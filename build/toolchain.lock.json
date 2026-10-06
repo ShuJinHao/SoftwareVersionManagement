@@ -1,0 +1,56 @@
+{
+  "dotnetSdk": "8.0.425",
+  "runtime": "8.0.31",
+  "node": "24.21.0",
+  "npm": "11.19.0",
+  "platforms": {
+    "darwin-arm64": {
+      "dotnet": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-arm64.tar.gz",
+        "algorithm": "sha512",
+        "hash": "d42156be70b489236479a415536013a89a9fd6eaca57d5716a7017612fcc65bdb459068973d7cffd6fe710f2799af8bee95b2046ba032762d47df176f5c4a7d6"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz",
+        "algorithm": "sha256",
+        "hash": "bed7eea5325e1108f32ce5228ddd6a5f0f08a499ee42aa7442aea583702f6057"
+      }
+    },
+    "darwin-x64": {
+      "dotnet": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-x64.tar.gz",
+        "algorithm": "sha512",
+        "hash": "3b27552358905f1bde600dd0315a23051ef1cbd055a50eb64c675ee25a04e658c2ed735177125436c5bec38dfcd958fee338299611348299cd34a9bea8b8011f"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz",
+        "algorithm": "sha256",
+        "hash": "1462cb3b3046b815cf8ea436d3da450ec1a9f11dac7e5a46b0ada5305d7e8097"
+      }
+    },
+    "linux-arm64": {
+      "dotnet": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-arm64.tar.gz",
+        "algorithm": "sha512",
+        "hash": "84a4d017d74d7aa842e981679d1b044e6be1f35b9b2b214021e30bc40871d016d29611cca373d8502ad5c890e3ad360ee698f9cf2d7a4d5a9fba102d88ba310f"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz",
+        "algorithm": "sha256",
+        "hash": "724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5"
+      }
+    },
+    "linux-x64": {
+      "dotnet": {
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-x64.tar.gz",
+        "algorithm": "sha512",
+        "hash": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798"
+      },
+      "node": {
+        "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz",
+        "algorithm": "sha256",
+        "hash": "6e1db87ef58b8819e5d5402eff1536491b18edd8eb7bee5ef7897876e88dc5ff"
+      }
+    }
+  }
+}

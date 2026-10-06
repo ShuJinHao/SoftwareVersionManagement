@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+SVM_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+export SVM_ROOT
+export DOTNET_ROOT="$SVM_ROOT/.tools/dotnet"
+export DOTNET_ROOT_ARM64="$DOTNET_ROOT"
+export DOTNET_ROOT_X64="$DOTNET_ROOT"
+export DOTNET_CLI_HOME="$SVM_ROOT/.cache/dotnet-home"
+export NUGET_PACKAGES="$SVM_ROOT/.cache/nuget/packages"
+export NUGET_HTTP_CACHE_PATH="$SVM_ROOT/.cache/nuget/http"
+export NUGET_PLUGINS_CACHE_PATH="$SVM_ROOT/.cache/nuget/plugins"
+export DOTNET_CLI_TELEMETRY_OPTOUT=1
+export DOTNET_NOLOGO=1
+export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+export DOTNET_GENERATE_ASPNET_CERTIFICATE=false
+export DOTNET_MULTILEVEL_LOOKUP=0
+export MSBUILDDISABLENODEREUSE=1
+export npm_config_cache="$SVM_ROOT/.cache/npm"
+export npm_config_userconfig=/dev/null
+export npm_config_update_notifier=false
+export PATH="$SVM_ROOT/.tools/node/bin:$DOTNET_ROOT:$PATH"

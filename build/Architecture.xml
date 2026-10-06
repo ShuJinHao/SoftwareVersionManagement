@@ -1,0 +1,214 @@
+<Architecture version="1">
+  <Project name="Svm.SharedKernel" path="src/shared/Svm.SharedKernel/Svm.SharedKernel.csproj" kind="shared" />
+  <Project name="Svm.Core.Identity" path="src/core/Svm.Core.Identity/Svm.Core.Identity.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.Core.Releases" path="src/core/Svm.Core.Releases/Svm.Core.Releases.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.Core.Packages" path="src/core/Svm.Core.Packages/Svm.Core.Packages.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.Core.Instances" path="src/core/Svm.Core.Instances/Svm.Core.Instances.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.Core.Tasks" path="src/core/Svm.Core.Tasks/Svm.Core.Tasks.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.Core.Audit" path="src/core/Svm.Core.Audit/Svm.Core.Audit.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.Services.Contracts" path="src/services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Package name="MediatR.Contracts" />
+  </Project>
+  <Project name="Svm.Services.CrossCutting" path="src/services/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Package name="MediatR" />
+    <Package name="FluentValidation" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <Package name="Microsoft.Extensions.Options" />
+  </Project>
+  <Project name="Svm.Application" path="src/services/Svm.Application/Svm.Application.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Services.CrossCutting" />
+    <Package name="MediatR" />
+    <Package name="FluentValidation" />
+    <Package name="FluentValidation.DependencyInjectionExtensions" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.IdentityService" path="src/services/Svm.IdentityService/Svm.IdentityService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Identity" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.ReleaseService" path="src/services/Svm.ReleaseService/Svm.ReleaseService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Releases" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.PackageService" path="src/services/Svm.PackageService/Svm.PackageService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Packages" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.InstanceService" path="src/services/Svm.InstanceService/Svm.InstanceService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Instances" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.TaskService" path="src/services/Svm.TaskService/Svm.TaskService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Tasks" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.AuditService" path="src/services/Svm.AuditService/Svm.AuditService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Audit" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.EntityFrameworkCore" path="src/infrastructure/Svm.EntityFrameworkCore/Svm.EntityFrameworkCore.csproj" kind="infrastructure">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Identity" />
+    <Reference name="Svm.Core.Releases" />
+    <Reference name="Svm.Core.Packages" />
+    <Reference name="Svm.Core.Instances" />
+    <Reference name="Svm.Core.Tasks" />
+    <Reference name="Svm.Core.Audit" />
+    <Package name="Microsoft.EntityFrameworkCore" />
+    <Package name="Microsoft.EntityFrameworkCore.Relational" />
+    <Package name="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <Package name="Npgsql" />
+    <Package name="MassTransit.EntityFrameworkCore" />
+    <Package name="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+  </Project>
+  <Project name="Svm.Dapper" path="src/infrastructure/Svm.Dapper/Svm.Dapper.csproj" kind="infrastructure">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Package name="Dapper" />
+    <Package name="Npgsql" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.EventBus" path="src/infrastructure/Svm.EventBus/Svm.EventBus.csproj" kind="infrastructure">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.EntityFrameworkCore" />
+    <Package name="MassTransit" />
+    <Package name="MassTransit.RabbitMQ" />
+    <Package name="MassTransit.EntityFrameworkCore" />
+    <Package name="MediatR" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <Package name="Microsoft.Extensions.Options" />
+  </Project>
+  <Project name="Svm.Security" path="src/infrastructure/Svm.Security/Svm.Security.csproj" kind="infrastructure">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <Package name="Microsoft.Extensions.Options" />
+  </Project>
+  <Project name="Svm.ServiceDefaults" path="src/hosts/Svm.ServiceDefaults/Svm.ServiceDefaults.csproj" kind="hosts">
+    <Reference name="Svm.Services.Contracts" />
+    <Package name="Serilog.AspNetCore" />
+    <Package name="Serilog.Sinks.File" />
+    <Package name="OpenTelemetry.Extensions.Hosting" />
+    <Package name="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+    <Package name="OpenTelemetry.Instrumentation.AspNetCore" />
+    <Package name="OpenTelemetry.Instrumentation.Http" />
+    <Package name="OpenTelemetry.Instrumentation.Runtime" />
+  </Project>
+  <Project name="Svm.HttpApi" path="src/hosts/Svm.HttpApi/Svm.HttpApi.csproj" kind="hosts">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Services.CrossCutting" />
+    <Reference name="Svm.Application" />
+    <Reference name="Svm.IdentityService" />
+    <Reference name="Svm.ReleaseService" />
+    <Reference name="Svm.PackageService" />
+    <Reference name="Svm.InstanceService" />
+    <Reference name="Svm.TaskService" />
+    <Reference name="Svm.AuditService" />
+    <Reference name="Svm.EntityFrameworkCore" />
+    <Reference name="Svm.Dapper" />
+    <Reference name="Svm.EventBus" />
+    <Reference name="Svm.Security" />
+    <Reference name="Svm.ServiceDefaults" />
+    <Package name="MediatR" />
+    <Package name="Swashbuckle.AspNetCore" />
+    <Package name="Microsoft.OpenApi" />
+  </Project>
+  <Project name="Svm.Worker" path="src/hosts/Svm.Worker/Svm.Worker.csproj" kind="hosts">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Services.CrossCutting" />
+    <Reference name="Svm.Application" />
+    <Reference name="Svm.IdentityService" />
+    <Reference name="Svm.ReleaseService" />
+    <Reference name="Svm.PackageService" />
+    <Reference name="Svm.InstanceService" />
+    <Reference name="Svm.TaskService" />
+    <Reference name="Svm.AuditService" />
+    <Reference name="Svm.EntityFrameworkCore" />
+    <Reference name="Svm.Dapper" />
+    <Reference name="Svm.EventBus" />
+    <Reference name="Svm.Security" />
+    <Reference name="Svm.ServiceDefaults" />
+    <Package name="Microsoft.Extensions.Hosting" />
+    <Package name="MediatR" />
+  </Project>
+  <Project name="Svm.Migration" path="src/hosts/Svm.Migration/Svm.Migration.csproj" kind="hosts">
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Services.CrossCutting" />
+    <Reference name="Svm.Application" />
+    <Reference name="Svm.IdentityService" />
+    <Reference name="Svm.AuditService" />
+    <Reference name="Svm.Security" />
+    <Reference name="Svm.EntityFrameworkCore" />
+    <Reference name="Svm.ServiceDefaults" />
+    <Package name="Microsoft.Extensions.Hosting" />
+    <Package name="Microsoft.EntityFrameworkCore.Design" />
+  </Project>
+  <Project name="Svm.Analyzers" path="src/analyzers/Svm.Analyzers/Svm.Analyzers.csproj" kind="analyzers">
+    <Package name="Microsoft.CodeAnalysis.CSharp" />
+    <Package name="Microsoft.CodeAnalysis.Common" />
+    <Package name="Microsoft.CodeAnalysis.Analyzers" />
+  </Project>
+  <Project name="Svm.ArchitectureTests" path="src/tests/Svm.ArchitectureTests/Svm.ArchitectureTests.csproj" kind="tests">
+    <Reference name="Svm.Analyzers" />
+    <Package name="xunit" />
+    <Package name="Microsoft.NET.Test.Sdk" />
+    <Package name="xunit.runner.visualstudio" />
+    <Package name="Microsoft.CodeAnalysis.CSharp" />
+  </Project>
+  <Project name="Svm.SecurityTests" path="src/tests/Svm.SecurityTests/Svm.SecurityTests.csproj" kind="tests">
+    <Reference name="Svm.HttpApi" />
+    <Reference name="Svm.Application" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Services.CrossCutting" />
+    <Package name="xunit" />
+    <Package name="Microsoft.NET.Test.Sdk" />
+    <Package name="xunit.runner.visualstudio" />
+    <Package name="Microsoft.AspNetCore.Mvc.Testing" />
+  </Project>
+  <Project name="Svm.FrameworkTests" path="src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj" kind="tests">
+    <Reference name="Svm.HttpApi" />
+    <Reference name="Svm.Worker" />
+    <Reference name="Svm.EntityFrameworkCore" />
+    <Reference name="Svm.EventBus" />
+    <Reference name="Svm.Security" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Services.CrossCutting" />
+    <Package name="xunit" />
+    <Package name="Microsoft.NET.Test.Sdk" />
+    <Package name="xunit.runner.visualstudio" />
+    <Package name="Microsoft.AspNetCore.Mvc.Testing" />
+  </Project>
+</Architecture>

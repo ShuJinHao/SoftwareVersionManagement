@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup />
+  <ItemGroup>
+    <ProjectReference Include="../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />
+    <ProjectReference Include="../../services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
+    <ProjectReference Include="../../services/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />
+    <ProjectReference Include="../../services/Svm.Application/Svm.Application.csproj" />
+    <ProjectReference Include="../../services/Svm.IdentityService/Svm.IdentityService.csproj" />
+    <ProjectReference Include="../../services/Svm.ReleaseService/Svm.ReleaseService.csproj" />
+    <ProjectReference Include="../../services/Svm.PackageService/Svm.PackageService.csproj" />
+    <ProjectReference Include="../../services/Svm.InstanceService/Svm.InstanceService.csproj" />
+    <ProjectReference Include="../../services/Svm.TaskService/Svm.TaskService.csproj" />
+    <ProjectReference Include="../../services/Svm.AuditService/Svm.AuditService.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.EntityFrameworkCore/Svm.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.Dapper/Svm.Dapper.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.EventBus/Svm.EventBus.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.Security/Svm.Security.csproj" />
+    <ProjectReference Include="../Svm.ServiceDefaults/Svm.ServiceDefaults.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="MediatR" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+    <PackageReference Include="Microsoft.OpenApi" />
+  </ItemGroup>
+</Project>

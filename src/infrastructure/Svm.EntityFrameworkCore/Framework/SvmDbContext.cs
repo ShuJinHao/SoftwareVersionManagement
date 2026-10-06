@@ -1,0 +1,27 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
+namespace Svm.EntityFrameworkCore.Framework;
+
+internal sealed class SvmDbContext : DbContext
+{
+    public SvmDbContext(WriteDataSource source, IEnumerable<IInterceptor> interceptors)
+        : this(new DbContextOptionsBuilder<SvmDbContext>()
+            .UseNpgsql(source.DataSource.CreateConnection(), contextOwnsConnection: true,
+                postgres => postgres.MigrationsHistoryTable("__EFMigrationsHistory", "framework"))
+            .AddInterceptors(interceptors).Options) { }
+
+    internal SvmDbContext(DbContextOptions<SvmDbContext> options) : base(options) { }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasDefaultSchema("framework");
+        Identity.PersonnelModel.Configure(modelBuilder);
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess) => throw new InvalidOperationException("Only the unit of work can save module changes.");
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default) =>
+        throw new InvalidOperationException("Only the unit of work can save module changes.");
+
+    internal Task<int> SaveWithinUnitOfWorkAsync(CancellationToken cancellationToken) => base.SaveChangesAsync(true, cancellationToken);
+}

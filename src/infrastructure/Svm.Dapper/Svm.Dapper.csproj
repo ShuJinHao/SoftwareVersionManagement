@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup />
+  <ItemGroup>
+    <ProjectReference Include="../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />
+    <ProjectReference Include="../../services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Dapper" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

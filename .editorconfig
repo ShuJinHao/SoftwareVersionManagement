@@ -1,0 +1,18 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+dotnet_diagnostic.SVM001.severity = error
+dotnet_diagnostic.SVM002.severity = error
+dotnet_diagnostic.SVM003.severity = error
+
+[*.{json,xml,props,targets,csproj,ts,vue}]
+indent_style = space
+indent_size = 2

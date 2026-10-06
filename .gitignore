@@ -1,0 +1,25 @@
+.tools/
+.cache/
+artifacts/
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+.DS_Store
+**/.env
+**/.env.*
+!**/.env.example
+**/appsettings.*.local.json
+
+# Local secrets, certificates, database files and runtime output.
+**/*.pfx
+**/*.p12
+**/*.pem
+**/*.key
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.dump
+**/*.backup
+**/*.log

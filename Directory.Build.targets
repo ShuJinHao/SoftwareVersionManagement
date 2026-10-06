@@ -1,0 +1,20 @@
+<Project>
+  <PropertyGroup>
+    <SvmProductionProject Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers' and '$(MSBuildProjectName)' != 'Svm.ArchitectureTests' and '$(MSBuildProjectName)' != 'Svm.SecurityTests' and '$(MSBuildProjectName)' != 'Svm.FrameworkTests'">true</SvmProductionProject>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(SvmProductionProject)' == 'true'">
+    <ProjectReference Include="$(SvmRoot)src/analyzers/Svm.Analyzers/Svm.Analyzers.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <AdditionalFiles Include="$(SvmRoot)build/Architecture.xml" />
+    <AdditionalFiles Include="$(SvmRoot)src/**/*.csproj" />
+  </ItemGroup>
+  <Target Name="ValidateSvmBuildSettings" BeforeTargets="CoreCompile">
+    <Error Condition="'$(NETCoreSdkVersion)' != '8.0.425'" Text="SVM100: Build requires .NET SDK 8.0.425." />
+    <Error Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers' and '$(TargetFramework)' != 'net8.0'" Text="SVM100: Product and test projects require net8.0." />
+    <Error Condition="'$(MSBuildProjectName)' == 'Svm.Analyzers' and '$(TargetFramework)' != 'netstandard2.0'" Text="SVM100: Analyzer requires netstandard2.0." />
+    <Error Condition="'$(LangVersion)' != '12.0'" Text="SVM100: C# version must be 12.0." />
+    <Error Condition="'$(SvmProductionProject)' == 'true' and ('$(RunAnalyzersDuringBuild)' != 'true' or '$(RunAnalyzers)' == 'false' or '$(EnableNETAnalyzers)' == 'false')" Text="SVM100: Production architecture analyzers cannot be disabled." />
+    <Error Condition="'$(TreatWarningsAsErrors)' != 'true' or '$(NuGetAudit)' != 'true' or '$(NuGetAuditMode)' != 'all' or '$(NuGetAuditLevel)' != 'low'" Text="SVM100: Warning and dependency audit gates cannot be weakened." />
+    <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(NoWarn);$(WarningsNotAsErrors)', '(?i)(SVM|NU190|NU1605)'))" Text="SVM100: Warning suppression must not bypass architecture or dependency gates." />
+  </Target>
+</Project>

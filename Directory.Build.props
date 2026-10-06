@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <SvmRoot>$(MSBuildThisFileDirectory)</SvmRoot>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RunAnalyzersDuringBuild>true</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>true</RunAnalyzersDuringLiveAnalysis>
+    <AnalysisLevel>8.0</AnalysisLevel>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
+    <RuntimeFrameworkVersion Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers'">8.0.31</RuntimeFrameworkVersion>
+    <RollForward>Disable</RollForward>
+    <RestorePackagesPath>$(SvmRoot).cache/nuget/packages</RestorePackagesPath>
+    <RestoreConfigFile>$(SvmRoot)NuGet.Config</RestoreConfigFile>
+  </PropertyGroup>
+</Project>

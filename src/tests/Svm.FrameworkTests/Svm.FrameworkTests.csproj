@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../hosts/Svm.HttpApi/Svm.HttpApi.csproj" />
+    <ProjectReference Include="../../hosts/Svm.Worker/Svm.Worker.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.EntityFrameworkCore/Svm.EntityFrameworkCore.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.EventBus/Svm.EventBus.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.Security/Svm.Security.csproj" />
+    <ProjectReference Include="../../services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
+    <ProjectReference Include="../../services/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" PrivateAssets="all" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
