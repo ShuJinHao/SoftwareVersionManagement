@@ -189,7 +189,7 @@ try {
       await child(['src/hosts/Svm.Migration/bin/Debug/net8.0/Svm.Migration.dll', arguments_[0], '--config', join(directory, 'migration.json')]);
     } else {
       const projects = { architecture: ['Svm.ArchitectureTests', 'Category=Architecture'], security: ['Svm.SecurityTests', 'Category=Security'],
-        framework: ['Svm.FrameworkTests', 'Category=Business&(FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel)'] };
+        framework: ['Svm.FrameworkTests', 'Category=Business&(FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel|FullyQualifiedName~Idempotency)'] };
       const choice = projects[arguments_[0]];
       if (!choice || arguments_.length !== 1) fail('Choose the affected architecture, security or framework test group.');
       await child(['test', `src/tests/${choice[0]}/${choice[0]}.csproj`, '--no-build', '--no-restore', '--filter', choice[1],

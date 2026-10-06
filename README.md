@@ -13,7 +13,8 @@
 | 28 个 C# 项目与网页骨架、固定工具链和依赖锁、编译期架构检查 | 网页业务功能与账号管理 |
 | DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 系统凭据、受管实例登记及状态上报 |
 | PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 软件/版本、安装包、批量任务和部分回退 |
-| 人员登录、本人改密、退出、共享会话及必要审计 | 通用持久化幂等、领域事件派发、Outbox/Inbox、RabbitMQ |
+| 人员登录、本人改密、退出、共享会话及必要审计 | 领域事件派发、Outbox/Inbox、RabbitMQ |
+| 持久化幂等协调器、六模块操作结果存储及提交结果核实 | 业务 HTTP 幂等接入及完整事务/消息验收 |
 | 密码哈希、随机凭据校验及密钥保护证书加载 | 文件副本与清理、完整日志/观测/健康检查接入 |
 
 会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。除已开放的人员会话及显式播种用例外，其余业务 Command 继续禁用。`Svm.EventBus`、Worker 及网页目前包含未实现的能力；依赖已安装不代表消息、页面或业务流程已经接通。
@@ -86,6 +87,13 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
+本批新增 OperationResults 迁移仅在一次性测试库执行，现有开发库尚未升级。升级前可在编译 Migration 后生成脚本并审阅；执行仍须另行确认：
+
+```sh
+mkdir -p artifacts
+eng/postgres migrate script > artifacts/operation-results-upgrade.sql
+```
+
 首次管理员默认为 `LOCAL-ADMIN`；显示名和随机临时密码位于已忽略的 `.cache/personnel-local/seed.json`，可在首次播种前私下调整。首次登录须改密。禁止将该文件、数据库连接、会话材料或证书私钥加入版本库。
 
 `serve` 启动 `https://127.0.0.1:7443` 的人员 API；证书为本机生成的自签名证书，未自动加入系统信任，网页登录流程尚未接入。直接运行 Hosts 的配置方式见[框架设计的工程入口](docs/软件框架设计.md#112-工程入口)。
@@ -102,7 +110,7 @@ eng/postgres test security
 eng/postgres test framework
 ```
 
-其中 `framework` 当前选择 Persistence、Composition、HostRuntime 和 Personnel 的 Business 用例，涉及真实 PostgreSQL、一次性测试数据库和独立本机 HTTPS 进程；应按本次改动范围选择，不能用此入口冒充全量或系统验收。细粒度执行使用 `eng/dotnet test --filter`，数据库用例需提供本机生成的 `SVM_TEST_DATABASE_CONFIG_FILE`，不在命令行传入密码。测试结果写入被忽略的 `artifacts/`。
+其中 `framework` 选择 Persistence、Composition、HostRuntime、Personnel 和 Idempotency 的 Business 用例，涉及真实 PostgreSQL、一次性测试库和本机 HTTPS 进程；按改动范围选择，不代表全量或系统验收。细粒度执行使用 `eng/dotnet test --filter`，需提供 `SVM_TEST_DATABASE_CONFIG_FILE`，人员用例还需 `SVM_PERSONNEL_CONFIG_FILE`，分别指向本机生成的 test-admin.json、personnel.json 私有文件；不在命令行传入密码。结果写入忽略的 `artifacts/`。
 
 ## 仓库与交付边界
 
