@@ -1,23 +1,30 @@
 # SoftwareVersionManagement
 
-面向隔离厂区的上位机软件版本管控平台。目标交付为 Linux 上的 .NET 8 服务端、网页管理端、管理 API、接入 API 和厂家接入文档。
+面向隔离厂区的制造业软件版本管控平台。目标交付为 Linux 上的 .NET 8 服务端、网页管理端、管理 API、接入 API 和厂家接入文档。
 
-平台管理版本、安装包、投放任务和上报事实；接入方通过 API 获取任务，负责本机安装、回退及数据库和日志保护。业务规则以[需求规格说明](docs/需求规格说明.md)为准。
+现场入口按“厂区 → 工序 → 设备 → 对应软件”组织；本平台独立维护台账及强制设备映射。上位机、视觉等可执行软件管理版本、EXE 或安装包、投放任务和上报事实；接入方通过 API 获取任务，负责本机安装、回退及数据库和日志保护。PLC 仅记录后续程序备份、压缩包归档方向，具体流程尚待确认。业务规则以[需求规格说明](docs/需求规格说明.md)为准。
 
 ## 当前状态
 
-项目处于基础框架开发阶段，尚未完成系统验收或生产部署。
+项目处于基础框架开发阶段，尚未完成系统验收或生产部署。已有进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送端恢复；本批增加 Consumer Outbox、Inbox 与消费事务基础。此前九份文档中的制造业业务设计继续保留，文档待复核，现场台账、软件分类、强制映射和对应网页/API 均待实现。
 
 | 已有实现 | 后续实现 |
 |---|---|
-| 28 个 C# 项目与网页骨架、固定工具链和依赖锁、编译期架构检查 | 网页业务功能与账号管理 |
+| 28 个 C# 项目与网页骨架、固定工具链和依赖锁、编译期架构检查 | 现场台账、软件分类、强制设备映射、网页业务与账号管理 |
 | DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 系统凭据、受管实例登记及状态上报 |
 | PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 软件/版本、安装包、批量任务和部分回退 |
-| 人员登录、本人改密、退出、共享会话及必要审计 | 领域事件派发、Outbox/Inbox、RabbitMQ |
+| 人员登录、本人改密、退出、共享会话及必要审计 | 外部系统与实例的实际凭据接入 |
+| 所属模块的类型化领域事件处理器、Scoped 串行派发、提交成功后的内部确认 | 实际业务事件及领域事实到版本化集成消息的转换 |
 | 持久化幂等协调器、六模块操作结果存储及提交结果核实 | 业务 HTTP 幂等接入及完整事务/消息验收 |
+| 三类固定 V1 消息、MassTransit EF Bus Outbox、Worker 投递及 RabbitMQ 断线/重启恢复 | 实际业务生产者、消费者与持续业务去重 |
+| 显式消费目录、原生 Consumer Outbox/Inbox 事务、当前授权先于去重、有界重试及崩溃恢复 | 所属模块的正式工作事实、长工作执行与消费观测 |
 | 密码哈希、随机凭据校验及密钥保护证书加载 | 文件副本与清理、完整日志/观测/健康检查接入 |
 
-会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。除已开放的人员会话及显式播种用例外，其余业务 Command 继续禁用。`Svm.EventBus`、Worker 及网页目前包含未实现的能力；依赖已安装不代表消息、页面或业务流程已经接通。
+会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。除已开放的人员会话及显式播种用例外，其余业务 Command 继续禁用。发送端尚无实际业务生产者，Worker 未注册业务消费者；网页和完整业务消息链路仍待实现。
+
+领域事件仅在当前进程和数据库事务内使用，按显式订阅目录执行本模块规则。缺失处理器、非法归属、重复事件标识、处理循环超限、异常或取消均拒绝提交；每事务默认上限 1000，可由 `DomainEventOptions` 调整。数据库确认提交成功才确认已处理事件；回滚或提交结果未知保留待处理事件，沿用既有幂等核实，不自动重执行。具体注册与事务边界见[框架设计第 7.2 节](docs/软件框架设计.md#72-领域事件)。
+
+Application 通过类型化端口登记三类固定消息；业务、审计、幂等结果及 Outbox 共同提交或回滚。HttpApi 只登记，Worker 使用 MassTransit 8.3.6 原生服务投递到三个固定持久队列；确认丢失允许重复交付，保持原 MessageId 和正文。消费基础在原生事务中保存处理事实、Inbox 完成标记及后续消息，提交确认后才确认领域事件；提交未知只在新 Scope 重新授权并查询，不就地重执行。正式 Worker 保持空业务消费目录，不启动业务消费者或 Inbox 清理；合法目录及持续工作事实目前由测试夹具验证。FND-06、FND-08、FND-09 均为部分通过；详见[框架设计第 8 节](docs/软件框架设计.md#8-事件总线mq-和持久化工作)。
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
@@ -28,7 +35,7 @@
 | `src/shared` | SharedKernel：DDD 基础类型 |
 | `src/core` | 身份、版本、包、实例、任务、审计六个领域模块 |
 | `src/services` | 内层契约、CQRS 管道、应用编排和六模块服务 |
-| `src/infrastructure` | EF 持久化、Dapper 只读查询、Security 安全技术实现、EventBus 骨架 |
+| `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
 | `src/ui/svm-web` | Vue 网页工程骨架 |
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
@@ -49,7 +56,7 @@
 6. [架构测试与验收要求](docs/架构测试与验收要求.md)
 7. [软件框架设计](docs/软件框架设计.md)
 
-字段、路径和状态契约以详细设计为准；厂家文档示例仍属设计说明。Cloud 的参考链接固定到公开提交，不需要同时检出 Cloud 工程。
+字段、路径和状态契约以详细设计为准；厂家文档示例仍属设计说明。Cloud 只提供固定公开提交的架构与工程机制参考，平台不对接其业务、主数据或身份。聊天示例不作为实际厂区/设备数据，文档中的虚构值不得用于播种或默认配置。
 
 ## 本机准备
 
@@ -87,11 +94,11 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-本批新增 OperationResults 迁移仅在一次性测试库执行，现有开发库尚未升级。升级前可在编译 Migration 后生成脚本并审阅；执行仍须另行确认：
+OperationResults 及本批新增的 `20261007000100_BusOutbox` 迁移仅在一次性测试库执行；BusOutbox 建立原生 OutboxMessage、OutboxState、InboxState 三张技术表。现有开发库仍只有 InitialSchemas、PersonnelSessions 两份已应用迁移，升级须另行确认。编译 Migration 后可生成包含待执行迁移及权限核对的幂等脚本：
 
 ```sh
 mkdir -p artifacts
-eng/postgres migrate script > artifacts/operation-results-upgrade.sql
+eng/postgres migrate script > artifacts/bus-outbox-upgrade.sql
 ```
 
 首次管理员默认为 `LOCAL-ADMIN`；显示名和随机临时密码位于已忽略的 `.cache/personnel-local/seed.json`，可在首次播种前私下调整。首次登录须改密。禁止将该文件、数据库连接、会话材料或证书私钥加入版本库。
@@ -99,6 +106,23 @@ eng/postgres migrate script > artifacts/operation-results-upgrade.sql
 `serve` 启动 `https://127.0.0.1:7443` 的人员 API；证书为本机生成的自签名证书，未自动加入系统信任，网页登录流程尚未接入。直接运行 Hosts 的配置方式见[框架设计的工程入口](docs/软件框架设计.md#112-工程入口)。
 
 结束开发可执行 `eng/postgres stop`，保留数据卷和私有配置。重新启动数据库后再次执行 `eng/postgres up` 更新本机端口配置；不要删除已有数据库对应的私有凭据。
+
+### RabbitMQ 与专用验证环境
+
+HttpApi/Worker 仅在显式设置 `SVM_MESSAGING_CONFIG_FILE` 时启用消息注册；文件不存在、结构或参数无效时明确失败。未设置时沿用现有运行方式。私有 JSON 文件使用 0600 权限，字段及限制见[框架设计第 8.1 节](docs/软件框架设计.md#81-组件落点和原子提交)，不把凭据写入命令行或仓库。Broker 不可用不阻塞数据库发送意图的登记；启用发送端前须显式完成目标数据库迁移。
+
+消费目录通过 `AddSvmConsumption` 与 `AddSvmMessaging` 使用相同的显式绑定，构建前调用 `ValidateSvmFoundation`。目录限定三类 V1 消息、模块、队列和唯一 Scoped Application 处理器；正式 Worker 当前目录为空。消费并发默认 4、prefetch 16，Inbox 窗口默认 30 分钟，参数有上限。只对确知未提交的瞬时故障短重试 3 次，间隔 1/3/5 秒且每次新 Scope；其余失败进入错误队列，禁止自动回灌。
+
+Migration 私有配置新增 `enableInboxWrites`，默认 `false` 保持发送端权限；显式 `true` 只补充 Inbox 表读写及其 ID 序列权限，不新增结构迁移。本批只在一次性测试库启用，本机生成的 `artifacts/consumer-outbox-review.sql` 包含既有四份迁移及消费权限，供另行审阅，未在开发库执行。正式消费还须实现可信工作授权适配及所属模块持续去重事实；启用 Inbox 清理不能删除这些业务事实。
+
+本项目验证工具固定 RabbitMQ `4.3.6` 的 linux/arm64 镜像摘要与本机 `desktop-linux` Docker context，只绑定回环地址，管理带本仓归属标签的容器和卷。首次分配的端口在容器停止/启动期间保持；随机测试 vhost 默认 quorum，临时总线队列显式 classic。测试账号只具有所属 vhost 权限，无管理标签。工具不会配置生产 broker。
+
+```sh
+eng/rabbitmq up
+eng/rabbitmq status
+```
+
+验证结束执行 `eng/rabbitmq down`，清理本工具拥有的测试容器、卷和私有配置；`stop`/`start` 用于保留数据的断线恢复验证。私有测试管理材料位于忽略的 `.cache/rabbitmq-local/test-admin.json`。
 
 ## 验证方式
 
@@ -110,7 +134,36 @@ eng/postgres test security
 eng/postgres test framework
 ```
 
-其中 `framework` 选择 Persistence、Composition、HostRuntime、Personnel 和 Idempotency 的 Business 用例，涉及真实 PostgreSQL、一次性测试库和本机 HTTPS 进程；按改动范围选择，不代表全量或系统验收。细粒度执行使用 `eng/dotnet test --filter`，需提供 `SVM_TEST_DATABASE_CONFIG_FILE`，人员用例还需 `SVM_PERSONNEL_CONFIG_FILE`，分别指向本机生成的 test-admin.json、personnel.json 私有文件；不在命令行传入密码。结果写入忽略的 `artifacts/`。
+其中 `framework` 选择名称包含 Persistence、Composition、HostRuntime、Personnel 和 Idempotency 的 Business 用例，涉及真实 PostgreSQL、一次性测试库和本机 HTTPS 进程；发送端恢复用例须按下面的专用命令执行。按改动范围选择，不代表全量或系统验收。细粒度执行需提供 `SVM_TEST_DATABASE_CONFIG_FILE`，人员用例还需 `SVM_PERSONNEL_CONFIG_FILE`，分别指向本机生成的 test-admin.json、personnel.json 私有文件；HostRuntime 用例还需 `SVM_PERSISTENCE_CONFIG_FILE`。不在命令行传入密码，结果写入忽略的 `artifacts/`。
+
+单独验证领域事件及 SharedKernel 基础类型可执行：
+
+```sh
+SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \
+  eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
+  --filter 'Category=Business&(FullyQualifiedName~DomainEvent|FullyQualifiedName~DomainFoundation)' \
+  --logger trx --results-directory artifacts/test-results/domain-events/components
+```
+
+发送端及受影响回归使用真实 PostgreSQL/RabbitMQ；先完成上述准备与 FrameworkTests 编译。发送端恢复会停止专用 broker，与消费验证依次执行：
+
+```sh
+SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \
+SVM_TEST_RABBITMQ_CONFIG_FILE="$PWD/.cache/rabbitmq-local/test-admin.json" \
+SVM_PERSONNEL_CONFIG_FILE="$PWD/.cache/personnel-local/personnel.json" \
+SVM_PERSISTENCE_CONFIG_FILE="$PWD/.cache/postgres-local/runtime.json" \
+  eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
+  --filter 'Category=Business&(FullyQualifiedName~Outbox|FullyQualifiedName~DomainEvent|FullyQualifiedName~DomainFoundation|FullyQualifiedName~Idempotency|FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel)&FullyQualifiedName!~Consumption' \
+  --logger trx --results-directory artifacts/test-results/consumer/framework-regression
+
+SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \
+SVM_TEST_RABBITMQ_CONFIG_FILE="$PWD/.cache/rabbitmq-local/test-admin.json" \
+  eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
+  --filter 'Category=Business&FullyQualifiedName~Consumption' \
+  --logger trx --results-directory artifacts/test-results/consumer/framework-consumption
+```
+
+恢复用例会停止/重启本工具拥有的专用测试 broker，使用测试代理丢弃发送确认，并启动/终止本次拥有的 Worker 或测试专用消费子进程。`ConsumptionHarness` 分类只由私有子进程验证工具调用，不属于 Business 门禁；生产 Worker 没有测试开关。每个用例清理其随机数据库、角色、vhost、账号及私有控制文件；不得将这些配置指向生产环境或其他项目。
 
 ## 仓库与交付边界
 

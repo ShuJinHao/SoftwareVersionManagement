@@ -1,0 +1,6 @@
+{
+  "version": "4.3.6",
+  "platform": "linux/arm64",
+  "image": "docker.io/library/rabbitmq@sha256:fe9009076fc11578b8b02ff62ea246e2c224c4972c73aa803f32791342e3d447",
+  "dockerContext": "desktop-linux"
+}

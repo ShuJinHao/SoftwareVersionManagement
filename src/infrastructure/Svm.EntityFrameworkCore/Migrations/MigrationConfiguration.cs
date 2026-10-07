@@ -8,20 +8,21 @@ namespace Svm.EntityFrameworkCore.Migrations;
 
 public sealed class MigrationConfiguration
 {
-    private MigrationConfiguration(PostgresConnectionOptions connection, string writerRole, string readerRole)
-    { Connection = connection; WriterRole = writerRole; ReaderRole = readerRole; }
+    private MigrationConfiguration(PostgresConnectionOptions connection, string writerRole, string readerRole, bool enableInboxWrites)
+    { Connection = connection; WriterRole = writerRole; ReaderRole = readerRole; EnableInboxWrites = enableInboxWrites; }
     internal PostgresConnectionOptions Connection { get; }
     internal string WriterRole { get; }
     internal string ReaderRole { get; }
+    internal bool EnableInboxWrites { get; }
     public override string ToString() => "Migration configuration (redacted)";
 
-    public static MigrationConfiguration Create(string connectionString, string writerRole, string readerRole)
+    public static MigrationConfiguration Create(string connectionString, string writerRole, string readerRole, bool enableInboxWrites = false)
     {
         var connection = PostgresConnectionOptions.Parse(connectionString);
         var user = new NpgsqlConnectionStringBuilder(connection.ConnectionString).Username;
         if (!ValidRole(writerRole) || !ValidRole(readerRole) || writerRole == readerRole || writerRole == user || readerRole == user)
             throw new PersistenceException(PersistenceFailure.ConfigurationInvalid);
-        return new(connection, writerRole, readerRole);
+        return new(connection, writerRole, readerRole, enableInboxWrites);
     }
     public static MigrationConfiguration Load(string path)
     {
@@ -30,9 +31,12 @@ public sealed class MigrationConfiguration
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var json = document.RootElement;
             var names = json.EnumerateObject().Select(p => p.Name).ToArray();
-            if (names.Length != 3 || names.Distinct().Count() != 3 || names.Except(["connectionString", "writerRole", "readerRole"]).Any())
+            if (names.Length is < 3 or > 4 || names.Distinct().Count() != names.Length || names.Except(["connectionString", "writerRole", "readerRole", "enableInboxWrites"]).Any())
                 throw new PersistenceException(PersistenceFailure.ConfigurationInvalid);
-            return Create(json.GetProperty("connectionString").GetString()!, json.GetProperty("writerRole").GetString()!, json.GetProperty("readerRole").GetString()!);
+            if (new[] { "connectionString", "writerRole", "readerRole" }.Except(names).Any())
+                throw new PersistenceException(PersistenceFailure.ConfigurationInvalid);
+            return Create(json.GetProperty("connectionString").GetString()!, json.GetProperty("writerRole").GetString()!, json.GetProperty("readerRole").GetString()!,
+                json.TryGetProperty("enableInboxWrites", out var inbox) && inbox.GetBoolean());
         }
         catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         { throw new PersistenceException(PersistenceFailure.ConfigurationInvalid); }

@@ -9,6 +9,7 @@ using Svm.Dapper;
 using Svm.EntityFrameworkCore;
 using Svm.EntityFrameworkCore.Framework;
 using Svm.EntityFrameworkCore.Migrations;
+using Svm.Services.CrossCutting.DomainEvents;
 using Xunit;
 
 namespace Svm.FrameworkTests;
@@ -81,6 +82,7 @@ public sealed class PersistenceDatabase : IAsyncLifetime
     internal ServiceProvider CreateProvider(IInterceptor? interceptor = null, string? writer = null, string? reader = null)
     {
         var services = new ServiceCollection();
+        services.AddSvmDomainEvents([]).ValidateSvmDomainEvents();
         if (interceptor is not null) services.AddSingleton(interceptor);
         services.AddSvmPostgres(RuntimeConnection(writer ?? WriterConnection));
         services.AddSvmReadPersistence(RuntimeConnection(reader ?? ReaderConnection));

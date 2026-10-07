@@ -12,6 +12,7 @@ internal sealed class SvmDbContextModelSnapshot : ModelSnapshot
         Configure(modelBuilder);
         ConfigurePersonnelV1(modelBuilder);
         ConfigureOperationResultsV1(modelBuilder);
+        BusOutboxV1Model.Configure(modelBuilder);
     }
     internal static void Configure(ModelBuilder modelBuilder) => modelBuilder.HasDefaultSchema("framework").HasAnnotation("ProductVersion", "8.0.31");
 

@@ -9,9 +9,11 @@ namespace Svm.FrameworkTests;
 public sealed class PersistenceHostTests
 {
     [Theory]
-    [InlineData("Svm.HttpApi")]
-    [InlineData("Svm.Worker")]
-    public async Task HostStartsWithoutApplyingMigrationsAndRejectsMissingConfiguration(string hostName)
+    [InlineData("Svm.HttpApi", false)]
+    [InlineData("Svm.Worker", false)]
+    [InlineData("Svm.HttpApi", true)]
+    [InlineData("Svm.Worker", true)]
+    public async Task HostStartsWithoutApplyingMigrationsAndRejectsMissingConfiguration(string hostName, bool messaging)
     {
         if (OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("The dedicated local PostgreSQL helper requires macOS or Linux.");
         var database = new PersistenceDatabase();
@@ -19,6 +21,7 @@ public sealed class PersistenceHostTests
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "build/postgres.local.json"))) root = root.Parent;
         Assert.NotNull(root);
         var configPath = Path.Combine(root.FullName, ".cache", $"persistence-host-{Guid.NewGuid():N}.json");
+        string? messagingPath = null;
         try
         {
             await database.CreateAsync(migrate: false);
@@ -34,6 +37,12 @@ public sealed class PersistenceHostTests
             };
             info.ArgumentList.Add(Path.Combine(root.FullName, "src/hosts", hostName, "bin/Debug/net8.0", hostName + ".dll"));
             info.Environment["SVM_PERSISTENCE_CONFIG_FILE"] = configPath;
+            if (messaging)
+            {
+                messagingPath = await OutboxFixture.PrivateJsonAsync(OutboxFixture.Options());
+                info.Environment["SVM_MESSAGING_CONFIG_FILE"] = messagingPath;
+            }
+            else info.Environment.Remove("SVM_MESSAGING_CONFIG_FILE");
             info.Environment["ASPNETCORE_URLS"] = "http://127.0.0.1:0";
             info.Environment["Logging__LogLevel__Default"] = "Information";
             using (var process = new Process { StartInfo = info })
@@ -71,6 +80,7 @@ public sealed class PersistenceHostTests
         finally
         {
             File.Delete(configPath);
+            if (messagingPath is not null) File.Delete(messagingPath);
             await database.DisposeAsync();
         }
     }

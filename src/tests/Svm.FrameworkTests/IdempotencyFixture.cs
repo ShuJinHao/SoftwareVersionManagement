@@ -8,6 +8,7 @@ using Svm.Services.Contracts.Audit;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.CrossCutting.Idempotency;
 using Svm.Services.CrossCutting.Registration;
+using Svm.Services.CrossCutting.DomainEvents;
 
 namespace Svm.FrameworkTests;
 
@@ -21,12 +22,17 @@ internal sealed class IdempotencyFixture(PersistenceDatabase database)
     internal readonly System.Collections.Concurrent.ConcurrentBag<Guid> Resources = [];
 
     internal ServiceProvider Provider(params IInterceptor[] interceptors)
+        => ProviderWithDomainEvents([], new DomainEventOptions(), _ => { }, interceptors);
+
+    internal ServiceProvider ProviderWithDomainEvents(IReadOnlyList<DomainEventBinding> domainEvents, DomainEventOptions options,
+        Action<IServiceCollection> configure, params IInterceptor[] interceptors)
     {
         var services = new ServiceCollection();
-        services.AddSvmRequestPipeline([]).AddSvmPostgres(database.WriterConnection).AddSvmAudit();
+        services.AddSvmRequestPipeline([], domainEvents, options).AddSvmPostgres(database.WriterConnection).AddSvmAudit();
         services.AddScoped<ITrustedCallContextSource>(_ => new Source(Actor));
         services.AddScoped<IRequestAuthorizer>(_ => new Authorizer(this));
         foreach (var interceptor in interceptors) services.AddSingleton(interceptor);
+        configure(services);
         services.ValidateSvmFoundation();
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }

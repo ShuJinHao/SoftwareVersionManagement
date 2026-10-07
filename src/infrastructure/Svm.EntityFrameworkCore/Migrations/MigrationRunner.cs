@@ -122,6 +122,18 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE ALL ON TABLE framework.\"__EFMigrationsHistory\" FROM PUBLIC, {writer};");
         sql.AppendLine($"GRANT SELECT, INSERT ON TABLE framework.data_protection_keys TO {writer};");
         sql.AppendLine($"GRANT USAGE, SELECT ON SEQUENCE framework.\"data_protection_keys_Id_seq\" TO {writer};");
+        sql.AppendLine($"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE framework.\"OutboxMessage\", framework.\"OutboxState\" TO {writer};");
+        sql.AppendLine($"GRANT USAGE, SELECT ON SEQUENCE framework.\"OutboxMessage_SequenceNumber_seq\" TO {writer};");
+        if (configuration.EnableInboxWrites)
+        {
+            sql.AppendLine($"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE framework.\"InboxState\" TO {writer};");
+            sql.AppendLine($"GRANT USAGE, SELECT ON SEQUENCE framework.\"InboxState_Id_seq\" TO {writer};");
+        }
+        else
+        {
+            sql.AppendLine($"REVOKE ALL ON TABLE framework.\"InboxState\" FROM {writer};");
+            sql.AppendLine($"REVOKE ALL ON SEQUENCE framework.\"InboxState_Id_seq\" FROM {writer};");
+        }
         foreach (var schema in new[] { "iam", "rel", "pkg", "ins", "tsk", "aud" })
         {
             // A completed operation key is retained; writers can only finalize its result columns.

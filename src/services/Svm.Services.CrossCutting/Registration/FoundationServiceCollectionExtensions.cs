@@ -6,6 +6,8 @@ using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Audit;
 using Svm.Services.CrossCutting.Pipeline;
 using Svm.Services.CrossCutting.Idempotency;
+using Svm.Services.CrossCutting.DomainEvents;
+using Svm.Services.CrossCutting.Consumption;
 
 namespace Svm.Services.CrossCutting.Registration;
 
@@ -14,11 +16,13 @@ public static class FoundationServiceCollectionExtensions
     private static readonly Type[] PipelineTypes =
         [typeof(RequestKindBehavior<,>), typeof(ValidationBehavior<,>), typeof(AuthorizationBehavior<,>), typeof(IdempotencyBehavior<,>), typeof(PersonnelTransactionBehavior<,>)];
 
-    public static IServiceCollection AddSvmRequestPipeline(this IServiceCollection services, IReadOnlyList<RequestBinding> bindings)
+    public static IServiceCollection AddSvmRequestPipeline(this IServiceCollection services, IReadOnlyList<RequestBinding> bindings,
+        IReadOnlyList<DomainEventBinding>? domainEvents = null, DomainEventOptions? domainEventOptions = null)
     {
         if (services.Any(d => d.ServiceType == typeof(RequestCatalog)))
             throw new InvalidOperationException("SVM foundation is already registered.");
         var catalog = new RequestCatalog(bindings);
+        services.AddSvmDomainEvents(domainEvents ?? [], domainEventOptions);
         services.AddSingleton(catalog);
         services.AddScoped<ICallContext, ScopedCallContext>();
         services.AddScoped<IOperationContext, ScopedOperationContext>();
@@ -42,6 +46,8 @@ public static class FoundationServiceCollectionExtensions
     /// <summary>Call after all host registrations, before building the service provider.</summary>
     public static IServiceCollection ValidateSvmFoundation(this IServiceCollection services)
     {
+        services.ValidateSvmDomainEvents();
+        services.ValidateSvmConsumption();
         var catalogs = services.Where(d => d.ServiceType == typeof(RequestCatalog)).ToArray();
         if (catalogs.Length != 1 || catalogs[0].ImplementationInstance is not RequestCatalog catalog)
             throw new InvalidOperationException("Exactly one immutable request catalog is required.");
@@ -58,6 +64,7 @@ public static class FoundationServiceCollectionExtensions
         RequireImplementation(services, typeof(IOperationResultRecovery), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
         RequireImplementation(services, typeof(ISender), typeof(Mediator), ServiceLifetime.Scoped);
         RequireImplementation(services, typeof(ScopedRequestExecutor), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
+        if (services.Any(d => d.ServiceType == typeof(IIntegrationEventOutbox))) RequireScopedPort(services, typeof(IIntegrationEventOutbox));
 
         var behaviors = services.Where(d => d.ServiceType.IsGenericType &&
             d.ServiceType.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>)).ToArray();
