@@ -5,9 +5,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../hosts/Svm.HttpApi/Svm.HttpApi.csproj" />
-    <ProjectReference Include="../../services/Svm.Application/Svm.Application.csproj" />
-    <ProjectReference Include="../../services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
-    <ProjectReference Include="../../services/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />
+    <ProjectReference Include="../../application/Svm.Application/Svm.Application.csproj" />
+    <ProjectReference Include="../../shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
+    <ProjectReference Include="../../shared/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="xunit" PrivateAssets="all" />

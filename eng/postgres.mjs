@@ -157,40 +157,40 @@ try {
     // Test selection is independent of Docker lifecycle; only pass this project's private configuration paths.
     await child(arguments_, join(root, 'eng/test'));
   } else {
-  if (['up', 'status', 'stop'].includes(command) && arguments_.length) fail('Lifecycle commands do not accept extra arguments.');
-  const endpoint = docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim();
-  if (!endpoint.startsWith('unix://')) fail('This helper only manages the existing local Unix-socket Docker context.');
-  const engine = docker(['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}']).stdout.trim();
-  if (engine !== baseline.platform) fail('Local Docker platform does not match the pinned PostgreSQL image.');
-  mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
-  if (existsSync(statePath)) {
-    state = JSON.parse(readFileSync(statePath, 'utf8'));
-    if (state.identity !== identity || state.format !== 1) fail('Saved database state belongs to another workspace or format.');
-    if (!['admin', 'migration', 'writer', 'reader'].every(k => typeof state.secrets?.[k] === 'string' && /^[A-Za-z0-9_-]{43}$/.test(state.secrets[k])))
-      fail('Saved local credentials are invalid; refusing automatic reset or rotation.');
-  }
-  // Only lifecycle commands hold the local file lock; PostgreSQL serializes migrations separately.
-  if (command === 'up' || command === 'stop') {
-    try { lock = openSync(join(directory, 'lifecycle.lock'), 'wx', 0o600); }
-    catch { fail('Another local database lifecycle operation is active.'); }
-  }
-  if (command === 'up') await up();
-  if (command === 'status') {
-    const current = checkedContainer();
-    console.log(JSON.stringify({ container, state: current?.State.Status ?? 'absent', database: 'svm_dev',
-      address: current?.State.Running ? `127.0.0.1:${current.NetworkSettings.Ports['5432/tcp'][0].HostPort}` : null,
-      volumeRetained: !!inspect('volume', volume) }));
-  }
-  if (command === 'stop') {
-    const current = checkedContainer();
-    if (current?.State.Running) docker(['stop', '--time', '20', container]);
-    console.log('SVM PostgreSQL stopped; the container, volume and credentials are retained.');
-  }
-  if (command === 'migrate') {
-    if (!state || !checkedContainer()?.State.Running) fail('Run eng/postgres up first.');
+    if (['up', 'status', 'stop'].includes(command) && arguments_.length) fail('Lifecycle commands do not accept extra arguments.');
+    const endpoint = docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim();
+    if (!endpoint.startsWith('unix://')) fail('This helper only manages the existing local Unix-socket Docker context.');
+    const engine = docker(['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}']).stdout.trim();
+    if (engine !== baseline.platform) fail('Local Docker platform does not match the pinned PostgreSQL image.');
+    mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
+    if (existsSync(statePath)) {
+      state = JSON.parse(readFileSync(statePath, 'utf8'));
+      if (state.identity !== identity || state.format !== 1) fail('Saved database state belongs to another workspace or format.');
+      if (!['admin', 'migration', 'writer', 'reader'].every(k => typeof state.secrets?.[k] === 'string' && /^[A-Za-z0-9_-]{43}$/.test(state.secrets[k])))
+        fail('Saved local credentials are invalid; refusing automatic reset or rotation.');
+    }
+    // Only lifecycle commands hold the local file lock; PostgreSQL serializes migrations separately.
+    if (command === 'up' || command === 'stop') {
+      try { lock = openSync(join(directory, 'lifecycle.lock'), 'wx', 0o600); }
+      catch { fail('Another local database lifecycle operation is active.'); }
+    }
+    if (command === 'up') await up();
+    if (command === 'status') {
+      const current = checkedContainer();
+      console.log(JSON.stringify({ container, state: current?.State.Status ?? 'absent', database: 'svm_dev',
+        address: current?.State.Running ? `127.0.0.1:${current.NetworkSettings.Ports['5432/tcp'][0].HostPort}` : null,
+        volumeRetained: !!inspect('volume', volume) }));
+    }
+    if (command === 'stop') {
+      const current = checkedContainer();
+      if (current?.State.Running) docker(['stop', '--time', '20', container]);
+      console.log('SVM PostgreSQL stopped; the container, volume and credentials are retained.');
+    }
+    if (command === 'migrate') {
+      if (!state || !checkedContainer()?.State.Running) fail('Run eng/postgres up first.');
       if (arguments_.length !== 1 || !['status', 'script', 'apply'].includes(arguments_[0])) fail('Migration requires exactly status, script or apply.');
       await child(['src/hosts/Svm.Migration/bin/Debug/net8.0/Svm.Migration.dll', arguments_[0], '--config', join(directory, 'migration.json')]);
-  }
+    }
   }
 } catch (error) {
   // Error messages emitted by this helper are deliberately fixed and contain no SQL or secrets.

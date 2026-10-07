@@ -1,28 +1,22 @@
 <Architecture version="1">
   <Project name="Svm.SharedKernel" path="src/shared/Svm.SharedKernel/Svm.SharedKernel.csproj" kind="shared" />
-  <Project name="Svm.Core.Identity" path="src/core/Svm.Core.Identity/Svm.Core.Identity.csproj" kind="core">
+  <Project name="Svm.Core.Identity" path="src/modules/Identity/Svm.Core.Identity/Svm.Core.Identity.csproj" kind="core">
     <Reference name="Svm.SharedKernel" />
   </Project>
-  <Project name="Svm.Core.Releases" path="src/core/Svm.Core.Releases/Svm.Core.Releases.csproj" kind="core">
+  <Project name="Svm.Core.Releases" path="src/modules/Releases/Svm.Core.Releases/Svm.Core.Releases.csproj" kind="core">
     <Reference name="Svm.SharedKernel" />
   </Project>
-  <Project name="Svm.Core.Packages" path="src/core/Svm.Core.Packages/Svm.Core.Packages.csproj" kind="core">
+  <Project name="Svm.Core.Instances" path="src/modules/Instances/Svm.Core.Instances/Svm.Core.Instances.csproj" kind="core">
     <Reference name="Svm.SharedKernel" />
   </Project>
-  <Project name="Svm.Core.Instances" path="src/core/Svm.Core.Instances/Svm.Core.Instances.csproj" kind="core">
+  <Project name="Svm.Core.Audit" path="src/modules/Audit/Svm.Core.Audit/Svm.Core.Audit.csproj" kind="core">
     <Reference name="Svm.SharedKernel" />
   </Project>
-  <Project name="Svm.Core.Tasks" path="src/core/Svm.Core.Tasks/Svm.Core.Tasks.csproj" kind="core">
-    <Reference name="Svm.SharedKernel" />
-  </Project>
-  <Project name="Svm.Core.Audit" path="src/core/Svm.Core.Audit/Svm.Core.Audit.csproj" kind="core">
-    <Reference name="Svm.SharedKernel" />
-  </Project>
-  <Project name="Svm.Services.Contracts" path="src/services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" kind="services">
+  <Project name="Svm.Services.Contracts" path="src/shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Package name="MediatR.Contracts" />
   </Project>
-  <Project name="Svm.Services.CrossCutting" path="src/services/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" kind="services">
+  <Project name="Svm.Services.CrossCutting" path="src/shared/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Package name="MediatR" />
@@ -30,7 +24,7 @@
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <Package name="Microsoft.Extensions.Options" />
   </Project>
-  <Project name="Svm.Application" path="src/services/Svm.Application/Svm.Application.csproj" kind="services">
+  <Project name="Svm.Application" path="src/application/Svm.Application/Svm.Application.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Reference name="Svm.Services.CrossCutting" />
@@ -39,37 +33,25 @@
     <Package name="FluentValidation.DependencyInjectionExtensions" />
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>
-  <Project name="Svm.IdentityService" path="src/services/Svm.IdentityService/Svm.IdentityService.csproj" kind="services">
+  <Project name="Svm.IdentityService" path="src/modules/Identity/Svm.IdentityService/Svm.IdentityService.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Reference name="Svm.Core.Identity" />
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>
-  <Project name="Svm.ReleaseService" path="src/services/Svm.ReleaseService/Svm.ReleaseService.csproj" kind="services">
+  <Project name="Svm.ReleaseService" path="src/modules/Releases/Svm.ReleaseService/Svm.ReleaseService.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Reference name="Svm.Core.Releases" />
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>
-  <Project name="Svm.PackageService" path="src/services/Svm.PackageService/Svm.PackageService.csproj" kind="services">
-    <Reference name="Svm.SharedKernel" />
-    <Reference name="Svm.Services.Contracts" />
-    <Reference name="Svm.Core.Packages" />
-    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
-  </Project>
-  <Project name="Svm.InstanceService" path="src/services/Svm.InstanceService/Svm.InstanceService.csproj" kind="services">
+  <Project name="Svm.InstanceService" path="src/modules/Instances/Svm.InstanceService/Svm.InstanceService.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Reference name="Svm.Core.Instances" />
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>
-  <Project name="Svm.TaskService" path="src/services/Svm.TaskService/Svm.TaskService.csproj" kind="services">
-    <Reference name="Svm.SharedKernel" />
-    <Reference name="Svm.Services.Contracts" />
-    <Reference name="Svm.Core.Tasks" />
-    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
-  </Project>
-  <Project name="Svm.AuditService" path="src/services/Svm.AuditService/Svm.AuditService.csproj" kind="services">
+  <Project name="Svm.AuditService" path="src/modules/Audit/Svm.AuditService/Svm.AuditService.csproj" kind="services">
     <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Reference name="Svm.Core.Audit" />
@@ -80,9 +62,7 @@
     <Reference name="Svm.Services.Contracts" />
     <Reference name="Svm.Core.Identity" />
     <Reference name="Svm.Core.Releases" />
-    <Reference name="Svm.Core.Packages" />
     <Reference name="Svm.Core.Instances" />
-    <Reference name="Svm.Core.Tasks" />
     <Reference name="Svm.Core.Audit" />
     <Package name="Microsoft.EntityFrameworkCore" />
     <Package name="Microsoft.EntityFrameworkCore.Relational" />
@@ -132,9 +112,7 @@
     <Reference name="Svm.Application" />
     <Reference name="Svm.IdentityService" />
     <Reference name="Svm.ReleaseService" />
-    <Reference name="Svm.PackageService" />
     <Reference name="Svm.InstanceService" />
-    <Reference name="Svm.TaskService" />
     <Reference name="Svm.AuditService" />
     <Reference name="Svm.EntityFrameworkCore" />
     <Reference name="Svm.Dapper" />
@@ -152,9 +130,7 @@
     <Reference name="Svm.Application" />
     <Reference name="Svm.IdentityService" />
     <Reference name="Svm.ReleaseService" />
-    <Reference name="Svm.PackageService" />
     <Reference name="Svm.InstanceService" />
-    <Reference name="Svm.TaskService" />
     <Reference name="Svm.AuditService" />
     <Reference name="Svm.EntityFrameworkCore" />
     <Reference name="Svm.Dapper" />

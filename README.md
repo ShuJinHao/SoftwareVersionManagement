@@ -6,11 +6,11 @@
 
 ## 当前状态
 
-项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础；本批加入现场台账、上位机/视觉软件目录、人员软件授权和设备映射 API 及同源网页。设备软件显示“尚未登记”，实例接入、安装/运行事实和版本业务仍待实现。
+项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权和设备映射 API 及同源网页，以及进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础。设备软件显示“尚未登记”，实例接入、安装/运行事实和版本业务仍待实现。
 
 | 已有实现 | 后续实现 |
 |---|---|
-| 28 个 C# 项目、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
+| 24 个 C# 项目、82 条普通项目引用、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
 | DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 系统凭据、受管实例登记及状态上报 |
 | PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 版本、安装包、批量任务和部分回退 |
 | 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部系统与实例的实际凭据接入 |
@@ -39,9 +39,9 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 | 目录 | 内容 |
 |---|---|
-| `src/shared` | SharedKernel：DDD 基础类型 |
-| `src/core` | 身份、版本、包、实例、任务、审计六个领域模块 |
-| `src/services` | 内层契约、CQRS 管道、应用编排和六模块服务 |
+| `src/shared` | SharedKernel 领域基础、Contracts 内层契约、CrossCutting 公共应用管道 |
+| `src/modules` | Identity、Releases、Instances、Audit；每个模块的 Core 与 Service 放在同一目录 |
+| `src/application` | Application 应用用例与跨模块协调 |
 | `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
 | `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护及软件目录网页 |
@@ -49,7 +49,9 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 | `build`、`eng` | 引用白名单、依赖/工具链清单和本机开发脚本 |
 | `docs` | 七份设计与验收文档 |
 
-内层定义端口，基础设施实现端口，Hosts 注册具体实现。Core、Services 和 Application 不引用数据库、消息或安全技术实现；完整引用图由[软件框架设计第 3 节](docs/软件框架设计.md#3-目录类库和完整引用关系)及 `build/Architecture.xml` 共同约束。
+内层定义端口，基础设施实现端口，Hosts 注册具体实现。模块 Core、Service 和 Application 不引用数据库、消息或安全技术实现；完整引用图由[软件框架设计第 3 节](docs/软件框架设计.md#3-目录类库和完整引用关系)及 `build/Architecture.xml` 共同约束。
+
+业务仍分 IAM、REL、PKG、INS、TSK、AUD 六个逻辑模块。PKG、TSK 的业务实现尚未开始，其四个空工程已删除；现有 schema、权限及版本化消息契约保留，后续有实际实现时再建立工程。已实现模块的 Core 与 Service 保持独立程序集，类型名、命名空间和依赖边界不变；模块位置见[模块设计第 1 节](docs/模块设计.md#1-模块与调用方向)。
 
 ## 文档入口
 
@@ -140,54 +142,34 @@ eng/rabbitmq status
 
 ## 验证方式
 
-网页类型检查、构建及关键交互测试使用既有锁定依赖：
+测试选择规则只在 [AGENTS.md](AGENTS.md#实施边界) 维护。`eng/test` 默认运行完整 Architecture，Security、Framework 必须提供显式过滤条件；入口只运行已有 Debug 产物，不自动还原、编译、迁移或启动容器。可先用 `--preview` 查看选集：
+
+```sh
+eng/test architecture
+eng/test framework --filter 'FullyQualifiedName~ClosedAdministrationCompositionBuildsWithFourTypedAdapters' --preview
+eng/test framework --filter 'FullyQualifiedName~ClosedAdministrationCompositionBuildsWithFourTypedAdapters'
+```
+
+构建与类型检查单独记录。网页发生变化时，使用锁定依赖构建，并指定受影响测试文件，例如人员或台账页面：
 
 ```sh
 eng/npm --prefix src/ui/svm-web run build
-(cd src/ui/svm-web && ../../../eng/npm exec -- vitest run)
-(cd src/ui/svm-web && PLAYWRIGHT_BROWSERS_PATH="$PWD/../../../.cache/playwright-browsers" ../../../eng/npm exec -- playwright install --only-shell chromium)
+(cd src/ui/svm-web && ../../../eng/npm exec -- vitest run tests/personnel.test.ts tests/catalog.test.ts)
 ```
 
-真实浏览器用例为 `PersonnelBrowserTests`、`SiteCatalogBrowserTests`；需先构建网页和 HttpApi，再使用项目私有 PostgreSQL/人员配置运行。夹具创建一次性数据库、显式虚构厂区、HTTPS 主机与 Chromium，验证会话、人员授权、现场层级、目录、映射、原键人工核实、修订冲突和空/失败列表。截图位于忽略的 `artifacts/personnel/browser-*/`、`artifacts/site-catalog/browser-*/`，不保存密码表单或请求追踪。
+涉及真实 PostgreSQL 的选集可通过 `eng/postgres test framework --filter '<显式选集>'` 转发到同一入口，并加载本项目私有配置；该命令不会启动或探测 Docker。也可显式提供 `SVM_TEST_DATABASE_CONFIG_FILE`、`SVM_PERSONNEL_CONFIG_FILE` 及所选用例需要的 `SVM_PERSISTENCE_CONFIG_FILE`。不在命令行传密码，结果仅写入忽略的 `artifacts/test-results/`。
 
-先编译受影响项目，再运行对应分类。基础脚本提供：
-
-```sh
-eng/postgres test architecture
-eng/postgres test security
-eng/postgres test framework
-```
-
-其中 `framework` 选择 Persistence、Composition、HostRuntime、Personnel、Idempotency 和 SiteCatalog 的 Business 用例，涉及真实 PostgreSQL、一次性测试库和本机 HTTPS；消息恢复须使用下面专用命令。按改动范围选择，不代表全量或系统验收。细粒度执行需提供 `SVM_TEST_DATABASE_CONFIG_FILE` 和 `SVM_PERSONNEL_CONFIG_FILE`；HostRuntime 还需 `SVM_PERSISTENCE_CONFIG_FILE`。不在命令行传入密码，结果写入忽略的 `artifacts/`。
-
-单独验证领域事件及 SharedKernel 基础类型可执行：
-
-```sh
-SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \
-  eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
-  --filter 'Category=Business&(FullyQualifiedName~DomainEvent|FullyQualifiedName~DomainFoundation)' \
-  --logger trx --results-directory artifacts/test-results/domain-events/components
-```
-
-发送端及受影响回归使用真实 PostgreSQL/RabbitMQ；先完成上述准备与 FrameworkTests 编译。发送端恢复会停止专用 broker，与消费验证依次执行：
+数据库事务、消息投递/恢复或浏览器流程发生相关变化时，再选择对应真实夹具。以下为单个消息隔离用例的调用方式，需先完成 PostgreSQL、RabbitMQ 和 FrameworkTests 构建：
 
 ```sh
 SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \
 SVM_TEST_RABBITMQ_CONFIG_FILE="$PWD/.cache/rabbitmq-local/test-admin.json" \
-SVM_PERSONNEL_CONFIG_FILE="$PWD/.cache/personnel-local/personnel.json" \
-SVM_PERSISTENCE_CONFIG_FILE="$PWD/.cache/postgres-local/runtime.json" \
-  eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
-  --filter 'Category=Business&(FullyQualifiedName~Outbox|FullyQualifiedName~DomainEvent|FullyQualifiedName~DomainFoundation|FullyQualifiedName~Idempotency|FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel|FullyQualifiedName~SiteCatalog)&FullyQualifiedName!~Consumption' \
-  --logger trx --results-directory artifacts/test-results/consumer/framework-regression
-
-SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \
-SVM_TEST_RABBITMQ_CONFIG_FILE="$PWD/.cache/rabbitmq-local/test-admin.json" \
-  eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
-  --filter 'Category=Business&FullyQualifiedName~Consumption' \
-  --logger trx --results-directory artifacts/test-results/consumer/framework-consumption
+  eng/test framework --filter 'FullyQualifiedName~UnknownContractIsQuarantinedOnceAndTheNextValidMessageStillCommits'
 ```
 
-恢复用例会停止/重启本工具拥有的专用测试 broker，使用测试代理丢弃发送确认，并启动/终止本次拥有的 Worker 或测试专用消费子进程。`ConsumptionHarness` 分类只由私有子进程验证工具调用，不属于 Business 门禁；生产 Worker 没有测试开关。每个用例清理其随机数据库、角色、vhost、账号及私有控制文件；不得将这些配置指向生产环境或其他项目。
+真实浏览器用例为 `PersonnelBrowserTests`、`SiteCatalogBrowserTests`，使用一次性 PostgreSQL、显式虚构厂区、临时 HTTPS 主机及匹配锁定 Playwright 的 Chromium。浏览器尚未准备时可显式执行 `(cd src/ui/svm-web && PLAYWRIGHT_BROWSERS_PATH="$PWD/../../../.cache/playwright-browsers" ../../../eng/npm exec -- playwright install --only-shell chromium)`。截图写入忽略的 `artifacts/personnel/browser-*/`、`artifacts/site-catalog/browser-*/`，不保存密码表单或请求追踪。
+
+恢复用例可能停止/重启本工具拥有的专用 broker、丢弃发送确认或终止本次测试子进程；按所选用例准备并串行使用这些资源。`ConsumptionHarness` 分类只由私有子进程验证工具调用；生产 Worker 没有测试开关。每个用例清理其随机数据库、角色、vhost、账号及私有文件，结束后核对残留；配置只指向本项目测试环境。已有结果和未覆盖项见框架设计第 11 节。
 
 ## 仓库与交付边界
 
