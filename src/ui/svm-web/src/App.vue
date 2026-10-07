@@ -9,8 +9,8 @@ const error = ref(''), busy = ref(false)
 const pendingWrite = ref(false)
 provide(pendingWriteKey, pendingWrite)
 const authenticated = computed(() => session.current?.authenticated === true)
-const home = computed(() => session.canAssets ? '/site' : session.canSoftware ? '/software' : session.canManage ? '/users' : '/password')
-const allowed = computed(() => route.path === '/password' || route.path === '/site' && session.canAssets || route.path === '/software' && session.canSoftware || route.path === '/users' && session.canManage)
+const home = computed(() => session.canAssets ? '/site' : session.canSoftware ? '/software' : session.canInstances ? '/instances' : session.canEnrollment ? '/enrollment' : session.canManage ? '/users' : '/password')
+const allowed = computed(() => route.path === '/password' || route.path === '/site' && session.canAssets || route.path === '/software' && session.canSoftware || route.path === '/users' && session.canManage || route.path === '/instances' && session.canInstances || route.path === '/enrollment' && session.canEnrollment)
 watch(() => [session.ready, authenticated.value, session.current?.mustChangePassword, allowed.value, home.value, route.path, pendingWrite.value], () => {
   if (!session.ready || session.error) return
   if (pendingWrite.value) return
@@ -35,8 +35,8 @@ async function logout() {
   <div v-else-if="session.error" class="state-card"><p role="alert">{{ session.error }}</p><button @click="session.load">重新加载</button></div>
   <template v-else>
     <nav v-if="authenticated && !session.current?.mustChangePassword" class="navigation" aria-label="管理导航">
-      <RouterLink v-if="session.canAssets" to="/site">现场台账</RouterLink><RouterLink v-if="session.canSoftware" to="/software">软件目录</RouterLink><RouterLink v-if="session.canManage" to="/users">人员账号</RouterLink><RouterLink to="/password">本人密码</RouterLink>
-      <span v-if="!session.canManage && !session.canAssets && !session.canSoftware" class="muted">当前账号未获管理或台账权限</span>
+      <RouterLink v-if="session.canAssets" to="/site">现场台账</RouterLink><RouterLink v-if="session.canSoftware" to="/software">软件目录</RouterLink><RouterLink v-if="session.canManage" to="/users">人员账号</RouterLink><RouterLink v-if="session.canInstances" to="/instances">软件实例</RouterLink><RouterLink v-if="session.canEnrollment" to="/enrollment">登记许可</RouterLink><RouterLink to="/password">本人密码</RouterLink>
+      <span v-if="!session.canManage && !session.canAssets && !session.canSoftware && !session.canInstances && !session.canEnrollment" class="muted">当前账号未获管理或台账权限</span>
     </nav>
     <main><p v-if="error" role="alert" class="error">{{ error }}</p><RouterView v-if="!authenticated && route.path === '/login' || authenticated && (pendingWrite || allowed && (route.path === '/password' || !session.current?.mustChangePassword))" /></main>
   </template>

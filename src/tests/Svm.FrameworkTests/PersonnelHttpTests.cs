@@ -148,13 +148,15 @@ internal sealed class LocalApi : IAsyncDisposable
     private readonly string _configuration;
     private readonly string _thumbprint;
     private readonly string? _siteConfiguration;
+    private readonly string? _instanceConfiguration;
     private readonly ConcurrentQueue<string> _logs = new();
     private readonly TaskCompletionSource<string> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _disposed;
     internal string Url { get; private set; } = "";
-    private LocalApi(Process process, string configuration, string thumbprint, string? siteConfiguration)
-    { _process = process; _configuration = configuration; _thumbprint = thumbprint; _siteConfiguration = siteConfiguration; }
-    internal static async Task<LocalApi> StartAsync(PersistenceDatabase database, string? writer = null, SiteCatalogOptions? site = null)
+    private LocalApi(Process process, string configuration, string thumbprint, string? siteConfiguration, string? instanceConfiguration)
+    { _process = process; _configuration = configuration; _thumbprint = thumbprint; _siteConfiguration = siteConfiguration; _instanceConfiguration = instanceConfiguration; }
+    internal static async Task<LocalApi> StartAsync(PersistenceDatabase database, string? writer = null, SiteCatalogOptions? site = null,
+        Svm.Services.Contracts.Instances.InstanceAccessOptions? instanceAccess = null)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "build/postgres.local.json"))) root = root.Parent;
@@ -175,6 +177,7 @@ internal sealed class LocalApi : IAsyncDisposable
         info.Environment["Kestrel__Certificates__Default__Password"] = personnel.CertificatePassword;
         info.Environment["Logging__LogLevel__Default"] = "Information";
         info.Environment.Remove("SVM_SITE_CONFIG_FILE");
+        info.Environment.Remove("SVM_INSTANCE_ACCESS_CONFIG_FILE");
         string? siteConfig = null;
         if (site is not null)
         {
@@ -184,7 +187,16 @@ internal sealed class LocalApi : IAsyncDisposable
             await JsonSerializer.SerializeAsync(file, site);
             info.Environment["SVM_SITE_CONFIG_FILE"] = siteConfig;
         }
-        var api = new LocalApi(new Process { StartInfo = info, EnableRaisingEvents = true }, config, cert.Thumbprint, siteConfig);
+        string? instanceConfig = null;
+        if (instanceAccess is not null)
+        {
+            instanceConfig = Path.Combine(root.FullName, ".cache", $"instance-api-{Guid.NewGuid():N}.json");
+            await using var file = new FileStream(instanceConfig, new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write,
+                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite });
+            await JsonSerializer.SerializeAsync(file, instanceAccess);
+            info.Environment["SVM_INSTANCE_ACCESS_CONFIG_FILE"] = instanceConfig;
+        }
+        var api = new LocalApi(new Process { StartInfo = info, EnableRaisingEvents = true }, config, cert.Thumbprint, siteConfig, instanceConfig);
         api._process.OutputDataReceived += (_, e) => api.Capture(e.Data);
         api._process.ErrorDataReceived += (_, e) => api.Capture(e.Data);
         api._process.Exited += (_, _) => api._ready.TrySetException(new InvalidOperationException("Local API exited before readiness; diagnostics retained in test memory."));
@@ -219,5 +231,6 @@ internal sealed class LocalApi : IAsyncDisposable
         await _process.WaitForExitAsync();
         _process.Dispose(); File.Delete(_configuration);
         if (_siteConfiguration is not null) File.Delete(_siteConfiguration);
+        if (_instanceConfiguration is not null) File.Delete(_instanceConfiguration);
     }
 }

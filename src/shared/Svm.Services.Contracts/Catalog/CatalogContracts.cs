@@ -23,7 +23,7 @@ public sealed record DeviceView(Guid Id, string DeviceNo, string Name, Guid Proc
     string ProcessName, Guid SiteId, string SiteName, long Revision);
 // Id and IsActive support safe internal result reconstruction; HTTP projects the documented public fields.
 public sealed record BindingView(Guid Id, Guid DeviceId, Guid SoftwareId, long Revision, bool IsActive);
-public sealed record DeviceSoftwareInventoryItem(SoftwareView Software, BindingView Binding);
+public sealed record DeviceSoftwareInventoryItem(SoftwareView Software, BindingView Binding, Svm.Services.Contracts.Instances.InstanceView? Instance = null);
 public sealed record CatalogPosition(string SortKey, Guid Id);
 public sealed record CatalogFilter(string? Code = null, string? Name = null, string? Category = null, Guid? ProcessId = null, Guid? SoftwareId = null);
 public sealed record CatalogListInput(CatalogFilter Filter, int PageSize, CatalogPosition? After = null);
@@ -49,6 +49,7 @@ public interface ISiteAssets
     Task<BindingView> CreateBindingAsync(Guid deviceId, Guid softwareId, CancellationToken token);
     Task<BindingView> RevokeBindingAsync(Guid deviceId, Guid softwareId, long revision, CancellationToken token);
     Task<BindingView> BindingResultAsync(Guid id, CancellationToken token);
+    Task<bool> HasActiveBindingAsync(Guid deviceId, Guid softwareId, CancellationToken token);
     Task ConfirmInstanceReferenceAsync(Guid deviceId, Guid softwareId, CancellationToken token);
 }
 public interface ISoftwareCatalogQueries

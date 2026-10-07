@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
+using Svm.Services.Contracts.Instances;
+using Svm.HttpApi.Instances;
 
 namespace Svm.HttpApi.Personnel;
 
@@ -17,6 +19,9 @@ internal sealed class HttpPersonnelContext(IHttpContextAccessor accessor) : ITru
     {
         var http = accessor.HttpContext;
         if (http is null) return null;
+        if (http.Items[HttpAccessProofSource.IdentityItem] is AccessIdentity identity)
+            return new(new CallActor(identity.Kind, identity.SubjectId, identity.SoftwareId, identity.InstanceId),
+                http.GetEndpoint()!.Metadata.GetMetadata<PersonnelEndpointKind>()!.Kind, http.TraceIdentifier);
         return new(Proof is { } proof ? new CallActor(ActorKind.Human, proof.SubjectId) : new CallActor(ActorKind.Anonymous),
             http.GetEndpoint()?.Metadata.GetMetadata<PersonnelEndpointKind>()?.Kind ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid), http.TraceIdentifier);
     }
@@ -30,7 +35,7 @@ internal sealed class PersonnelCookieEvents(IPersonnelService personnel) : Cooki
 {
     public override async Task ValidatePrincipal(CookieValidatePrincipalContext context)
     {
-        if (!context.HttpContext.Request.Path.StartsWithSegments("/api"))
+        if (HttpAccessProofSource.IsMachine(context.HttpContext) || !context.HttpContext.Request.Path.StartsWithSegments("/api"))
         {
             context.RejectPrincipal();
             return;

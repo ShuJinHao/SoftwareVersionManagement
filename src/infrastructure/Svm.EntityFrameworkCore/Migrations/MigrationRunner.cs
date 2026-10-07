@@ -140,6 +140,17 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
             sql.AppendLine($"REVOKE UPDATE, DELETE ON TABLE {schema}.operation_results FROM {writer};");
             sql.AppendLine($"GRANT UPDATE (\"Status\",\"ResourceId\",\"WorkId\",\"CompletedAt\") ON TABLE {schema}.operation_results TO {writer};");
         }
+        foreach (var (table, columns) in new[] {
+            ("instance_credentials", "\"Id\",\"SubjectId\",\"ExpiresAt\",\"RevokedAt\",\"Revision\""),
+            ("enrollment_grants", "\"Id\",\"SoftwareId\",\"DeviceIds\",\"ExpiresAt\",\"MaxInstances\",\"UsedCount\",\"RevokedAt\",\"Revision\""),
+            ("recovery_grants", "\"Id\",\"SoftwareId\",\"InstanceId\",\"ExpiresAt\",\"UsedKey\",\"RevokedAt\",\"Revision\"") })
+        {
+            sql.AppendLine($"REVOKE SELECT ON TABLE iam.{table} FROM {reader};");
+            sql.AppendLine($"GRANT SELECT ({columns}) ON TABLE iam.{table} TO {reader};");
+        }
+        sql.AppendLine($"REVOKE ALL ON TABLE iam.registrations FROM {reader};");
+        sql.AppendLine($"REVOKE DELETE ON TABLE iam.instance_subjects,iam.instance_credentials,iam.enrollment_grants,iam.recovery_grants,iam.registrations,ins.instances,ins.instance_snapshots,ins.installation_evidence,ins.report_stream_receipts FROM {writer};");
+        sql.AppendLine($"REVOKE UPDATE ON TABLE iam.registrations,ins.installation_evidence,ins.report_stream_receipts FROM {writer};");
         return sql.ToString();
     }
 }

@@ -18,6 +18,7 @@ const messages: Record<string, string> = {
   IDEMPOTENCY_CONFLICT: '原操作信息发生冲突，请核实该操作。', RESOURCE_NOT_FOUND: '对象不存在或不可访问。',
   RATE_LIMITED: '操作过于频繁，请稍后再试。', PAYLOAD_TOO_LARGE: '提交内容过大，请减少内容。',
   DEPENDENCY_UNAVAILABLE: '服务暂不可用，操作结果需要核实。', CONFIGURATION_INVALID: '服务配置不可用，请联系管理员。',
+  REGISTRATION_CONFLICT: '登记资料与已有安装不一致，请通过受控恢复核实身份。', REPORT_CONFLICT: '当前报告序号的内容冲突。', INSTANCE_SUSPENDED: '此实例的 API 接入已暂停。', GRANT_EXPIRED: '登记许可已到期。', GRANT_EXHAUSTED: '登记许可名额已耗尽。', GRANT_REVOKED: '登记许可已撤销。',
   CONNECTION_UNKNOWN: '连接中断，操作结果尚未确认。',
 }
 export class ApiError extends Error {

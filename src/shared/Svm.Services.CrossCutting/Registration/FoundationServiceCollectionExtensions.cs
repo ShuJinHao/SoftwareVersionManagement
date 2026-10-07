@@ -9,6 +9,7 @@ using Svm.Services.CrossCutting.Idempotency;
 using Svm.Services.CrossCutting.DomainEvents;
 using Svm.Services.CrossCutting.Consumption;
 using Svm.Services.Contracts.Catalog;
+using Svm.Services.Contracts.Instances;
 
 namespace Svm.Services.CrossCutting.Registration;
 
@@ -28,6 +29,8 @@ public static class FoundationServiceCollectionExtensions
         services.AddScoped<ICallContext, ScopedCallContext>();
         services.AddScoped<IOperationContext, ScopedOperationContext>();
         services.AddScoped<IdempotencyCoordinator>();
+        services.AddScoped<ProtocolCoordinator>();
+        services.AddSingleton<IProtocolRecovery, ScopedRequestExecutor>();
         services.AddScoped<ISender, Mediator>();
         services.AddSingleton<ScopedRequestExecutor>();
         services.AddSingleton<IOperationResultRecovery, ScopedRequestExecutor>();
@@ -55,12 +58,14 @@ public static class FoundationServiceCollectionExtensions
         if (services.Any(d => d.IsKeyedService && (IsSinglePort(d.ServiceType) ||
             d.ServiceType.IsGenericType && (d.ServiceType.GetGenericTypeDefinition() == typeof(IRequestHandler<,>) ||
                 d.ServiceType.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>) ||
-                d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>) || d.ServiceType.GetGenericTypeDefinition() == typeof(IIdempotencyRequestAdapter<,>)))))
+                d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>) || d.ServiceType.GetGenericTypeDefinition() == typeof(IIdempotencyRequestAdapter<,>) || d.ServiceType.GetGenericTypeDefinition() == typeof(IProtocolRequestAdapter<,>)))))
             throw new InvalidOperationException("Keyed registrations cannot substitute framework ports, handlers or pipeline components.");
         foreach (var group in services.Where(d => IsSinglePort(d.ServiceType)).GroupBy(d => d.ServiceType))
             if (group.Count() != 1) throw new InvalidOperationException($"Conflicting default implementations for {group.Key.FullName}.");
         RequireImplementation(services, typeof(ICallContext), typeof(ScopedCallContext), ServiceLifetime.Scoped);
         RequireImplementation(services, typeof(IOperationContext), typeof(ScopedOperationContext), ServiceLifetime.Scoped);
+        RequireImplementation(services, typeof(ProtocolCoordinator), typeof(ProtocolCoordinator), ServiceLifetime.Scoped);
+        RequireImplementation(services, typeof(IProtocolRecovery), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
         RequireImplementation(services, typeof(IdempotencyCoordinator), typeof(IdempotencyCoordinator), ServiceLifetime.Scoped);
         RequireImplementation(services, typeof(IOperationResultRecovery), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
         RequireImplementation(services, typeof(ISender), typeof(Mediator), ServiceLifetime.Scoped);
@@ -78,7 +83,7 @@ public static class FoundationServiceCollectionExtensions
             RequireScopedPort(services, typeof(ITrustedCallContextSource));
             RequireScopedPort(services, typeof(IRequestAuthorizer));
         }
-        if (catalog.Bindings.Any(b => PersonnelWriteCapabilities.Contains(b.RequestType) || PersonnelManagementCapabilities.Contains(b.RequestType) || CatalogCapabilities.IsWrite(b.RequestType)))
+        if (catalog.Bindings.Any(b => PersonnelWriteCapabilities.Contains(b.RequestType) || PersonnelManagementCapabilities.Contains(b.RequestType) || CatalogCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsWrite(b.RequestType)))
         {
             RequireScopedPort(services, typeof(IUnitOfWork));
             RequireScopedPort(services, typeof(IPersonnelService));
@@ -100,6 +105,12 @@ public static class FoundationServiceCollectionExtensions
             RequireScopedPort(services, typeof(IPersonnelAdministration)); RequireScopedPort(services, typeof(IPersonnelSoftwareAdministration));
             RequireScopedPort(services, typeof(IOperationResultStore)); RequireScopedPort(services, typeof(IUserQueries));
         }
+        if (catalog.Bindings.Any(b => InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)))
+        {
+            RequireScopedPort(services, typeof(IInstanceAccess)); RequireScopedPort(services, typeof(IManagedInstances));
+            RequireScopedPort(services, typeof(IInstanceQueries)); RequireScopedPort(services, typeof(IAccessProofSource));
+            RequireScopedPort(services, typeof(IOperationResultStore));
+        }
         var expectedHandlers = new HashSet<Type>();
         var expectedValidators = new HashSet<(Type Contract, Type Implementation)>();
         var expectedAdapters = new Dictionary<Type, System.Reflection.Assembly>();
@@ -110,8 +121,8 @@ public static class FoundationServiceCollectionExtensions
             var contract = typeof(IRequestHandler<,>).MakeGenericType(binding.RequestType, response);
             expectedHandlers.Add(contract);
             RequireImplementation(services, contract, binding.HandlerType, ServiceLifetime.Scoped);
-            if (catalog.GetPolicy(binding.RequestType).Idempotency == IdempotencyMode.OperationResult)
-                expectedAdapters.Add(typeof(IIdempotencyRequestAdapter<,>).MakeGenericType(binding.RequestType, response), binding.HandlerType.Assembly);
+            if (catalog.GetPolicy(binding.RequestType).Idempotency != IdempotencyMode.None)
+                expectedAdapters.Add((InstanceCapabilities.IsProtocol(binding.RequestType) ? typeof(IProtocolRequestAdapter<,>) : typeof(IIdempotencyRequestAdapter<,>)).MakeGenericType(binding.RequestType, response), binding.HandlerType.Assembly);
             foreach (var validator in binding.ValidatorTypes)
                 expectedValidators.Add((typeof(IValidator<>).MakeGenericType(binding.RequestType), validator));
         }
@@ -125,7 +136,7 @@ public static class FoundationServiceCollectionExtensions
             if (definition == typeof(IValidator<>) && (descriptor.ImplementationType is null ||
                 descriptor.Lifetime != ServiceLifetime.Scoped || !expectedValidators.Remove((descriptor.ServiceType, descriptor.ImplementationType))))
                 throw new InvalidOperationException("A Validator bypasses or duplicates the approved registration.");
-            if (definition == typeof(IIdempotencyRequestAdapter<,>))
+            if (definition == typeof(IIdempotencyRequestAdapter<,>) || definition == typeof(IProtocolRequestAdapter<,>))
             {
                 if (!expectedAdapters.Remove(descriptor.ServiceType, out var assembly) || descriptor.IsKeyedService ||
                     descriptor.Lifetime != ServiceLifetime.Scoped || descriptor.ImplementationType is not { IsAbstract: false, ContainsGenericParameters: false } implementation ||
@@ -139,7 +150,7 @@ public static class FoundationServiceCollectionExtensions
     }
 
     private static bool IsSinglePort(Type type) => type == typeof(ICallContext) || type == typeof(ISender) ||
-        type == typeof(ScopedRequestExecutor) || type == typeof(IOperationResultRecovery) || type.IsInterface && !type.IsGenericType &&
+        type == typeof(ScopedRequestExecutor) || type == typeof(IOperationResultRecovery) || type == typeof(IProtocolRecovery) || type.IsInterface && !type.IsGenericType &&
         type.Assembly == typeof(ICallContext).Assembly;
 
     private static void RequireScopedPort(IServiceCollection services, Type type)
