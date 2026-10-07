@@ -137,9 +137,9 @@ async function up() {
   writeConnections();
   console.log(`PostgreSQL ${baseline.version} ready at 127.0.0.1:${state.port}; database svm_dev. Secrets remain in ignored local files.`);
 }
-async function child(args) {
+async function child(args, executable = join(root, 'eng/dotnet')) {
   const exitCode = await new Promise((accept, reject) => {
-    const process_ = spawn(join(root, 'eng/dotnet'), args, {
+    const process_ = spawn(executable, args, {
       cwd: root, stdio: 'inherit', env: { ...process.env,
         SVM_PERSISTENCE_CONFIG_FILE: join(directory, 'runtime.json'),
         SVM_TEST_DATABASE_CONFIG_FILE: join(directory, 'test-admin.json'),
@@ -153,47 +153,43 @@ async function child(args) {
 
 try {
   if (!allowed.has(command)) fail('Usage: eng/postgres up|status|stop|migrate status|script|apply|test architecture|security|framework');
-  if (['up', 'status', 'stop'].includes(command) && arguments_.length) fail('Lifecycle commands do not accept extra arguments.');
-  const endpoint = docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim();
-  if (!endpoint.startsWith('unix://')) fail('This helper only manages the existing local Unix-socket Docker context.');
-  const engine = docker(['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}']).stdout.trim();
-  if (engine !== baseline.platform) fail('Local Docker platform does not match the pinned PostgreSQL image.');
-  mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
-  if (existsSync(statePath)) {
-    state = JSON.parse(readFileSync(statePath, 'utf8'));
-    if (state.identity !== identity || state.format !== 1) fail('Saved database state belongs to another workspace or format.');
-    if (!['admin', 'migration', 'writer', 'reader'].every(k => typeof state.secrets?.[k] === 'string' && /^[A-Za-z0-9_-]{43}$/.test(state.secrets[k])))
-      fail('Saved local credentials are invalid; refusing automatic reset or rotation.');
-  }
-  // Only lifecycle commands hold the local file lock; PostgreSQL serializes migrations separately.
-  if (command === 'up' || command === 'stop') {
-    try { lock = openSync(join(directory, 'lifecycle.lock'), 'wx', 0o600); }
-    catch { fail('Another local database lifecycle operation is active.'); }
-  }
-  if (command === 'up') await up();
-  if (command === 'status') {
-    const current = checkedContainer();
-    console.log(JSON.stringify({ container, state: current?.State.Status ?? 'absent', database: 'svm_dev',
-      address: current?.State.Running ? `127.0.0.1:${current.NetworkSettings.Ports['5432/tcp'][0].HostPort}` : null,
-      volumeRetained: !!inspect('volume', volume) }));
-  }
-  if (command === 'stop') {
-    const current = checkedContainer();
-    if (current?.State.Running) docker(['stop', '--time', '20', container]);
-    console.log('SVM PostgreSQL stopped; the container, volume and credentials are retained.');
-  }
-  if (command === 'migrate' || command === 'test') {
-    if (!state || !checkedContainer()?.State.Running) fail('Run eng/postgres up first.');
+  if (command === 'test') {
+    // Test selection is independent of Docker lifecycle; only pass this project's private configuration paths.
+    await child(arguments_, join(root, 'eng/test'));
+  } else {
+    if (['up', 'status', 'stop'].includes(command) && arguments_.length) fail('Lifecycle commands do not accept extra arguments.');
+    const endpoint = docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim();
+    if (!endpoint.startsWith('unix://')) fail('This helper only manages the existing local Unix-socket Docker context.');
+    const engine = docker(['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}']).stdout.trim();
+    if (engine !== baseline.platform) fail('Local Docker platform does not match the pinned PostgreSQL image.');
+    mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
+    if (existsSync(statePath)) {
+      state = JSON.parse(readFileSync(statePath, 'utf8'));
+      if (state.identity !== identity || state.format !== 1) fail('Saved database state belongs to another workspace or format.');
+      if (!['admin', 'migration', 'writer', 'reader'].every(k => typeof state.secrets?.[k] === 'string' && /^[A-Za-z0-9_-]{43}$/.test(state.secrets[k])))
+        fail('Saved local credentials are invalid; refusing automatic reset or rotation.');
+    }
+    // Only lifecycle commands hold the local file lock; PostgreSQL serializes migrations separately.
+    if (command === 'up' || command === 'stop') {
+      try { lock = openSync(join(directory, 'lifecycle.lock'), 'wx', 0o600); }
+      catch { fail('Another local database lifecycle operation is active.'); }
+    }
+    if (command === 'up') await up();
+    if (command === 'status') {
+      const current = checkedContainer();
+      console.log(JSON.stringify({ container, state: current?.State.Status ?? 'absent', database: 'svm_dev',
+        address: current?.State.Running ? `127.0.0.1:${current.NetworkSettings.Ports['5432/tcp'][0].HostPort}` : null,
+        volumeRetained: !!inspect('volume', volume) }));
+    }
+    if (command === 'stop') {
+      const current = checkedContainer();
+      if (current?.State.Running) docker(['stop', '--time', '20', container]);
+      console.log('SVM PostgreSQL stopped; the container, volume and credentials are retained.');
+    }
     if (command === 'migrate') {
+      if (!state || !checkedContainer()?.State.Running) fail('Run eng/postgres up first.');
       if (arguments_.length !== 1 || !['status', 'script', 'apply'].includes(arguments_[0])) fail('Migration requires exactly status, script or apply.');
       await child(['src/hosts/Svm.Migration/bin/Debug/net8.0/Svm.Migration.dll', arguments_[0], '--config', join(directory, 'migration.json')]);
-    } else {
-      const projects = { architecture: ['Svm.ArchitectureTests', 'Category=Architecture'], security: ['Svm.SecurityTests', 'Category=Security'],
-        framework: ['Svm.FrameworkTests', 'Category=Business&(FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel|FullyQualifiedName~Idempotency|FullyQualifiedName~SiteCatalog)'] };
-      const choice = projects[arguments_[0]];
-      if (!choice || arguments_.length !== 1) fail('Choose the affected architecture, security or framework test group.');
-      await child(['test', `src/tests/${choice[0]}/${choice[0]}.csproj`, '--no-build', '--no-restore', '--filter', choice[1],
-        '--logger', 'trx', '--results-directory', `artifacts/test-results/personnel/${arguments_[0]}`, '--verbosity', 'minimal']);
     }
   }
 } catch (error) {

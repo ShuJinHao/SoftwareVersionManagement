@@ -4,15 +4,13 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />
-    <ProjectReference Include="../../services/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
-    <ProjectReference Include="../../services/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />
-    <ProjectReference Include="../../services/Svm.Application/Svm.Application.csproj" />
-    <ProjectReference Include="../../services/Svm.IdentityService/Svm.IdentityService.csproj" />
-    <ProjectReference Include="../../services/Svm.ReleaseService/Svm.ReleaseService.csproj" />
-    <ProjectReference Include="../../services/Svm.PackageService/Svm.PackageService.csproj" />
-    <ProjectReference Include="../../services/Svm.InstanceService/Svm.InstanceService.csproj" />
-    <ProjectReference Include="../../services/Svm.TaskService/Svm.TaskService.csproj" />
-    <ProjectReference Include="../../services/Svm.AuditService/Svm.AuditService.csproj" />
+    <ProjectReference Include="../../shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
+    <ProjectReference Include="../../shared/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />
+    <ProjectReference Include="../../application/Svm.Application/Svm.Application.csproj" />
+    <ProjectReference Include="../../modules/Identity/Svm.IdentityService/Svm.IdentityService.csproj" />
+    <ProjectReference Include="../../modules/Releases/Svm.ReleaseService/Svm.ReleaseService.csproj" />
+    <ProjectReference Include="../../modules/Instances/Svm.InstanceService/Svm.InstanceService.csproj" />
+    <ProjectReference Include="../../modules/Audit/Svm.AuditService/Svm.AuditService.csproj" />
     <ProjectReference Include="../../infrastructure/Svm.EntityFrameworkCore/Svm.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../../infrastructure/Svm.Dapper/Svm.Dapper.csproj" />
     <ProjectReference Include="../../infrastructure/Svm.EventBus/Svm.EventBus.csproj" />
