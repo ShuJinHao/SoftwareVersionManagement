@@ -53,7 +53,7 @@ async function save() {
   const body = creating ? { code: code.value, name: name.value, category: category.value, description: description.value || null }
     : { name: name.value, description: description.value || null, reason: reason.value, expectedRevision: selected.value!.revision }
   const result = await mutation.perform<Software>('/api/v1/manage/software' + (creating ? '' : '/' + selected.value!.id), creating ? 'POST' : 'PATCH', body, session.current!.csrfToken)
-  if (mutation.completed.value && result) { selected.value = result; dialog.value?.close(); mode.value = null; notice.value = '软件资料已保存。'; await session.load(); await load() }
+  if (mutation.completed.value && result) { selected.value = result; dialog.value?.close(); mode.value = null; notice.value = '软件资料已保存。'; await session.load(); if (creating) { cursors.value = ['']; nextCursor.value = null }; await load() }
   else if (!uncertain.value) await session.load()
 }
 onMounted(async () => { await load(); const id = route.query.id; if (typeof id === 'string' && /^[\da-f]{8}(-[\da-f]{4}){3}-[\da-f]{12}$/i.test(id)) await select(id) })
