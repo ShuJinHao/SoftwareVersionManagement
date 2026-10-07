@@ -7,7 +7,12 @@ public interface IAggregateRoot
     IReadOnlyList<IDomainEvent> DomainEvents { get; }
 }
 
-public abstract class AggregateRoot<TId> : Entity<TId>, IAggregateRoot where TId : notnull, IStrongId
+internal interface ITransactionalDomainEvents
+{
+    void AcknowledgeDomainEvents(IReadOnlyList<IDomainEvent> processed);
+}
+
+public abstract class AggregateRoot<TId> : Entity<TId>, IAggregateRoot, ITransactionalDomainEvents where TId : notnull, IStrongId
 {
     private readonly List<IDomainEvent> _events = [];
     private readonly ReadOnlyCollection<IDomainEvent> _view;
@@ -26,6 +31,13 @@ public abstract class AggregateRoot<TId> : Entity<TId>, IAggregateRoot where TId
         _events.Add(domainEvent);
     }
 
-    // Dispatch and acknowledgement belong to the future transaction implementation.
-    // There is deliberately no public Clear method that could discard uncommitted facts.
+    void ITransactionalDomainEvents.AcknowledgeDomainEvents(IReadOnlyList<IDomainEvent> processed)
+    {
+        // Match the actual dispatched objects, never discard unrelated pending events.
+        foreach (var domainEvent in processed)
+        {
+            var index = _events.FindIndex(pending => ReferenceEquals(pending, domainEvent));
+            if (index >= 0) _events.RemoveAt(index);
+        }
+    }
 }

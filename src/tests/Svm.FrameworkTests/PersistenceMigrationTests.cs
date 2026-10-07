@@ -74,11 +74,37 @@ public sealed class PersistenceMigrationTests
                 """;
             var before = await PersistenceDatabase.ScalarAsync<string>(database.MigrationConnection, previous);
             var pending = await database.Runner.StatusAsync(default);
-            Assert.Equal(new[] { "20261006000100_OperationResults" }, pending.Pending);
+            Assert.Equal(new[] { "20261006000100_OperationResults", "20261007000100_BusOutbox" }, pending.Pending);
             await database.Runner.ApplyAsync(default);
             Assert.Equal(before, await PersistenceDatabase.ScalarAsync<string>(database.ReaderConnection, previous));
             foreach (var schema in new[] { "iam", "rel", "pkg", "ins", "tsk", "aud" })
                 Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(database.ReaderConnection, $"SELECT count(*) FROM {schema}.operation_results"));
+        }
+        finally { await database.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task BusOutboxUpgradePreservesPreviouslyRetainedOperationResultsAndAudit()
+    {
+        var database = new PersistenceDatabase();
+        try
+        {
+            await database.CreateAsync(migrate: false);
+            await using (var context = new SvmDbContext(new DbContextOptionsBuilder<SvmDbContext>()
+                .UseNpgsql(database.MigrationConnection, options => options.MigrationsHistoryTable("__EFMigrationsHistory", "framework")).Options))
+                await context.GetService<IMigrator>().MigrateAsync("20261006000100_OperationResults");
+            var operation = Guid.NewGuid();
+            await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, $"""
+                INSERT INTO pkg.operation_results ("ActorKind","SubjectId","Operation","IdempotencyKey","RequestDigest","OperationId","Status","ResourceId","CompletedAt")
+                VALUES (2,'{Guid.NewGuid()}','fixture.retained','{Guid.NewGuid()}','{new string('a',64)}','{operation}',2,'{Guid.NewGuid()}',clock_timestamp());
+                INSERT INTO aud.events VALUES ('{Guid.NewGuid()}','{operation}',NULL,'Human',NULL,NULL,'fixture.retained',NULL,'Completed','Preserved evidence','fixture',clock_timestamp());
+                """);
+            const string rows = "SELECT json_build_object('results',(SELECT json_agg(r) FROM pkg.operation_results r),'audit',(SELECT json_agg(a) FROM aud.events a))::text";
+            var before = await PersistenceDatabase.ScalarAsync<string>(database.MigrationConnection, rows);
+            Assert.Equal(new[] { "20261007000100_BusOutbox" }, (await database.Runner.StatusAsync(default)).Pending);
+            await database.Runner.ApplyAsync(default);
+            Assert.Equal(before, await PersistenceDatabase.ScalarAsync<string>(database.ReaderConnection, rows));
+            Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(database.ReaderConnection,"SELECT count(*) FROM framework.\"InboxState\""));
         }
         finally { await database.DisposeAsync(); }
     }
@@ -92,7 +118,7 @@ public sealed class PersistenceMigrationTests
             await database.CreateAsync(migrate: false);
             var before = await database.Runner.StatusAsync(default);
             Assert.Empty(before.Applied);
-            Assert.Equal(new[] { "20260930000100_InitialSchemas", "20261001000100_PersonnelSessions", "20261006000100_OperationResults" }, before.Pending);
+            Assert.Equal(new[] { "20260930000100_InitialSchemas", "20261001000100_PersonnelSessions", "20261006000100_OperationResults", "20261007000100_BusOutbox" }, before.Pending);
             var script = database.Runner.GenerateScript();
             Assert.Contains("pg_try_advisory_lock", script);
             Assert.Contains("SVM migration role configuration invalid", script);
@@ -102,11 +128,11 @@ public sealed class PersistenceMigrationTests
             var second = await database.Runner.ApplyAsync(default);
             Assert.Empty(first.Pending);
             Assert.Equal(first.Applied, second.Applied);
-            Assert.Equal(3, second.Applied.Count);
+            Assert.Equal(4, second.Applied.Count);
             Assert.Equal(7, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection, SchemaCount));
-            Assert.Equal(16, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
+            Assert.Equal(19, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
                 "SELECT count(*) FROM pg_tables WHERE schemaname IN ('iam','rel','pkg','ins','tsk','aud','framework')"));
-            Assert.Equal(3, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
+            Assert.Equal(4, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
                 "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         }
         finally { await database.DisposeAsync(); }
@@ -123,7 +149,7 @@ public sealed class PersistenceMigrationTests
             await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, script);
             await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, script);
             Assert.Empty((await database.Runner.StatusAsync(default)).Pending);
-            Assert.Equal(3, (await database.Runner.ApplyAsync(default)).Applied.Count);
+            Assert.Equal(4, (await database.Runner.ApplyAsync(default)).Applied.Count);
             await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, "CREATE TABLE iam.foundation_probe(id integer)");
             await PersistenceDatabase.ExecuteAsync(database.WriterConnection, "INSERT INTO iam.foundation_probe VALUES (7)");
             Assert.Equal(7, await PersistenceDatabase.ScalarAsync<int>(database.ReaderConnection, "SELECT id FROM iam.foundation_probe"));
@@ -147,7 +173,7 @@ public sealed class PersistenceMigrationTests
                 await Assert.ThrowsAsync<MigrationBusyException>(() => database.Runner.ApplyAsync(default));
                 Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection, SchemaCount));
             }
-            Assert.Equal(3, (await database.Runner.ApplyAsync(default)).Applied.Count);
+            Assert.Equal(4, (await database.Runner.ApplyAsync(default)).Applied.Count);
         }
         finally { await database.DisposeAsync(); }
     }

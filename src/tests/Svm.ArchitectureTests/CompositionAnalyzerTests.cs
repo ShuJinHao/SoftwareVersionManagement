@@ -31,6 +31,18 @@ public sealed class CompositionAnalyzerTests
         Assert.Contains(diagnostics, d => d.Id == "SVM004");
     }
 
+    [Theory]
+    [InlineData("Svm.Application")]
+    [InlineData("Svm.TaskService")]
+    public async Task BusinessCannotManufactureConsumptionAuthority(string assembly)
+    {
+        var diagnostics=await Analyze(assembly,"""
+            namespace Svm.Services.Contracts.Framework { public interface IIntegrationWorkAuthorizer {} }
+            public class Bad : Svm.Services.Contracts.Framework.IIntegrationWorkAuthorizer {}
+            """);
+        Assert.Contains(diagnostics,d=>d.Id=="SVM004");
+    }
+
     [Fact]
     public async Task BusinessCannotCaptureTheHostBackgroundDispatcher()
     {

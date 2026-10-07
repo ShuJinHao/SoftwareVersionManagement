@@ -7,7 +7,7 @@ using Svm.Services.Contracts.Framework;
 
 namespace Svm.EntityFrameworkCore.Framework;
 
-internal sealed class PostgresUnitOfWork(SvmDbContext context) : IUnitOfWork
+internal sealed class PostgresUnitOfWork(SvmDbContext context, IDomainEventDispatcher domainEvents, DomainEventOptions domainEventOptions) : IUnitOfWork
 {
     private sealed class Operation(Guid id)
     {
@@ -62,27 +62,46 @@ internal sealed class PostgresUnitOfWork(SvmDbContext context) : IUnitOfWork
         }
 
         IDbContextTransaction? transaction = null;
+        var joinedConsumer = false;
         var commitAttempted = false;
         try
         {
-            if (context.Database.CurrentTransaction is not null)
-                throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting, operationId);
-            await context.Database.OpenConnectionAsync(cancellationToken);
-            await EnsureRuntimeRoleAsync((NpgsqlConnection)context.Database.GetDbConnection(), cancellationToken);
-            transaction = await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+            if (context.Database.CurrentTransaction is { } current)
+            {
+                if (!context.ConsumerTransactions.Owns(current))
+                    throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting, operationId);
+                transaction = current; joinedConsumer = true; context.ConsumerTransactions.BusinessActive = true;
+            }
+            else
+            {
+                await context.Database.OpenConnectionAsync(cancellationToken);
+                await EnsureRuntimeRoleAsync((NpgsqlConnection)context.Database.GetDbConnection(), cancellationToken);
+                transaction = await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+            }
             var result = await action(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             EnsureCanCommit(operation, frame);
+            var events = new TransactionDomainEvents(context, domainEvents, domainEventOptions);
+            await events.DispatchAsync(cancellationToken);
+            EnsureCanCommit(operation, frame);
+            context.OutboxSealed = true;
             await context.SaveWithinUnitOfWorkAsync(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            events.ValidateAfterSave();
             EnsureCanCommit(operation, frame, seal: true);
+            if (joinedConsumer)
+            {
+                context.ConsumerTransactions.Prepare(transaction, operationId, events);
+                return result; // The native factory saves Consumed and owns commit/rollback.
+            }
             commitAttempted = true;
             await transaction.CommitAsync(cancellationToken);
+            events.AcknowledgeCommitted();
             return result;
         }
         catch (Exception error)
         {
-            if (transaction is not null)
+            if (transaction is not null && !joinedConsumer)
             {
                 try
                 {
@@ -102,12 +121,14 @@ internal sealed class PostgresUnitOfWork(SvmDbContext context) : IUnitOfWork
         {
             lock (_gate) { _completed = true; _active = null; _leaf = null; }
             _ambient.Value = previous;
-            context.ChangeTracker.Clear();
+            if (!joinedConsumer) context.ChangeTracker.Clear();
             context.PendingOperationResult = null;
+            context.OutboxSealed = true;
+            context.ConsumerTransactions.BusinessActive = false;
             // Cleanup cannot turn an acknowledged commit into a retryable failure.
-            try { if (transaction is not null) await transaction.DisposeAsync(); }
+            try { if (transaction is not null && !joinedConsumer) await transaction.DisposeAsync(); }
             catch (Exception cleanupError) when (cleanupError is DbException or InvalidOperationException or OperationCanceledException or IOException) { }
-            try { await context.Database.CloseConnectionAsync(); }
+            try { if (!joinedConsumer) await context.Database.CloseConnectionAsync(); }
             catch (Exception cleanupError) when (cleanupError is DbException or InvalidOperationException or OperationCanceledException or IOException) { }
         }
     }
@@ -122,7 +143,7 @@ internal sealed class PostgresUnitOfWork(SvmDbContext context) : IUnitOfWork
         }
     }
 
-    private static async Task EnsureRuntimeRoleAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
+    internal static async Task EnsureRuntimeRoleAsync(NpgsqlConnection connection, CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT NOT (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole OR r.rolreplication OR r.rolbypassrls)

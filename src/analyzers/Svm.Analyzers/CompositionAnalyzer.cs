@@ -70,7 +70,8 @@ public sealed class CompositionAnalyzer : DiagnosticAnalyzer
         {
             if (IsBusiness(named.ContainingAssembly?.Name))
                 foreach (var contract in named.AllInterfaces)
-                    if (contract.ToDisplayString() == "Svm.Services.Contracts.Framework.ITrustedCallContextSource")
+                    if (contract.ToDisplayString() is "Svm.Services.Contracts.Framework.ITrustedCallContextSource" or
+                        "Svm.Services.Contracts.Framework.IIntegrationWorkAuthorizer")
                         Report(context, "A trusted context source must be supplied by a host adapter, not a business module.");
             return;
         }

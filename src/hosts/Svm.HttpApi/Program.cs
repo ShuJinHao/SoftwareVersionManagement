@@ -2,6 +2,7 @@ using Svm.Application;
 using Svm.Services.CrossCutting.Registration;
 using Svm.EntityFrameworkCore;
 using Svm.Dapper;
+using Svm.EventBus;
 using Svm.ServiceDefaults;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
@@ -31,6 +32,8 @@ public partial class Program
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
         builder.Services.AddSvmPostgres(persistence.WriterConnectionString);
         builder.Services.AddSvmReadPersistence(persistence.ReaderConnectionString);
+        if (MessagingConfiguration.LoadFromEnvironment() is { } messaging)
+            builder.Services.AddSvmMessaging(messaging, delivery: false);
         builder.Services.AddSvmPersonnel().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<HttpPersonnelContext>();
