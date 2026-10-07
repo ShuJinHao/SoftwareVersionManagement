@@ -75,4 +75,6 @@ public interface IPersonnelAdministrationRepository
     Task<bool> HasOtherEnabledAdministratorAsync(Guid subjectId, CancellationToken cancellationToken);
     void AddUser(UserAccount user);
     Task ReplaceGlobalPermissionsAsync(Guid subjectId, IReadOnlyList<string> operations, CancellationToken cancellationToken);
+    Task ReplaceAllPermissionsAsync(Guid subjectId, IReadOnlyList<PersonnelPermission> permissions, CancellationToken cancellationToken);
+    Task AddSoftwarePermissionsAsync(Guid subjectId, Guid softwareId, IReadOnlyList<string> operations, CancellationToken cancellationToken);
 }

@@ -13,7 +13,9 @@ async function change() {
     session.current = await request<Session>('/api/v1/session/password', 'POST',
       { currentPassword: currentPassword.value, newPassword: newPassword.value }, session.current?.csrfToken)
     success.value = '密码已修改，旧会话已失效。'
-    if (session.canManage) await router.replace('/users')
+    if (session.canAssets) await router.replace('/site')
+    else if (session.canSoftware) await router.replace('/software')
+    else if (session.canManage) await router.replace('/users')
   } catch (e) { error.value = e instanceof ApiError ? e.message : '修改未完成，请重新登录核实。' }
   finally { currentPassword.value = ''; newPassword.value = ''; confirmPassword.value = ''; busy.value = false }
 }

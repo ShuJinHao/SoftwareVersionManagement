@@ -8,6 +8,7 @@ using Svm.Services.CrossCutting.Pipeline;
 using Svm.Services.CrossCutting.Idempotency;
 using Svm.Services.CrossCutting.DomainEvents;
 using Svm.Services.CrossCutting.Consumption;
+using Svm.Services.Contracts.Catalog;
 
 namespace Svm.Services.CrossCutting.Registration;
 
@@ -77,7 +78,7 @@ public static class FoundationServiceCollectionExtensions
             RequireScopedPort(services, typeof(ITrustedCallContextSource));
             RequireScopedPort(services, typeof(IRequestAuthorizer));
         }
-        if (catalog.Bindings.Any(b => PersonnelWriteCapabilities.Contains(b.RequestType) || PersonnelManagementCapabilities.Contains(b.RequestType)))
+        if (catalog.Bindings.Any(b => PersonnelWriteCapabilities.Contains(b.RequestType) || PersonnelManagementCapabilities.Contains(b.RequestType) || CatalogCapabilities.IsWrite(b.RequestType)))
         {
             RequireScopedPort(services, typeof(IUnitOfWork));
             RequireScopedPort(services, typeof(IPersonnelService));
@@ -92,6 +93,13 @@ public static class FoundationServiceCollectionExtensions
         }
         if (catalog.Bindings.Any(b => b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)))
             RequireScopedPort(services, typeof(IUserQueries));
+        if (catalog.Bindings.Any(b => CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)))
+        {
+            RequireScopedPort(services, typeof(ISoftwareCatalog)); RequireScopedPort(services, typeof(ISiteAssets));
+            RequireScopedPort(services, typeof(ISoftwareCatalogQueries)); RequireScopedPort(services, typeof(ISiteAssetQueries));
+            RequireScopedPort(services, typeof(IPersonnelAdministration)); RequireScopedPort(services, typeof(IPersonnelSoftwareAdministration));
+            RequireScopedPort(services, typeof(IOperationResultStore)); RequireScopedPort(services, typeof(IUserQueries));
+        }
         var expectedHandlers = new HashSet<Type>();
         var expectedValidators = new HashSet<(Type Contract, Type Implementation)>();
         var expectedAdapters = new Dictionary<Type, System.Reflection.Assembly>();

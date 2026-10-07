@@ -2,6 +2,7 @@ using MediatR;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.CrossCutting.Registration;
+using Svm.Services.Contracts.Catalog;
 
 namespace Svm.Services.CrossCutting.Pipeline;
 
@@ -12,7 +13,7 @@ public sealed class PersonnelTransactionBehavior<TRequest, TResponse>(RequestCat
     {
         var policy = catalog.GetPolicy(request.GetType());
         if (policy.Transaction == TransactionMode.ReadOnly) return await next();
-        if (PersonnelManagementCapabilities.Contains(request.GetType()))
+        if (PersonnelManagementCapabilities.Contains(request.GetType()) || CatalogCapabilities.IsWrite(request.GetType()))
         {
             // The idempotency coordinator already owns and reauthorizes this root transaction.
             if (policy.Idempotency != IdempotencyMode.OperationResult || unitOfWork?.CurrentOperationId is null)

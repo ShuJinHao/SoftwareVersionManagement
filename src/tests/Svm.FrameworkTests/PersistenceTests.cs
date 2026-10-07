@@ -319,7 +319,10 @@ public sealed class PersistenceTests(PersistenceDatabase database) : IClassFixtu
         Assert.Equal(new[] { "aud", "iam", "ins", "pkg", "rel", "tsk" }, operationResults.Select(type => type.GetSchema()).Order());
         var messaging = context.Model.GetEntityTypes().Where(type => type.GetSchema() == "framework").ToArray();
         Assert.Equal(new[] { "InboxState", "OutboxMessage", "OutboxState" }, messaging.Select(type => type.GetTableName()).Order());
-        Assert.All(context.Model.GetEntityTypes().Except(operationResults).Except(messaging), type => Assert.Contains(type.GetSchema(), new[] { "iam", "aud" }));
+        var catalog = context.Model.GetEntityTypes().Where(type => type.GetTableName() is "site_identity" or "software" or "processes" or "devices" or "device_software_bindings").ToArray();
+        Assert.Equal(new[] { "ins.device_software_bindings", "ins.devices", "ins.processes", "ins.site_identity", "rel.software" },
+            catalog.Select(type => type.GetSchema() + "." + type.GetTableName()).Order());
+        Assert.All(context.Model.GetEntityTypes().Except(operationResults).Except(messaging).Except(catalog), type => Assert.Contains(type.GetSchema(), new[] { "iam", "aud" }));
         Assert.DoesNotContain(context.Model.GetEntityTypes(), type => type.GetTableName() == "foundation_probe");
         Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
         await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());

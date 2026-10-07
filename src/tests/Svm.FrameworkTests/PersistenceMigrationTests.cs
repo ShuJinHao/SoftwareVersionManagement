@@ -74,7 +74,7 @@ public sealed class PersistenceMigrationTests
                 """;
             var before = await PersistenceDatabase.ScalarAsync<string>(database.MigrationConnection, previous);
             var pending = await database.Runner.StatusAsync(default);
-            Assert.Equal(new[] { "20261006000100_OperationResults", "20261007000100_BusOutbox", "20261007000200_PersonnelAdministrationPermissions" }, pending.Pending);
+            Assert.Equal(new[] { "20261006000100_OperationResults", "20261007000100_BusOutbox", "20261007000200_PersonnelAdministrationPermissions", "20261008000100_SiteCatalog" }, pending.Pending);
             await database.Runner.ApplyAsync(default);
             Assert.Equal(before, await PersistenceDatabase.ScalarAsync<string>(database.ReaderConnection, previous));
             foreach (var schema in new[] { "iam", "rel", "pkg", "ins", "tsk", "aud" })
@@ -101,7 +101,7 @@ public sealed class PersistenceMigrationTests
                 """);
             const string rows = "SELECT json_build_object('results',(SELECT json_agg(r) FROM pkg.operation_results r),'audit',(SELECT json_agg(a) FROM aud.events a))::text";
             var before = await PersistenceDatabase.ScalarAsync<string>(database.MigrationConnection, rows);
-            Assert.Equal(new[] { "20261007000100_BusOutbox", "20261007000200_PersonnelAdministrationPermissions" }, (await database.Runner.StatusAsync(default)).Pending);
+            Assert.Equal(new[] { "20261007000100_BusOutbox", "20261007000200_PersonnelAdministrationPermissions", "20261008000100_SiteCatalog" }, (await database.Runner.StatusAsync(default)).Pending);
             await database.Runner.ApplyAsync(default);
             Assert.Equal(before, await PersistenceDatabase.ScalarAsync<string>(database.ReaderConnection, rows));
             Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(database.ReaderConnection,"SELECT count(*) FROM framework.\"InboxState\""));
@@ -118,7 +118,7 @@ public sealed class PersistenceMigrationTests
             await database.CreateAsync(migrate: false);
             var before = await database.Runner.StatusAsync(default);
             Assert.Empty(before.Applied);
-            Assert.Equal(new[] { "20260930000100_InitialSchemas", "20261001000100_PersonnelSessions", "20261006000100_OperationResults", "20261007000100_BusOutbox", "20261007000200_PersonnelAdministrationPermissions" }, before.Pending);
+            Assert.Equal(new[] { "20260930000100_InitialSchemas", "20261001000100_PersonnelSessions", "20261006000100_OperationResults", "20261007000100_BusOutbox", "20261007000200_PersonnelAdministrationPermissions", "20261008000100_SiteCatalog" }, before.Pending);
             var script = database.Runner.GenerateScript();
             Assert.Contains("pg_try_advisory_lock", script);
             Assert.Contains("SVM migration role configuration invalid", script);
@@ -128,11 +128,11 @@ public sealed class PersistenceMigrationTests
             var second = await database.Runner.ApplyAsync(default);
             Assert.Empty(first.Pending);
             Assert.Equal(first.Applied, second.Applied);
-            Assert.Equal(5, second.Applied.Count);
+            Assert.Equal(6, second.Applied.Count);
             Assert.Equal(7, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection, SchemaCount));
-            Assert.Equal(19, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
+            Assert.Equal(24, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
                 "SELECT count(*) FROM pg_tables WHERE schemaname IN ('iam','rel','pkg','ins','tsk','aud','framework')"));
-            Assert.Equal(5, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
+            Assert.Equal(6, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection,
                 "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         }
         finally { await database.DisposeAsync(); }
@@ -171,6 +171,42 @@ public sealed class PersistenceMigrationTests
     }
 
     [Fact]
+    public async Task SiteCatalogUpgradePreservesFiveMigrationDataAndCreatesNoDefaultLedger()
+    {
+        await using var db = new PersistenceDatabase(); await db.CreateAsync(migrate: false);
+        await using (var context = new SvmDbContext(new DbContextOptionsBuilder<SvmDbContext>().UseNpgsql(db.MigrationConnection,
+            options => options.MigrationsHistoryTable("__EFMigrationsHistory", "framework")).Options))
+            await context.GetService<IMigrator>().MigrateAsync("20261007000200_PersonnelAdministrationPermissions");
+        var subject = Guid.NewGuid(); var operation = Guid.NewGuid(); var outbox = Guid.NewGuid();
+        await PersistenceDatabase.ExecuteAsync(db.MigrationConnection, $"""
+            INSERT INTO iam.permission_catalog VALUES ('identity.manage',true);
+            INSERT INTO iam.users VALUES ('{subject}','CATALOG-MIGRATION','既有人员','fixture-hash',true,false);
+            INSERT INTO iam.subject_guards VALUES ('{subject}',11);
+            INSERT INTO iam.permissions VALUES ('{Guid.NewGuid()}','{subject}',NULL,'identity.manage');
+            INSERT INTO iam.sessions VALUES ('{Guid.NewGuid()}','{subject}','{new string('a',64)}',clock_timestamp()+interval '1 hour',NULL);
+            INSERT INTO aud.events VALUES ('{Guid.NewGuid()}','{operation}','{subject}','Human','CATALOG-MIGRATION','既有人员','fixture.retained','{subject}','succeeded','retained','fixture',clock_timestamp());
+            INSERT INTO iam.operation_results ("ActorKind","SubjectId","Operation","IdempotencyKey","RequestDigest","OperationId","Status","ResourceId","CompletedAt")
+              VALUES (2,'{subject}','fixture.retained','{Guid.NewGuid()}','{new string('b',64)}','{operation}',2,'{subject}',clock_timestamp());
+            INSERT INTO framework."OutboxState" ("OutboxId","LockId","Created") VALUES ('{outbox}','{Guid.NewGuid()}',clock_timestamp());
+            INSERT INTO framework."InboxState" ("MessageId","ConsumerId","LockId","Received","ReceiveCount") VALUES ('{Guid.NewGuid()}','{Guid.NewGuid()}','{Guid.NewGuid()}',clock_timestamp(),1);
+            """);
+        const string retained = """
+            SELECT json_build_object('users',(SELECT json_agg(u) FROM iam.users u),'guards',(SELECT json_agg(g) FROM iam.subject_guards g),
+              'grants',(SELECT json_agg(p) FROM iam.permissions p),'sessions',(SELECT json_agg(s) FROM iam.sessions s),
+              'audit',(SELECT json_agg(a) FROM aud.events a),'results',(SELECT json_agg(r) FROM iam.operation_results r),
+              'outbox',(SELECT json_agg(o) FROM framework."OutboxState" o),'inbox',(SELECT json_agg(i) FROM framework."InboxState" i))::text
+            """;
+        var before = await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, retained);
+        Assert.Equal(new[] { "20261008000100_SiteCatalog" }, (await db.Runner.StatusAsync(default)).Pending); await db.Runner.ApplyAsync(default);
+        Assert.Equal(before, await PersistenceDatabase.ScalarAsync<string>(db.ReaderConnection, retained));
+        foreach (var table in new[] { "ins.site_identity", "ins.processes", "ins.devices", "ins.device_software_bindings", "rel.software" })
+        { Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM " + table)); Assert.True(await PersistenceDatabase.ScalarAsync<bool>(db.ReaderConnection,
+            "SELECT NOT has_table_privilege(current_user,'" + table + "','INSERT') AND NOT has_table_privilege(current_user,'" + table + "','UPDATE')")); }
+        var fk = await Assert.ThrowsAsync<PostgresException>(() => PersistenceDatabase.ExecuteAsync(db.WriterConnection,
+            $"INSERT INTO ins.device_software_bindings VALUES ('{Guid.NewGuid()}','{Guid.NewGuid()}','{Guid.NewGuid()}',1,true,false)")); Assert.Equal("23503", fk.SqlState);
+    }
+
+    [Fact]
     public async Task GeneratedScriptWorksOnEmptyDatabaseAndMatchesApply()
     {
         var database = new PersistenceDatabase();
@@ -181,7 +217,7 @@ public sealed class PersistenceMigrationTests
             await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, script);
             await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, script);
             Assert.Empty((await database.Runner.StatusAsync(default)).Pending);
-            Assert.Equal(5, (await database.Runner.ApplyAsync(default)).Applied.Count);
+            Assert.Equal(6, (await database.Runner.ApplyAsync(default)).Applied.Count);
             await PersistenceDatabase.ExecuteAsync(database.MigrationConnection, "CREATE TABLE iam.foundation_probe(id integer)");
             await PersistenceDatabase.ExecuteAsync(database.WriterConnection, "INSERT INTO iam.foundation_probe VALUES (7)");
             Assert.Equal(7, await PersistenceDatabase.ScalarAsync<int>(database.ReaderConnection, "SELECT id FROM iam.foundation_probe"));
@@ -205,7 +241,7 @@ public sealed class PersistenceMigrationTests
                 await Assert.ThrowsAsync<MigrationBusyException>(() => database.Runner.ApplyAsync(default));
                 Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(database.MigrationConnection, SchemaCount));
             }
-            Assert.Equal(5, (await database.Runner.ApplyAsync(default)).Applied.Count);
+            Assert.Equal(6, (await database.Runner.ApplyAsync(default)).Applied.Count);
         }
         finally { await database.DisposeAsync(); }
     }

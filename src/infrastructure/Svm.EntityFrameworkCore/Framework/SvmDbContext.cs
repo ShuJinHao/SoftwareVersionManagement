@@ -29,6 +29,7 @@ internal sealed class SvmDbContext : DbContext
         Identity.PersonnelModel.Configure(modelBuilder);
         Operations.OperationResultModel.Configure(modelBuilder);
         Messaging.OutboxModel.Configure(modelBuilder);
+        Catalog.CatalogModel.Configure(modelBuilder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess) => throw new InvalidOperationException("Only the unit of work can save module changes.");

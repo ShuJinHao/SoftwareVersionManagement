@@ -59,7 +59,7 @@ describe('personnel access', () => {
   })
   it('does not expose management to a person without the global grant', async () => {
     const { root, app } = await mount(snapshot(false, [{ softwareId: 'fixture-software', operation: 'identity.manage' }]))
-    expect(root.textContent).toContain('当前账号未获人员管理权限')
+    expect(root.textContent).toContain('当前账号未获管理或台账权限')
     expect(root.textContent).not.toContain('创建账号')
     app.unmount()
   })

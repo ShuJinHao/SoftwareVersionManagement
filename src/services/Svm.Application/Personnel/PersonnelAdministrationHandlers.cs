@@ -3,6 +3,7 @@ using MediatR;
 using Svm.Services.Contracts.Audit;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
+using Svm.Services.Contracts.Catalog;
 
 namespace Svm.Application.Personnel;
 
@@ -50,12 +51,22 @@ internal sealed class ResetUserPasswordHandler(IPersonnelAdministration personne
         completion.ExecuteAsync("identity.users.reset-password", request.Reason, () =>
             personnel.ResetPasswordAsync(request.UserId, request.ExpectedRevision, request.TemporaryPassword, token), token);
 }
-internal sealed class ReplaceUserPermissionsHandler(IPersonnelAdministration personnel, PersonnelAdministrationCompletion completion)
+internal sealed class ReplaceUserPermissionsHandler(IPersonnelAdministration personnel, PersonnelAdministrationCompletion completion,
+    IPersonnelSoftwareAdministration? softwareGrants = null, ISoftwareCatalog? software = null, IUserQueries? users = null)
     : IRequestHandler<ReplaceUserPermissionsCommand, OperationResult<UserView>>
 {
     public Task<OperationResult<UserView>> Handle(ReplaceUserPermissionsCommand request, CancellationToken token) =>
         completion.ExecuteAsync("identity.users.permissions", request.Reason, () =>
-            personnel.ReplacePermissionsAsync(request.UserId, request.ExpectedRevision, request.Permissions, token), token);
+            ReplaceAsync(request, token), token);
+    private async Task<UserView> ReplaceAsync(ReplaceUserPermissionsCommand request, CancellationToken token)
+    {
+        if (softwareGrants is null) return await personnel.ReplacePermissionsAsync(request.UserId, request.ExpectedRevision, request.Permissions, token);
+        if (software is null || users is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        var current = await users.GetAsync(request.UserId, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        foreach (var id in request.Permissions.Except(current.Permissions).Where(p => p.SoftwareId is not null).Select(p => p.SoftwareId!.Value).Distinct().Order())
+            if (!await software.ExistsAsync(id, true, token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        return await softwareGrants.ReplaceAsync(request.UserId, request.ExpectedRevision, request.Permissions, token);
+    }
 }
 
 internal sealed class GetUserValidator : AbstractValidator<GetUserQuery>

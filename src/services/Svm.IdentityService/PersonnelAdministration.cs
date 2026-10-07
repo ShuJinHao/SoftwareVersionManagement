@@ -3,6 +3,7 @@ using Svm.Core.Identity;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.SharedKernel.Domain;
+using Svm.Services.Contracts.Catalog;
 
 namespace Svm.IdentityService;
 
@@ -10,10 +11,12 @@ public static class PersonnelAdministrationRegistration
 {
     public static IServiceCollection AddSvmPersonnelAdministration(this IServiceCollection services) =>
         services.AddScoped<IPersonnelAdministration, PersonnelAdministration>();
+    public static IServiceCollection AddSvmPersonnelSoftwareAdministration(this IServiceCollection services) =>
+        services.AddScoped<IPersonnelSoftwareAdministration, PersonnelAdministration>();
 }
 
 internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IPersonnelAdministrationRepository administration,
-    IPersonnelCrypto crypto, IUnitOfWork unitOfWork) : IPersonnelAdministration
+    IPersonnelCrypto crypto, IUnitOfWork unitOfWork, IOperationContext operations) : IPersonnelAdministration, IPersonnelSoftwareAdministration
 {
     public Task ProtectAsync(Guid actorId, Guid? targetId, CancellationToken token) => administration.ProtectAsync(actorId, targetId, token);
     public async Task<UserView> CreateAsync(string employeeNo, string displayName, string temporaryPassword, CancellationToken token)
@@ -56,6 +59,30 @@ internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IP
         await personnel.AdvanceRevisionAsync(userId, token);
         return new(user.Id.Value, user.EmployeeNo, user.DisplayName, user.IsEnabled, user.MustChangePassword,
             permissions.OrderBy(p => p.Operation, StringComparer.Ordinal).ThenBy(p => p.SoftwareId).ToArray(), await administration.RevisionAsync(userId, token));
+    }
+    public async Task<UserView> ReplaceAsync(Guid userId, long revision, IReadOnlyList<PermissionView> permissions, CancellationToken token)
+    {
+        RequireOperation();
+        if (operations.Current is not { Owner: ModuleOwner.Identity, Operation: "identity.users.permissions" })
+            throw new RequestRejectedException(RequestFailure.PermissionDenied);
+        var user = await ExistingAsync(userId, revision, token);
+        if (permissions.Any(p => !PermissionCatalog.Entries.Any(d => d.Operation == p.Operation && d.Global == (p.SoftwareId is null))))
+            throw new RequestRejectedException(RequestFailure.ValidationFailed);
+        var current = await personnel.PermissionsAsync(userId, token);
+        if (user.IsEnabled && current.Any(IsAdministrator) && !permissions.Any(p => p.SoftwareId is null && p.Operation == "identity.manage"))
+            await RequireAnotherAdministrator(userId, token);
+        await administration.ReplaceAllPermissionsAsync(userId, permissions.Select(p => new PersonnelPermission(p.SoftwareId, p.Operation)).ToArray(), token);
+        await personnel.AdvanceRevisionAsync(userId, token);
+        return new(user.Id.Value, user.EmployeeNo, user.DisplayName, user.IsEnabled, user.MustChangePassword,
+            permissions.OrderBy(p => p.Operation, StringComparer.Ordinal).ThenBy(p => p.SoftwareId).ToArray(), await administration.RevisionAsync(userId, token));
+    }
+    public async Task GrantCreatorAsync(Guid softwareId, CancellationToken token)
+    {
+        RequireOperation();
+        if (operations.Current is not { Owner: ModuleOwner.Releases, Operation: "rel.software.create" } operation || softwareId == Guid.Empty)
+            throw new RequestRejectedException(RequestFailure.PermissionDenied);
+        await administration.AddSoftwarePermissionsAsync(operation.SubjectId, softwareId, ["software.read", "instance.read", "instance.manage"], token);
+        await personnel.AdvanceRevisionAsync(operation.SubjectId, token);
     }
     private async Task<UserAccount> ExistingAsync(Guid id, long expectedRevision, CancellationToken token)
     {
