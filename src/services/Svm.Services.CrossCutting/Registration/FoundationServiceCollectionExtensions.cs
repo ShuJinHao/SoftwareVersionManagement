@@ -5,13 +5,14 @@ using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Audit;
 using Svm.Services.CrossCutting.Pipeline;
+using Svm.Services.CrossCutting.Idempotency;
 
 namespace Svm.Services.CrossCutting.Registration;
 
 public static class FoundationServiceCollectionExtensions
 {
     private static readonly Type[] PipelineTypes =
-        [typeof(RequestKindBehavior<,>), typeof(ValidationBehavior<,>), typeof(AuthorizationBehavior<,>), typeof(PersonnelTransactionBehavior<,>)];
+        [typeof(RequestKindBehavior<,>), typeof(ValidationBehavior<,>), typeof(AuthorizationBehavior<,>), typeof(IdempotencyBehavior<,>), typeof(PersonnelTransactionBehavior<,>)];
 
     public static IServiceCollection AddSvmRequestPipeline(this IServiceCollection services, IReadOnlyList<RequestBinding> bindings)
     {
@@ -20,8 +21,11 @@ public static class FoundationServiceCollectionExtensions
         var catalog = new RequestCatalog(bindings);
         services.AddSingleton(catalog);
         services.AddScoped<ICallContext, ScopedCallContext>();
+        services.AddScoped<IOperationContext, ScopedOperationContext>();
+        services.AddScoped<IdempotencyCoordinator>();
         services.AddScoped<ISender, Mediator>();
         services.AddSingleton<ScopedRequestExecutor>();
+        services.AddSingleton<IOperationResultRecovery, ScopedRequestExecutor>();
         foreach (var pipeline in PipelineTypes)
             services.AddScoped(typeof(IPipelineBehavior<,>), pipeline);
         foreach (var binding in bindings)
@@ -49,6 +53,9 @@ public static class FoundationServiceCollectionExtensions
         foreach (var group in services.Where(d => IsSinglePort(d.ServiceType)).GroupBy(d => d.ServiceType))
             if (group.Count() != 1) throw new InvalidOperationException($"Conflicting default implementations for {group.Key.FullName}.");
         RequireImplementation(services, typeof(ICallContext), typeof(ScopedCallContext), ServiceLifetime.Scoped);
+        RequireImplementation(services, typeof(IOperationContext), typeof(ScopedOperationContext), ServiceLifetime.Scoped);
+        RequireImplementation(services, typeof(IdempotencyCoordinator), typeof(IdempotencyCoordinator), ServiceLifetime.Scoped);
+        RequireImplementation(services, typeof(IOperationResultRecovery), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
         RequireImplementation(services, typeof(ISender), typeof(Mediator), ServiceLifetime.Scoped);
         RequireImplementation(services, typeof(ScopedRequestExecutor), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
 
@@ -92,13 +99,15 @@ public static class FoundationServiceCollectionExtensions
             if (definition == typeof(IValidator<>) && (descriptor.ImplementationType is null ||
                 descriptor.Lifetime != ServiceLifetime.Scoped || !expectedValidators.Remove((descriptor.ServiceType, descriptor.ImplementationType))))
                 throw new InvalidOperationException("A Validator bypasses or duplicates the approved registration.");
+            if (definition == typeof(IIdempotencyRequestAdapter<,>))
+                throw new InvalidOperationException("Persistent-idempotency Commands are not activated; no request adapter may be registered yet.");
         }
         if (expectedValidators.Count != 0) throw new InvalidOperationException("A required Validator registration was removed.");
         return services;
     }
 
     private static bool IsSinglePort(Type type) => type == typeof(ICallContext) || type == typeof(ISender) ||
-        type == typeof(ScopedRequestExecutor) || type.IsInterface && !type.IsGenericType &&
+        type == typeof(ScopedRequestExecutor) || type == typeof(IOperationResultRecovery) || type.IsInterface && !type.IsGenericType &&
         type.Assembly == typeof(ICallContext).Assembly;
 
     private static void RequireScopedPort(IServiceCollection services, Type type)

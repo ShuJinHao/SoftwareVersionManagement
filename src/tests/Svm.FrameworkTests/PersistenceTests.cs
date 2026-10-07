@@ -315,7 +315,9 @@ public sealed class PersistenceTests(PersistenceDatabase database) : IClassFixtu
         Assert.Throws<InvalidOperationException>(() => provider.GetRequiredService<IUnitOfWork>());
         await using var scope = provider.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<SvmDbContext>();
-        Assert.All(context.Model.GetEntityTypes(), type => Assert.Contains(type.GetSchema(), new[] { "iam", "aud" }));
+        var operationResults = context.Model.GetEntityTypes().Where(type => type.GetTableName() == "operation_results").ToArray();
+        Assert.Equal(new[] { "aud", "iam", "ins", "pkg", "rel", "tsk" }, operationResults.Select(type => type.GetSchema()).Order());
+        Assert.All(context.Model.GetEntityTypes().Except(operationResults), type => Assert.Contains(type.GetSchema(), new[] { "iam", "aud" }));
         Assert.DoesNotContain(context.Model.GetEntityTypes(), type => type.GetTableName() == "foundation_probe");
         Assert.Throws<InvalidOperationException>(() => context.SaveChanges());
         await Assert.ThrowsAsync<InvalidOperationException>(() => context.SaveChangesAsync());

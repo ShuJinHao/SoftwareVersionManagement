@@ -103,6 +103,7 @@ internal sealed class PostgresUnitOfWork(SvmDbContext context) : IUnitOfWork
             lock (_gate) { _completed = true; _active = null; _leaf = null; }
             _ambient.Value = previous;
             context.ChangeTracker.Clear();
+            context.PendingOperationResult = null;
             // Cleanup cannot turn an acknowledged commit into a retryable failure.
             try { if (transaction is not null) await transaction.DisposeAsync(); }
             catch (Exception cleanupError) when (cleanupError is DbException or InvalidOperationException or OperationCanceledException or IOException) { }

@@ -11,8 +11,28 @@ internal sealed class SvmDbContextModelSnapshot : ModelSnapshot
     {
         Configure(modelBuilder);
         ConfigurePersonnelV1(modelBuilder);
+        ConfigureOperationResultsV1(modelBuilder);
     }
     internal static void Configure(ModelBuilder modelBuilder) => modelBuilder.HasDefaultSchema("framework").HasAnnotation("ProductVersion", "8.0.31");
+
+    // Frozen property-bag model; no dependency on the live operation-result mapping.
+    internal static void ConfigureOperationResultsV1(ModelBuilder model)
+    {
+        foreach (var schema in new[] { "iam", "rel", "pkg", "ins", "tsk", "aud" })
+            model.SharedTypeEntity<Dictionary<string, object>>("Svm.OperationResult." + schema, b =>
+            {
+                b.IndexerProperty<short>("ActorKind"); b.IndexerProperty<Guid>("SubjectId").ValueGeneratedNever();
+                b.IndexerProperty<string>("Operation").IsRequired().HasMaxLength(128);
+                b.IndexerProperty<Guid>("IdempotencyKey").ValueGeneratedNever();
+                b.IndexerProperty<string>("RequestDigest").IsRequired().HasMaxLength(64);
+                b.IndexerProperty<Guid>("OperationId").ValueGeneratedNever();
+                b.IndexerProperty<short?>("Status"); b.IndexerProperty<Guid?>("ResourceId"); b.IndexerProperty<Guid?>("WorkId");
+                b.IndexerProperty<DateTimeOffset>("CreatedAt").HasDefaultValueSql("clock_timestamp()");
+                b.IndexerProperty<DateTimeOffset?>("CompletedAt");
+                b.HasKey("ActorKind", "SubjectId", "Operation", "IdempotencyKey");
+                b.HasIndex("OperationId").IsUnique().HasDatabaseName("IX_operation_results_OperationId"); b.ToTable("operation_results", schema);
+            });
+    }
 
     // Frozen migration model. Never delegate snapshots to the live module mapping.
     internal static void ConfigurePersonnelV1(ModelBuilder model)
