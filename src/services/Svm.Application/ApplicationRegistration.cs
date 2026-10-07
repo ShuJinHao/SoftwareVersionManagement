@@ -3,6 +3,8 @@ using Svm.Services.Contracts.Framework;
 using Svm.Services.CrossCutting.Registration;
 using Svm.Services.Contracts.Identity;
 using Svm.Application.Personnel;
+using Svm.Application.Catalog;
+using Svm.Services.Contracts.Catalog;
 
 namespace Svm.Application;
 
@@ -13,14 +15,16 @@ public static class ApplicationRegistration
     public static IServiceCollection AddSvmSessionApplication(this IServiceCollection services) => AddPersonnel(services, seed: false);
     public static IServiceCollection AddSvmSeedApplication(this IServiceCollection services) => AddPersonnel(services, seed: true);
     public static IServiceCollection AddSvmPersonnelManagementApplication(this IServiceCollection services) => AddPersonnel(services, seed: false, management: true);
+    public static IServiceCollection AddSvmSiteCatalogApplication(this IServiceCollection services) => AddPersonnel(services, seed: false, management: true, siteCatalog: true);
 
-    private static IServiceCollection AddPersonnel(IServiceCollection services, bool seed, bool management = false)
+    private static IServiceCollection AddPersonnel(IServiceCollection services, bool seed, bool management = false, bool siteCatalog = false)
     {
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
         services.AddSvmRequestPipeline(bindings.Where(b => seed ? b.RequestType == typeof(SeedPersonnelCommand) :
             b.RequestType != typeof(SeedPersonnelCommand) && (PersonnelWriteCapabilities.Contains(b.RequestType) ||
                 b.RequestType == typeof(AnonymousSessionQuery) || b.RequestType == typeof(CurrentSessionQuery) ||
-                management && (PersonnelManagementCapabilities.Contains(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)))).ToArray());
+                management && (PersonnelManagementCapabilities.Contains(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) ||
+                siteCatalog && (CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)))).ToArray());
         services.AddScoped<IRequestAuthorizer, PersonnelAuthorization>();
         services.AddScoped<PersonnelCompletion>();
         if (management)
@@ -30,6 +34,18 @@ public static class ApplicationRegistration
             services.AddScoped<IIdempotencyRequestAdapter<UpdateUserCommand, OperationResult<UserView>>, UpdateUserAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<ResetUserPasswordCommand, OperationResult<UserView>>, ResetUserPasswordAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<ReplaceUserPermissionsCommand, OperationResult<UserView>>, ReplaceUserPermissionsAdapter>();
+        }
+        if (siteCatalog)
+        {
+            services.AddScoped<CatalogCompletion>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateSoftwareCommand, OperationResult<SoftwareView>>, CreateSoftwareCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<UpdateSoftwareCommand, OperationResult<SoftwareView>>, UpdateSoftwareCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateProcessCommand, OperationResult<ProcessView>>, CreateProcessCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<UpdateProcessCommand, OperationResult<ProcessView>>, UpdateProcessCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateDeviceCommand, OperationResult<DeviceView>>, CreateDeviceCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<UpdateDeviceCommand, OperationResult<DeviceView>>, UpdateDeviceCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateBindingCommand, OperationResult<BindingView>>, CreateBindingCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RevokeBindingCommand, OperationResult<BindingView>>, RevokeBindingCommandAdapter>();
         }
         return services;
     }

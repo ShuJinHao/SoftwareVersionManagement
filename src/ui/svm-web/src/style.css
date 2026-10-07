@@ -78,11 +78,38 @@ dd { margin: 0; }
 .detail-actions .text-button { text-align: center; margin-top: 4px; }
 dialog { max-width: 560px; width: calc(100vw - 40px); max-height: 85vh; border: 1px solid #dbe4ef; border-radius: 14px; padding: 30px; color: #172c47; }
 dialog::backdrop { background: #11243e66; backdrop-filter: blur(2px); }
+dialog { margin: auto; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .dialog-heading h2 { margin: 0; }
 .dialog-heading button { border: 0; font-size: 20px; padding: 0 6px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .check { display: flex; align-items: center; }
 .grant-options { padding: 10px 0; }
+.breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 24px; font-size: 14px; color: #516883; }
+.breadcrumbs small { margin-left: auto; }
+.site-layout { display: grid; grid-template-columns: minmax(220px, .65fr) minmax(230px, .8fr) minmax(350px, 1.4fr); align-items: start; gap: 18px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px 8px; }
+.section-heading h2, .section-heading h3 { margin: 0; }
+.compact-filters { display: flex; align-items: flex-end; gap: 10px; padding: 16px 20px; }
+dialog .compact-filters { padding: 0; margin-bottom: 18px; }
+.compact-filters label { flex: 1; min-width: 0; margin: 0; }
+.compact-filters button { flex-shrink: 0; }
+.selection-list { margin: 0; padding: 0 12px 15px; list-style: none; }
+.selection-list button { display: block; width: 100%; text-align: left; border-color: transparent; margin: 3px 0; padding: 13px 12px; overflow-wrap: anywhere; }
+.selection-list .active { background: #eef4ff; border-color: #c9daf8; color: #245dc9; }
+.device-facts { padding: 0 20px; }
+.inventory-card { margin: 12px 20px; padding: 18px; border: 1px solid #e2e9f2; border-radius: 10px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: start; gap: 10px; }
+.inventory-card h3 { margin: 0; font-size: 16px; }
+.inventory-card p { margin: 4px 0 0; }
+.inventory-card > p { flex-basis: 100%; }
+.description { overflow-wrap: anywhere; white-space: pre-wrap; font-size: 14px; }
+.mapping-section { border-top: 1px solid #e2e9f2; padding: 6px 20px 22px; }
+.mapping-section .section-heading { padding-left: 0; padding-right: 0; }
+.permission-list .text-button { display: block; margin-top: 8px; }
+.text-link { display: block; margin-top: 8px; color: #245dc9; }
+.pager-inline { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.software-grants { border-top: 1px solid #e2e9f2; margin-top: 18px; }
+@media (max-width: 1150px) { .site-layout { grid-template-columns: 1fr 1fr; } .device-detail { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .site-layout { grid-template-columns: 1fr; } .device-detail { grid-column: auto; } .navigation { overflow-x: auto; gap: 20px; white-space: nowrap; } .navigation a { flex-shrink: 0; } .section-heading { flex-wrap: wrap; } }
 @media (max-width: 1000px) { .account-layout { grid-template-columns: 1fr; } .detail-actions { grid-template-columns: repeat(2, 1fr); } .read-time { display: none; } }
 @media (max-width: 600px) { .topbar { padding: 0 18px; height: 80px; } .brand { font-size: 14px; gap: 8px; } .brand small { display: none; } .brand-mark { width: 32px; height: 32px; } .identity span { display: none; } main { padding: 24px 16px; } .navigation { padding: 0 18px; } .auth-card { padding: 26px; margin-top: 20px; } .filters { flex-wrap: wrap; padding: 18px; } .filters label { flex-basis: 45%; } .filters button { width: 100%; } .page-heading { gap: 15px; } h1 { font-size: 24px; } .pagination { padding: 14px; } }

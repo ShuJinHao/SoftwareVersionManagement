@@ -7,6 +7,9 @@ using Svm.Core.Audit;
 using Svm.EntityFrameworkCore.Identity;
 using Svm.EntityFrameworkCore.Audit;
 using Svm.EntityFrameworkCore.Operations;
+using Svm.Core.Releases;
+using Svm.Core.Instances;
+using Svm.EntityFrameworkCore.Catalog;
 
 namespace Svm.EntityFrameworkCore;
 
@@ -23,6 +26,8 @@ public static class PersistenceRegistration
         services.AddScoped<IOperationResultStore, OperationResultStore>();
         services.AddScoped<IPersonnelRepository, PersonnelRepository>();
         services.AddScoped<IPersonnelAdministrationRepository, PersonnelAdministrationRepository>();
+        services.AddScoped<ISoftwareCatalogRepository, SoftwareCatalogRepository>();
+        services.AddScoped<ISiteAssetRepository, SiteAssetRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
         return services;
     }

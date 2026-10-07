@@ -3,6 +3,7 @@ using FluentValidation;
 using MediatR;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
+using Svm.Services.Contracts.Catalog;
 
 namespace Svm.Services.CrossCutting.Registration;
 
@@ -67,10 +68,11 @@ public sealed class RequestCatalog
             throw new InvalidOperationException("A request must be exactly one typed SVM Command or Query.");
         var isCommand = shapes[0].GetGenericTypeDefinition() == typeof(ICommand<>);
         var management = PersonnelManagementCapabilities.Contains(type);
-        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management) || policy.Transaction != TransactionMode.DatabaseAtomic ||
-                policy.Idempotency != (management ? IdempotencyMode.OperationResult : IdempotencyMode.None)
+        var catalogWrite = CatalogCapabilities.IsWrite(type);
+        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite) || policy.Transaction != TransactionMode.DatabaseAtomic ||
+                policy.Idempotency != (management || catalogWrite ? IdempotencyMode.OperationResult : IdempotencyMode.None)
             : policy.Transaction != TransactionMode.ReadOnly || policy.Idempotency != IdempotencyMode.None)
-            throw new InvalidOperationException("Only the closed personnel session and administration writes are activated.");
+            throw new InvalidOperationException("Only the closed personnel and site-catalog writes are activated.");
 
         var response = type.GetInterfaces().Single(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>)).GenericTypeArguments[0];
         var handlerContract = typeof(IRequestHandler<,>).MakeGenericType(type, response);

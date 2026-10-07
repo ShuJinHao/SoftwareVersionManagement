@@ -6,15 +6,15 @@
 
 ## 当前状态
 
-项目处于基础框架及首批管理功能开发阶段，尚未完成系统验收或生产部署。已有进程内领域事件、PostgreSQL 工作单元、RabbitMQ 发送端恢复及 Consumer Outbox/Inbox 消费事务基础；本批增加人员账号与厂级权限管理 API、同源网页。制造业业务设计继续保留，现场台账、软件分类、强制映射和对应网页/API 均待实现。
+项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础；本批加入现场台账、上位机/视觉软件目录、人员软件授权和设备映射 API 及同源网页。设备软件显示“尚未登记”，实例接入、安装/运行事实和版本业务仍待实现。
 
 | 已有实现 | 后续实现 |
 |---|---|
-| 28 个 C# 项目、固定工具链和依赖锁、编译期架构检查 | 现场台账、软件分类、强制设备映射及其网页业务 |
+| 28 个 C# 项目、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
 | DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 系统凭据、受管实例登记及状态上报 |
-| PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 软件/版本、安装包、批量任务和部分回退 |
+| PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 版本、安装包、批量任务和部分回退 |
 | 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部系统与实例的实际凭据接入 |
-| 人员分页/详情、创建/启停、密码重置、四项厂级授权及对应网页 | 软件范围授权维护；台账与接入能力 |
+| 人员管理、四项厂级及软件范围授权、软件目录、工序/设备/映射维护与现场导航 | 实例登记/上报、安装履历及接入授权 |
 | 所属模块的类型化领域事件处理器、Scoped 串行派发、提交成功后的内部确认 | 实际业务事件及领域事实到版本化集成消息的转换 |
 | 持久化幂等协调器、六模块操作结果存储、人员管理 HTTP 幂等及提交结果核实 | 其他业务 HTTP 幂等接入及完整事务/消息验收 |
 | 三类固定 V1 消息、MassTransit EF Bus Outbox、Worker 投递及 RabbitMQ 断线/重启恢复 | 实际业务生产者、消费者与持续业务去重 |
@@ -23,9 +23,11 @@
 
 会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。新增 `GET/POST /api/v1/manage/users`、`GET/PATCH /api/v1/manage/users/{userId}`、`POST /api/v1/manage/users/{userId}/reset-password`、`PUT /api/v1/manage/subjects/{subjectId}/permissions`，均仅允许已首次改密且当前具有 `identity.manage` 的人员。
 
-工号唯一且不可修改，无删除历史主体接口；新建/重置要求下次改密，停用/重置同事务撤销旧会话。IAM 事务锁与主体保护保证并发操作后至少保留一名启用且持有厂级 `identity.manage` 的人员。授权仅能编辑 `identity.manage`、`software.create`、`asset.read`、`asset.manage`；既有软件授权只读，完整提交时须原样保留。其他业务 Command 继续禁用；发送端尚无实际业务生产者，Worker 未注册业务消费者。
+工号唯一且不可修改，无删除历史主体接口；新建/重置要求下次改密，停用/重置同事务撤销旧会话。IAM 事务锁与主体保护保证并发操作后至少保留一名启用且持有厂级 `identity.manage` 的人员。管理员可编辑四项厂级权限及现有目录中的软件范围操作；新增软件授权必须引用真实软件。软件创建者只同事务取得 `software.read`、`instance.read`、`instance.manage`。其他业务 Command 继续禁用；发送端尚无实际业务生产者，Worker 未注册业务消费者。
 
-网页与 API 同源，通过 HTTPS 和现有 Cookie/CSRF 使用真实数据。管理写请求携带 `Idempotency-Key`，修改已有账号另带 `expectedRevision`；当前授权先于重放，合法重放先于旧修订比较。响应不明时页面仅在内存保留原请求及操作键，由人员手动核实，不自动换键或重发；核实时的授权拒绝不能证明原请求已回滚，仍保留原键。密码不写浏览器持久存储。分页默认 50、最大 200，按工号/ID 固定排序；受保护游标绑定主体、部署、筛选和页长，默认有效 15 分钟。
+现场接口为 `/api/v1/manage/site`、`processes`、`devices`、`software` 及设备下的 `software-bindings`、`software-inventory`；另有 `permission-options` 为人员管理员提供有界授权候选。台账查看/维护分别要求 `asset.read`/`asset.manage`；映射维护另需对应软件 `instance.manage`，资料修改需 `release.upload`。软件清单按 software.read 过滤，设备软件汇总另需 instance.read；数量只描述过滤后的本页对象。代码、设备编号和软件分类不可修改，映射逻辑撤销保留标识，重建继续 revision；原键重放仅核实，不再次改变关联。实例引用保护端口已建立，真实登记并发仍待验证。
+
+网页与 API 同源，通过 HTTPS 和现有 Cookie/CSRF 使用真实数据。管理写请求携带 `Idempotency-Key`，修改和撤销已有资源另带 `expectedRevision`；当前授权先于重放，合法重放先于旧修订比较。响应不明时页面仅在内存保留原请求及操作键，由人员手动核实，不自动换键或重发；核实时的授权拒绝不能证明原请求已回滚，仍保留原键。密码不写浏览器持久存储。分页默认 50、最大 200；人员按工号/ID，台账及软件按代码或设备编号/ID 固定排序。现场游标绑定主体、部署、筛选、页长和权限修订，默认有效 15 分钟，撤权后旧游标失效。
 
 领域事件仅在当前进程和数据库事务内使用，按显式订阅目录执行本模块规则。缺失处理器、非法归属、重复事件标识、处理循环超限、异常或取消均拒绝提交；每事务默认上限 1000，可由 `DomainEventOptions` 调整。数据库确认提交成功才确认已处理事件；回滚或提交结果未知保留待处理事件，沿用既有幂等核实，不自动重执行。具体注册与事务边界见[框架设计第 7.2 节](docs/软件框架设计.md#72-领域事件)。
 
@@ -42,7 +44,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 | `src/services` | 内层契约、CQRS 管道、应用编排和六模块服务 |
 | `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
-| `src/ui/svm-web` | Vue 登录、改密及人员账号/厂级权限管理网页 |
+| `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护及软件目录网页 |
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
 | `build`、`eng` | 引用白名单、依赖/工具链清单和本机开发脚本 |
 | `docs` | 七份设计与验收文档 |
@@ -100,11 +102,11 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-OperationResults、BusOutbox 及本批新增的 `20261007000200_PersonnelAdministrationPermissions` 迁移仅在一次性测试库执行。新迁移只补入资产权限定义，不自动给现有账号授权；既有四份迁移及模型快照不变。现有开发库仍只有 InitialSchemas、PersonnelSessions 两份已应用迁移，升级须另行确认。编译 Migration 后可生成包含待执行迁移及权限核对的幂等脚本：
+OperationResults、BusOutbox、PersonnelAdministrationPermissions 及本批新增 `20261008000100_SiteCatalog` 仅在一次性测试库执行。新迁移建立厂区标识、软件、工序、设备和映射五张表，不生成台账或默认授权；既有五份迁移不改，模型快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
 
 ```sh
 mkdir -p artifacts
-eng/postgres migrate script > artifacts/personnel-administration-upgrade.sql
+eng/postgres migrate script > artifacts/site-catalog-upgrade.sql
 ```
 
 首次管理员默认为 `LOCAL-ADMIN`；显示名和随机临时密码位于已忽略的 `.cache/personnel-local/seed.json`，可在首次播种前私下调整。首次登录须改密。禁止将该文件、数据库连接、会话材料或证书私钥加入版本库。
@@ -112,6 +114,12 @@ eng/postgres migrate script > artifacts/personnel-administration-upgrade.sql
 `serve` 启动 `https://127.0.0.1:7443` 的人员 API 及已构建网页；证书为本机生成的自签名证书，未自动加入系统信任。网页实现不代表当前开发库已具备管理所需迁移；开发库升级仍须另行确认。私有 personnel.json 可增加 `management`：`defaultPageSize:50`、`maximumPageSize:200`、`cursorMinutes:15`；省略时使用这些默认值，游标上限 60 分钟。直接运行 Hosts 的配置方式见[框架设计的工程入口](docs/软件框架设计.md#112-工程入口)。
 
 结束开发可执行 `eng/postgres stop`，保留数据卷和私有配置。重新启动数据库后再次执行 `eng/postgres up` 更新本机端口配置；不要删除已有数据库对应的私有凭据。
+
+### 显式厂区配置
+
+现场能力需要私有 `SVM_SITE_CONFIG_FILE`。标识、实际名称和 IANA 时区须由本厂明确提供，无默认厂区或设备。可用 `eng/site prepare --id <稳定UUID> --name <实际厂区名称> --time-zone <IANA时区>` 保存忽略的 `.cache/site-local/site.json`，工具不迁移或播种；再次运行不允许替换已有厂区标识。然后通过 `SVM_SITE_CONFIG_FILE="$PWD/.cache/site-local/site.json" eng/personnel serve` 启动。
+
+JSON 字段为 `siteId`、`siteName`、`siteTimeZone`，可选 `defaultPageSize:50`、`maximumPageSize:200`、`cursorMinutes:15`。缺少配置时现场接口返回 `503 CONFIGURATION_INVALID`；显式配置格式或限额错误使启动失败。首个现场/软件写事务把稳定厂区标识绑定数据库，换成其他标识不能读取或写入旧台账。人员功能沿用既有配置与运行方式。
 
 ### RabbitMQ 与专用验证环境
 
@@ -140,7 +148,7 @@ eng/npm --prefix src/ui/svm-web run build
 (cd src/ui/svm-web && PLAYWRIGHT_BROWSERS_PATH="$PWD/../../../.cache/playwright-browsers" ../../../eng/npm exec -- playwright install --only-shell chromium)
 ```
 
-真实浏览器用例为 `PersonnelBrowserTests`，包含在人员 Framework 筛选内；需先构建网页和 HttpApi，再使用项目私有 PostgreSQL/人员配置运行。夹具创建一次性数据库、HTTPS 主机和 Chromium 进程，验证首次改密、管理、响应丢失后人工重放、会话撤销、修订冲突与空/失败列表。截图位于忽略的 `artifacts/personnel/browser-*/`，不保存密码表单或请求追踪。
+真实浏览器用例为 `PersonnelBrowserTests`、`SiteCatalogBrowserTests`；需先构建网页和 HttpApi，再使用项目私有 PostgreSQL/人员配置运行。夹具创建一次性数据库、显式虚构厂区、HTTPS 主机与 Chromium，验证会话、人员授权、现场层级、目录、映射、原键人工核实、修订冲突和空/失败列表。截图位于忽略的 `artifacts/personnel/browser-*/`、`artifacts/site-catalog/browser-*/`，不保存密码表单或请求追踪。
 
 先编译受影响项目，再运行对应分类。基础脚本提供：
 
@@ -150,7 +158,7 @@ eng/postgres test security
 eng/postgres test framework
 ```
 
-其中 `framework` 选择名称包含 Persistence、Composition、HostRuntime、Personnel 和 Idempotency 的 Business 用例，涉及真实 PostgreSQL、一次性测试库和本机 HTTPS 进程；发送端恢复用例须按下面的专用命令执行。按改动范围选择，不代表全量或系统验收。细粒度执行需提供 `SVM_TEST_DATABASE_CONFIG_FILE`，人员用例还需 `SVM_PERSONNEL_CONFIG_FILE`，分别指向本机生成的 test-admin.json、personnel.json 私有文件；HostRuntime 用例还需 `SVM_PERSISTENCE_CONFIG_FILE`。不在命令行传入密码，结果写入忽略的 `artifacts/`。
+其中 `framework` 选择 Persistence、Composition、HostRuntime、Personnel、Idempotency 和 SiteCatalog 的 Business 用例，涉及真实 PostgreSQL、一次性测试库和本机 HTTPS；消息恢复须使用下面专用命令。按改动范围选择，不代表全量或系统验收。细粒度执行需提供 `SVM_TEST_DATABASE_CONFIG_FILE` 和 `SVM_PERSONNEL_CONFIG_FILE`；HostRuntime 还需 `SVM_PERSISTENCE_CONFIG_FILE`。不在命令行传入密码，结果写入忽略的 `artifacts/`。
 
 单独验证领域事件及 SharedKernel 基础类型可执行：
 
@@ -169,7 +177,7 @@ SVM_TEST_RABBITMQ_CONFIG_FILE="$PWD/.cache/rabbitmq-local/test-admin.json" \
 SVM_PERSONNEL_CONFIG_FILE="$PWD/.cache/personnel-local/personnel.json" \
 SVM_PERSISTENCE_CONFIG_FILE="$PWD/.cache/postgres-local/runtime.json" \
   eng/dotnet test src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj --no-build --no-restore \
-  --filter 'Category=Business&(FullyQualifiedName~Outbox|FullyQualifiedName~DomainEvent|FullyQualifiedName~DomainFoundation|FullyQualifiedName~Idempotency|FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel)&FullyQualifiedName!~Consumption' \
+  --filter 'Category=Business&(FullyQualifiedName~Outbox|FullyQualifiedName~DomainEvent|FullyQualifiedName~DomainFoundation|FullyQualifiedName~Idempotency|FullyQualifiedName~Persistence|FullyQualifiedName~Composition|FullyQualifiedName~HostRuntime|FullyQualifiedName~Personnel|FullyQualifiedName~SiteCatalog)&FullyQualifiedName!~Consumption' \
   --logger trx --results-directory artifacts/test-results/consumer/framework-regression
 
 SVM_TEST_DATABASE_CONFIG_FILE="$PWD/.cache/postgres-local/test-admin.json" \

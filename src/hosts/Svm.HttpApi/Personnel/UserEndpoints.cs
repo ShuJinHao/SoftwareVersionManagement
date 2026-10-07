@@ -74,7 +74,7 @@ internal static class UserEndpoints
         });
     }
     private static string? Query(HttpContext http, string name) => http.Request.Query.TryGetValue(name, out var value) && !string.IsNullOrEmpty(value[0]) ? value[0] : null;
-    private static async Task<JsonDocument> Input(HttpContext http, IAntiforgery antiforgery, string[] fields)
+    internal static async Task<JsonDocument> Input(HttpContext http, IAntiforgery antiforgery, string[] fields)
     {
         if (!http.Request.IsHttps) throw new RequestRejectedException(RequestFailure.PermissionDenied);
         try { await antiforgery.ValidateRequestAsync(http); }
@@ -97,15 +97,15 @@ internal static class UserEndpoints
         if (properties.Any(p => !fields.Contains(p.Name, StringComparer.Ordinal))) throw new RequestRejectedException(RequestFailure.UnknownField);
         if (properties.Select(p => p.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != properties.Length) throw new RequestRejectedException(RequestFailure.InvalidRequest);
     }
-    private static string Text(JsonElement body, string field) => body.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String
+    internal static string Text(JsonElement body, string field) => body.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String
         ? value.GetString()! : throw new RequestRejectedException(RequestFailure.InvalidRequest);
-    private static string? OptionalText(JsonElement body, string field) => !body.TryGetProperty(field, out var value) || value.ValueKind == JsonValueKind.Null
+    internal static string? OptionalText(JsonElement body, string field) => !body.TryGetProperty(field, out var value) || value.ValueKind == JsonValueKind.Null
         ? null : value.ValueKind == JsonValueKind.String ? value.GetString() : throw new RequestRejectedException(RequestFailure.InvalidRequest);
     private static bool? OptionalBoolean(JsonElement body, string field) => !body.TryGetProperty(field, out var value) || value.ValueKind == JsonValueKind.Null ? null :
         value.ValueKind == JsonValueKind.True ? true : value.ValueKind == JsonValueKind.False ? false : throw new RequestRejectedException(RequestFailure.InvalidRequest);
-    private static long Revision(JsonElement body) => !body.TryGetProperty("expectedRevision", out var value)
+    internal static long Revision(JsonElement body) => !body.TryGetProperty("expectedRevision", out var value)
         ? throw new RequestRejectedException(RequestFailure.RevisionRequired) : value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var revision) ? revision : throw new RequestRejectedException(RequestFailure.InvalidRequest);
-    private static Guid Key(HttpContext http) => http.Request.Headers.TryGetValue("Idempotency-Key", out var value) && value.Count == 1 && Guid.TryParseExact(value[0], "D", out var key) && key != Guid.Empty
+    internal static Guid Key(HttpContext http) => http.Request.Headers.TryGetValue("Idempotency-Key", out var value) && value.Count == 1 && Guid.TryParseExact(value[0], "D", out var key) && key != Guid.Empty
         ? key : throw new RequestRejectedException(RequestFailure.InvalidRequest);
     private static object View(UserView user) => new { user.Id, user.EmployeeNo, user.DisplayName, user.IsEnabled, user.MustChangePassword, user.Permissions, user.Revision, serverTime = DateTimeOffset.UtcNow };
 }

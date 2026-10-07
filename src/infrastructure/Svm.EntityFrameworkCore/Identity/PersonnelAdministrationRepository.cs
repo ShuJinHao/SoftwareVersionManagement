@@ -45,4 +45,18 @@ internal sealed class PersonnelAdministrationRepository(SvmDbContext context, IU
         foreach (var operation in operations)
             context.Add(new PermissionGrant { Id = Guid.NewGuid(), SubjectId = subjectId, Operation = operation });
     }
+    public async Task ReplaceAllPermissionsAsync(Guid subjectId, IReadOnlyList<PersonnelPermission> permissions, CancellationToken token)
+    {
+        RequireTransaction();
+        await context.Set<PermissionGrant>().Where(x => x.SubjectId == subjectId).ExecuteDeleteAsync(token);
+        foreach (var permission in permissions)
+            context.Add(new PermissionGrant { Id = Guid.NewGuid(), SubjectId = subjectId, SoftwareId = permission.SoftwareId, Operation = permission.Operation });
+    }
+    public Task AddSoftwarePermissionsAsync(Guid subjectId, Guid softwareId, IReadOnlyList<string> operations, CancellationToken token)
+    {
+        RequireTransaction(); token.ThrowIfCancellationRequested();
+        foreach (var operation in operations) context.Add(new PermissionGrant
+            { Id = Guid.NewGuid(), SubjectId = subjectId, SoftwareId = softwareId, Operation = operation });
+        return Task.CompletedTask;
+    }
 }

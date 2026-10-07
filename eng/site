@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+svm_site_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+exec "$svm_site_root/.tools/node/bin/node" "$svm_site_root/eng/site.mjs" "$@"

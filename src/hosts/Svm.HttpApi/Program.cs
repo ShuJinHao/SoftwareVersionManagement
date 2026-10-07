@@ -13,6 +13,10 @@ using Svm.Security;
 using Svm.HttpApi.Personnel;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
+using Svm.Services.Contracts.Catalog;
+using Svm.HttpApi.Catalog;
+using Svm.ReleaseService;
+using Svm.InstanceService;
 
 namespace Svm.HttpApi;
 
@@ -28,17 +32,20 @@ public partial class Program
             options.ValidateOnBuild = true;
         });
 
-        builder.Services.AddSvmPersonnelManagementApplication();
+        builder.Services.AddSvmSiteCatalogApplication();
         var persistence = PersistenceConfiguration.LoadFromEnvironment();
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
         builder.Services.AddSvmPostgres(persistence.WriterConnectionString);
         builder.Services.AddSvmReadPersistence(persistence.ReaderConnectionString);
         builder.Services.AddSvmUserQueries();
+        builder.Services.AddSvmCatalogQueries().AddSvmSoftwareCatalog().AddSvmSiteAssets();
+        builder.Services.AddSingleton(SiteConfiguration.LoadFromEnvironment());
+        builder.Services.AddScoped<CatalogCursor>();
         builder.Services.AddSingleton(personnel.Management);
         builder.Services.AddScoped<UserCursor>();
         if (MessagingConfiguration.LoadFromEnvironment() is { } messaging)
             builder.Services.AddSvmMessaging(messaging, delivery: false);
-        builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
+        builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<HttpPersonnelContext>();
         builder.Services.AddScoped<ISessionProofSource>(p => p.GetRequiredService<HttpPersonnelContext>());
@@ -86,6 +93,7 @@ public partial class Program
         app.UseStaticFiles();
         app.MapPersonnelSessions();
         app.MapPersonnelManagement();
+        app.MapSiteCatalog();
         app.Map("/api/{**path}", (HttpContext http) => Results.Json(new { code = "RESOURCE_NOT_FOUND", traceId = http.TraceIdentifier, retryable = false }, statusCode: 404));
         app.MapFallbackToFile("{*path:nonfile}", "index.html");
         app.Run();
