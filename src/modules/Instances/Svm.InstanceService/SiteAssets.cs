@@ -65,6 +65,8 @@ internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork un
         var value = await repository.BindingByIdAsync(id, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         await ExistingDevice(value.DeviceId.Value, false, token); return View(value);
     }
+    public async Task<bool> HasActiveBindingAsync(Guid deviceId, Guid softwareId, CancellationToken token) =>
+        (await repository.BindingAsync(deviceId, softwareId, unitOfWork.CurrentOperationId is not null, token))?.IsActive == true;
     public async Task ConfirmInstanceReferenceAsync(Guid deviceId, Guid softwareId, CancellationToken token)
     {
         RequireWrite(); await ExistingDevice(deviceId, true, token);

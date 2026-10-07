@@ -11,6 +11,8 @@ export const useSession = defineStore('session', () => {
   function can(operation: string, softwareId: string | null = null) { return current.value?.authenticated === true && !current.value.mustChangePassword && current.value.permissions.some(p => p.softwareId === softwareId && p.operation === operation) }
   const canAssets = computed(() => can('asset.read'))
   const canSoftware = computed(() => can('software.create') || current.value?.authenticated && !current.value.mustChangePassword && current.value.permissions.some(p => p.softwareId !== null && p.operation === 'software.read'))
+  const canInstances = computed(() => current.value?.authenticated && !current.value.mustChangePassword && current.value.permissions.some(p => p.softwareId !== null && p.operation === 'instance.read'))
+  const canEnrollment = computed(() => current.value?.authenticated && !current.value.mustChangePassword && current.value.permissions.some(p => p.softwareId !== null && p.operation === 'enrollment.manage'))
   async function load() {
     error.value = ''
     try { current.value = await request<Session>('/api/v1/session') }
@@ -23,5 +25,5 @@ export const useSession = defineStore('session', () => {
       } else { current.value = null; error.value = e instanceof ApiError ? e.message : '会话加载失败，请重试。' }
     } finally { ready.value = true }
   }
-  return { current, ready, error, canManage, canAssets, canSoftware, can, load }
+  return { current, ready, error, canManage, canAssets, canSoftware, canInstances, canEnrollment, can, load }
 })
