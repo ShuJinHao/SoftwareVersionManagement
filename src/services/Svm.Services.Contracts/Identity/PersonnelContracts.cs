@@ -70,7 +70,7 @@ public static class PermissionCatalog
 {
     public static IReadOnlyList<(string Operation, bool Global)> Entries { get; } = Array.AsReadOnly(new[]
     {
-        ("identity.manage", true), ("software.create", true), ("software.read", false),
+        ("identity.manage", true), ("software.create", true), ("asset.read", true), ("asset.manage", true), ("software.read", false),
         ("release.upload", false), ("release.publish", false), ("release.disable", false),
         ("instance.read", false), ("instance.manage", false), ("enrollment.manage", false),
         ("deployment.create", false), ("deployment.control", false), ("deployment.rollback", false),

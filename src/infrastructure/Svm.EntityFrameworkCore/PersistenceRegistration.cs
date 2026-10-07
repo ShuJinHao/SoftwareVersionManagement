@@ -22,6 +22,7 @@ public static class PersistenceRegistration
         services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
         services.AddScoped<IOperationResultStore, OperationResultStore>();
         services.AddScoped<IPersonnelRepository, PersonnelRepository>();
+        services.AddScoped<IPersonnelAdministrationRepository, PersonnelAdministrationRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
         return services;
     }

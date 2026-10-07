@@ -20,21 +20,25 @@ public partial class Program
 {
     public static void Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args,
+            WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot") });
         builder.Host.UseDefaultServiceProvider(options =>
         {
             options.ValidateScopes = true;
             options.ValidateOnBuild = true;
         });
 
-        builder.Services.AddSvmSessionApplication();
+        builder.Services.AddSvmPersonnelManagementApplication();
         var persistence = PersistenceConfiguration.LoadFromEnvironment();
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
         builder.Services.AddSvmPostgres(persistence.WriterConnectionString);
         builder.Services.AddSvmReadPersistence(persistence.ReaderConnectionString);
+        builder.Services.AddSvmUserQueries();
+        builder.Services.AddSingleton(personnel.Management);
+        builder.Services.AddScoped<UserCursor>();
         if (MessagingConfiguration.LoadFromEnvironment() is { } messaging)
             builder.Services.AddSvmMessaging(messaging, delivery: false);
-        builder.Services.AddSvmPersonnel().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
+        builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<HttpPersonnelContext>();
         builder.Services.AddScoped<ISessionProofSource>(p => p.GetRequiredService<HttpPersonnelContext>());
@@ -66,17 +70,24 @@ public partial class Program
         app.Use(SessionErrors.Handle);
         app.Use(async (http, next) =>
         {
-            if (http.Request.Headers.ContainsKey("Authorization")) throw new RequestRejectedException(RequestFailure.CredentialInvalid);
+            if (http.Request.Path.StartsWithSegments("/api") && http.Request.Headers.ContainsKey("Authorization"))
+                throw new RequestRejectedException(RequestFailure.CredentialInvalid);
             await next();
         });
         app.UseAuthentication();
         app.Use(async (http, next) =>
         {
-            if (http.Request.Cookies.ContainsKey(SessionEndpoints.CookieName) && http.User.Identity?.IsAuthenticated != true)
+            if (http.Request.Path.StartsWithSegments("/api") && http.Request.Cookies.ContainsKey(SessionEndpoints.CookieName) &&
+                http.User.Identity?.IsAuthenticated != true)
                 throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
             await next();
         });
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
         app.MapPersonnelSessions();
+        app.MapPersonnelManagement();
+        app.Map("/api/{**path}", (HttpContext http) => Results.Json(new { code = "RESOURCE_NOT_FOUND", traceId = http.TraceIdentifier, retryable = false }, statusCode: 404));
+        app.MapFallbackToFile("{*path:nonfile}", "index.html");
         app.Run();
     }
 }

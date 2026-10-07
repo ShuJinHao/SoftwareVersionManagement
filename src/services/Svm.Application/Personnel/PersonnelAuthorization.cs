@@ -3,7 +3,8 @@ using Svm.Services.Contracts.Identity;
 
 namespace Svm.Application.Personnel;
 
-internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessionProofSource proofSource, IUnitOfWork unitOfWork) : IRequestAuthorizer
+internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessionProofSource proofSource, IUnitOfWork unitOfWork,
+    IPersonnelAdministration? administration = null) : IRequestAuthorizer
 {
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
     {
@@ -16,6 +17,11 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
                 AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
         if (request.Context.Actor.Kind != ActorKind.Human || proofSource.Proof is not { } proof || proof.SubjectId != request.Context.Actor.ActorId)
             return AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
+        if (PersonnelManagementCapabilities.Contains(request.Request.GetType()) && unitOfWork.CurrentOperationId is not null)
+        {
+            if (administration is null) return AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid);
+            await administration.ProtectAsync(proof.SubjectId, PersonnelManagementCapabilities.Target(request.Request), cancellationToken);
+        }
         var person = await personnel.AuthenticateAsync(proof, unitOfWork.CurrentOperationId is not null, cancellationToken);
         if (person is null) return AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
         if (request.Request is CurrentSessionQuery or ChangePasswordCommand or LogoutCommand)

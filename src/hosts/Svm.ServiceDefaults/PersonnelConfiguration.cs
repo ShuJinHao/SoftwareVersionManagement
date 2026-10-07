@@ -11,6 +11,7 @@ public sealed class PersonnelConfiguration
     public string CertificatePath { get; init; } = "";
     public string CertificatePassword { get; init; } = "";
     public PersonnelPolicy Policy { get; init; } = null!;
+    public PersonnelManagementOptions Management { get; init; } = new();
     public override string ToString() => "Personnel configuration [redacted]";
     public static PersonnelConfiguration LoadFromEnvironment() => Load(Environment.GetEnvironmentVariable("SVM_PERSONNEL_CONFIG_FILE"));
     public static PersonnelConfiguration Load(string? path)
@@ -21,9 +22,10 @@ public sealed class PersonnelConfiguration
             var value = JsonSerializer.Deserialize<PersonnelConfiguration>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web)
                 { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow }) ?? throw new InvalidOperationException();
             if (!value.ApplicationName.StartsWith("svm/", StringComparison.Ordinal) || value.ApplicationName.Length > 100 ||
-                !Path.IsPathFullyQualified(value.CertificatePath) || !File.Exists(value.CertificatePath) || value.CertificatePassword.Length < 16 || value.Policy is null)
+                !Path.IsPathFullyQualified(value.CertificatePath) || !File.Exists(value.CertificatePath) || value.CertificatePassword.Length < 16 || value.Policy is null || value.Management is null)
                 throw new InvalidOperationException();
             value.Policy.Validate();
+            value.Management.Validate();
             return value;
         }
         catch (Exception error) when (error is JsonException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)

@@ -20,28 +20,28 @@ internal static class SessionEndpoints
                 ? await sender.Send(new CurrentSessionQuery(), http.RequestAborted)
                 : await sender.Send(new AnonymousSessionQuery(), http.RequestAborted);
             return View(http, antiforgery, view);
-        });
+        }).WithMetadata(new PersonnelEndpointKind(RequestKind.Session));
         app.MapPost("/api/v1/session", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
             await CheckCsrf(http, antiforgery);
             var input = await ReadInput(http, ["employeeNo", "password"]);
             var result = await sender.Send(new LoginCommand(input["employeeNo"], input["password"]), http.RequestAborted);
             return await Complete(http, antiforgery, result.Value);
-        });
+        }).WithMetadata(new PersonnelEndpointKind(RequestKind.Session));
         app.MapDelete("/api/v1/session", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
             await CheckCsrf(http, antiforgery);
             await sender.Send(new LogoutCommand(), http.RequestAborted);
             await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.NoContent();
-        });
+        }).WithMetadata(new PersonnelEndpointKind(RequestKind.Session));
         app.MapPost("/api/v1/session/password", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
             await CheckCsrf(http, antiforgery);
             var input = await ReadInput(http, ["currentPassword", "newPassword"]);
             var result = await sender.Send(new ChangePasswordCommand(input["currentPassword"], input["newPassword"]), http.RequestAborted);
             return await Complete(http, antiforgery, result.Value);
-        });
+        }).WithMetadata(new PersonnelEndpointKind(RequestKind.Session));
     }
     private static async Task CheckCsrf(HttpContext http, IAntiforgery antiforgery)
     {

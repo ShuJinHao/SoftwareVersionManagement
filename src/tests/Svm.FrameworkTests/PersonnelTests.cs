@@ -45,10 +45,12 @@ public sealed class PersonnelTests
     public async Task SeedAuditFailureRollsBackMarkerCatalogAndAccount()
     {
         await using var fixture = await PersonnelDatabase.CreateAsync(seed: false);
+        var catalog = await fixture.CountAsync("iam.permission_catalog");
         await RejectAudit(fixture);
         Assert.Equal(PersistenceFailure.DependencyUnavailable, (await Assert.ThrowsAsync<PersistenceException>(() => fixture.SeedAsync())).Failure);
-        foreach (var table in new[] { "iam.users", "iam.permissions", "iam.permission_catalog", "iam.seed_markers", "aud.events" })
+        foreach (var table in new[] { "iam.users", "iam.permissions", "iam.seed_markers", "aud.events" })
             Assert.Equal(0, await fixture.CountAsync(table));
+        Assert.Equal(catalog, await fixture.CountAsync("iam.permission_catalog"));
         await fixture.ExecuteAsync("DROP TRIGGER reject_audit ON aud.events");
         Assert.True(await fixture.SeedAsync());
     }

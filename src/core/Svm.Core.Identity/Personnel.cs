@@ -16,6 +16,16 @@ public sealed class UserAccount : AggregateRoot<StrongId<UserAccount>>
     public string PasswordHash { get; private set; }
     public bool IsEnabled { get; private set; } = true;
     public bool MustChangePassword { get; private set; } = true;
+    public void Update(string? displayName, bool? isEnabled)
+    {
+        if (displayName is not null) { ArgumentException.ThrowIfNullOrWhiteSpace(displayName); DisplayName = displayName; }
+        if (isEnabled is not null) IsEnabled = isEnabled.Value;
+    }
+    public void ResetPassword(string hash)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hash);
+        PasswordHash = hash; MustChangePassword = true;
+    }
     public void ChangePassword(string hash)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hash);
@@ -55,4 +65,14 @@ public interface IPersonnelRepository
     Task<bool> BeginSeedAsync(CancellationToken cancellationToken);
     void AddInitialAccount(UserAccount user, IReadOnlyList<string> globalPermissions);
     Task EnsurePermissionCatalogAsync(IReadOnlyList<(string Operation, bool Global)> permissions, CancellationToken cancellationToken);
+}
+
+/// <summary>IAM administration storage. Every method except reads requires the active unit of work.</summary>
+public interface IPersonnelAdministrationRepository
+{
+    Task ProtectAsync(Guid actorId, Guid? targetId, CancellationToken cancellationToken);
+    Task<long> RevisionAsync(Guid subjectId, CancellationToken cancellationToken);
+    Task<bool> HasOtherEnabledAdministratorAsync(Guid subjectId, CancellationToken cancellationToken);
+    void AddUser(UserAccount user);
+    Task ReplaceGlobalPermissionsAsync(Guid subjectId, IReadOnlyList<string> operations, CancellationToken cancellationToken);
 }

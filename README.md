@@ -6,21 +6,26 @@
 
 ## 当前状态
 
-项目处于基础框架开发阶段，尚未完成系统验收或生产部署。已有进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送端恢复；本批增加 Consumer Outbox、Inbox 与消费事务基础。此前九份文档中的制造业业务设计继续保留，文档待复核，现场台账、软件分类、强制映射和对应网页/API 均待实现。
+项目处于基础框架及首批管理功能开发阶段，尚未完成系统验收或生产部署。已有进程内领域事件、PostgreSQL 工作单元、RabbitMQ 发送端恢复及 Consumer Outbox/Inbox 消费事务基础；本批增加人员账号与厂级权限管理 API、同源网页。制造业业务设计继续保留，现场台账、软件分类、强制映射和对应网页/API 均待实现。
 
 | 已有实现 | 后续实现 |
 |---|---|
-| 28 个 C# 项目与网页骨架、固定工具链和依赖锁、编译期架构检查 | 现场台账、软件分类、强制设备映射、网页业务与账号管理 |
+| 28 个 C# 项目、固定工具链和依赖锁、编译期架构检查 | 现场台账、软件分类、强制设备映射及其网页业务 |
 | DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 系统凭据、受管实例登记及状态上报 |
 | PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 软件/版本、安装包、批量任务和部分回退 |
-| 人员登录、本人改密、退出、共享会话及必要审计 | 外部系统与实例的实际凭据接入 |
+| 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部系统与实例的实际凭据接入 |
+| 人员分页/详情、创建/启停、密码重置、四项厂级授权及对应网页 | 软件范围授权维护；台账与接入能力 |
 | 所属模块的类型化领域事件处理器、Scoped 串行派发、提交成功后的内部确认 | 实际业务事件及领域事实到版本化集成消息的转换 |
-| 持久化幂等协调器、六模块操作结果存储及提交结果核实 | 业务 HTTP 幂等接入及完整事务/消息验收 |
+| 持久化幂等协调器、六模块操作结果存储、人员管理 HTTP 幂等及提交结果核实 | 其他业务 HTTP 幂等接入及完整事务/消息验收 |
 | 三类固定 V1 消息、MassTransit EF Bus Outbox、Worker 投递及 RabbitMQ 断线/重启恢复 | 实际业务生产者、消费者与持续业务去重 |
 | 显式消费目录、原生 Consumer Outbox/Inbox 事务、当前授权先于去重、有界重试及崩溃恢复 | 所属模块的正式工作事实、长工作执行与消费观测 |
 | 密码哈希、随机凭据校验及密钥保护证书加载 | 文件副本与清理、完整日志/观测/健康检查接入 |
 
-会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。除已开放的人员会话及显式播种用例外，其余业务 Command 继续禁用。发送端尚无实际业务生产者，Worker 未注册业务消费者；网页和完整业务消息链路仍待实现。
+会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。新增 `GET/POST /api/v1/manage/users`、`GET/PATCH /api/v1/manage/users/{userId}`、`POST /api/v1/manage/users/{userId}/reset-password`、`PUT /api/v1/manage/subjects/{subjectId}/permissions`，均仅允许已首次改密且当前具有 `identity.manage` 的人员。
+
+工号唯一且不可修改，无删除历史主体接口；新建/重置要求下次改密，停用/重置同事务撤销旧会话。IAM 事务锁与主体保护保证并发操作后至少保留一名启用且持有厂级 `identity.manage` 的人员。授权仅能编辑 `identity.manage`、`software.create`、`asset.read`、`asset.manage`；既有软件授权只读，完整提交时须原样保留。其他业务 Command 继续禁用；发送端尚无实际业务生产者，Worker 未注册业务消费者。
+
+网页与 API 同源，通过 HTTPS 和现有 Cookie/CSRF 使用真实数据。管理写请求携带 `Idempotency-Key`，修改已有账号另带 `expectedRevision`；当前授权先于重放，合法重放先于旧修订比较。响应不明时页面仅在内存保留原请求及操作键，由人员手动核实，不自动换键或重发；核实时的授权拒绝不能证明原请求已回滚，仍保留原键。密码不写浏览器持久存储。分页默认 50、最大 200，按工号/ID 固定排序；受保护游标绑定主体、部署、筛选和页长，默认有效 15 分钟。
 
 领域事件仅在当前进程和数据库事务内使用，按显式订阅目录执行本模块规则。缺失处理器、非法归属、重复事件标识、处理循环超限、异常或取消均拒绝提交；每事务默认上限 1000，可由 `DomainEventOptions` 调整。数据库确认提交成功才确认已处理事件；回滚或提交结果未知保留待处理事件，沿用既有幂等核实，不自动重执行。具体注册与事务边界见[框架设计第 7.2 节](docs/软件框架设计.md#72-领域事件)。
 
@@ -37,7 +42,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 | `src/services` | 内层契约、CQRS 管道、应用编排和六模块服务 |
 | `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
-| `src/ui/svm-web` | Vue 网页工程骨架 |
+| `src/ui/svm-web` | Vue 登录、改密及人员账号/厂级权限管理网页 |
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
 | `build`、`eng` | 引用白名单、依赖/工具链清单和本机开发脚本 |
 | `docs` | 七份设计与验收文档 |
@@ -73,10 +78,11 @@ eng/dotnet tool restore --configfile NuGet.Config
 eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
 eng/npm --prefix src/ui/svm-web ci --ignore-scripts
 eng/npm --prefix src/ui/svm-web run build
+eng/dotnet build src/hosts/Svm.HttpApi/Svm.HttpApi.csproj --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
 .tools/node/bin/node eng/verify-dependencies.mjs
 ```
 
-工具版本与摘要由 `build/toolchain.lock.json` 固定；NuGet 版本和许可清单见软件框架设计。脚本只设置本项目的工具和缓存目录，不修改系统 SDK。
+网页先构建到 `dist/`，再编译或发布 HttpApi 将构建产物复制到 `wwwroot/`，由同一主机托管。未知 `/api/...` 仍返回 JSON 错误，不落入网页路由。工具版本与摘要由 `build/toolchain.lock.json` 固定；NuGet 版本和许可清单见软件框架设计。脚本只设置本项目的工具和缓存目录，不修改系统 SDK。
 
 ### PostgreSQL 与人员 API
 
@@ -94,16 +100,16 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-OperationResults 及本批新增的 `20261007000100_BusOutbox` 迁移仅在一次性测试库执行；BusOutbox 建立原生 OutboxMessage、OutboxState、InboxState 三张技术表。现有开发库仍只有 InitialSchemas、PersonnelSessions 两份已应用迁移，升级须另行确认。编译 Migration 后可生成包含待执行迁移及权限核对的幂等脚本：
+OperationResults、BusOutbox 及本批新增的 `20261007000200_PersonnelAdministrationPermissions` 迁移仅在一次性测试库执行。新迁移只补入资产权限定义，不自动给现有账号授权；既有四份迁移及模型快照不变。现有开发库仍只有 InitialSchemas、PersonnelSessions 两份已应用迁移，升级须另行确认。编译 Migration 后可生成包含待执行迁移及权限核对的幂等脚本：
 
 ```sh
 mkdir -p artifacts
-eng/postgres migrate script > artifacts/bus-outbox-upgrade.sql
+eng/postgres migrate script > artifacts/personnel-administration-upgrade.sql
 ```
 
 首次管理员默认为 `LOCAL-ADMIN`；显示名和随机临时密码位于已忽略的 `.cache/personnel-local/seed.json`，可在首次播种前私下调整。首次登录须改密。禁止将该文件、数据库连接、会话材料或证书私钥加入版本库。
 
-`serve` 启动 `https://127.0.0.1:7443` 的人员 API；证书为本机生成的自签名证书，未自动加入系统信任，网页登录流程尚未接入。直接运行 Hosts 的配置方式见[框架设计的工程入口](docs/软件框架设计.md#112-工程入口)。
+`serve` 启动 `https://127.0.0.1:7443` 的人员 API 及已构建网页；证书为本机生成的自签名证书，未自动加入系统信任。网页实现不代表当前开发库已具备管理所需迁移；开发库升级仍须另行确认。私有 personnel.json 可增加 `management`：`defaultPageSize:50`、`maximumPageSize:200`、`cursorMinutes:15`；省略时使用这些默认值，游标上限 60 分钟。直接运行 Hosts 的配置方式见[框架设计的工程入口](docs/软件框架设计.md#112-工程入口)。
 
 结束开发可执行 `eng/postgres stop`，保留数据卷和私有配置。重新启动数据库后再次执行 `eng/postgres up` 更新本机端口配置；不要删除已有数据库对应的私有凭据。
 
@@ -125,6 +131,16 @@ eng/rabbitmq status
 验证结束执行 `eng/rabbitmq down`，清理本工具拥有的测试容器、卷和私有配置；`stop`/`start` 用于保留数据的断线恢复验证。私有测试管理材料位于忽略的 `.cache/rabbitmq-local/test-admin.json`。
 
 ## 验证方式
+
+网页类型检查、构建及关键交互测试使用既有锁定依赖：
+
+```sh
+eng/npm --prefix src/ui/svm-web run build
+(cd src/ui/svm-web && ../../../eng/npm exec -- vitest run)
+(cd src/ui/svm-web && PLAYWRIGHT_BROWSERS_PATH="$PWD/../../../.cache/playwright-browsers" ../../../eng/npm exec -- playwright install --only-shell chromium)
+```
+
+真实浏览器用例为 `PersonnelBrowserTests`，包含在人员 Framework 筛选内；需先构建网页和 HttpApi，再使用项目私有 PostgreSQL/人员配置运行。夹具创建一次性数据库、HTTPS 主机和 Chromium 进程，验证首次改密、管理、响应丢失后人工重放、会话撤销、修订冲突与空/失败列表。截图位于忽略的 `artifacts/personnel/browser-*/`，不保存密码表单或请求追踪。
 
 先编译受影响项目，再运行对应分类。基础脚本提供：
 

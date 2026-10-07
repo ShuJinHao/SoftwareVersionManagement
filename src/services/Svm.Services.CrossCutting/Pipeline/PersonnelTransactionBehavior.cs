@@ -12,6 +12,13 @@ public sealed class PersonnelTransactionBehavior<TRequest, TResponse>(RequestCat
     {
         var policy = catalog.GetPolicy(request.GetType());
         if (policy.Transaction == TransactionMode.ReadOnly) return await next();
+        if (PersonnelManagementCapabilities.Contains(request.GetType()))
+        {
+            // The idempotency coordinator already owns and reauthorizes this root transaction.
+            if (policy.Idempotency != IdempotencyMode.OperationResult || unitOfWork?.CurrentOperationId is null)
+                throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+            return await next();
+        }
         if (!PersonnelWriteCapabilities.Contains(request.GetType()) || unitOfWork is null || authorizer is null)
             throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         return await unitOfWork.ExecuteAsync(Guid.NewGuid(), async token =>
