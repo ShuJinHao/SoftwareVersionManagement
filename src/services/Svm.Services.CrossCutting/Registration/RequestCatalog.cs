@@ -66,10 +66,11 @@ public sealed class RequestCatalog
                 i.GetGenericTypeDefinition() == typeof(IStreamRequest<>)))
             throw new InvalidOperationException("A request must be exactly one typed SVM Command or Query.");
         var isCommand = shapes[0].GetGenericTypeDefinition() == typeof(ICommand<>);
-        if (policy.Idempotency != IdempotencyMode.None || (isCommand
-                ? !PersonnelWriteCapabilities.Contains(type) || policy.Transaction != TransactionMode.DatabaseAtomic
-                : policy.Transaction != TransactionMode.ReadOnly))
-            throw new InvalidOperationException("Only the closed personnel write capabilities are activated; other Commands and persistent idempotency remain disabled.");
+        var management = PersonnelManagementCapabilities.Contains(type);
+        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management) || policy.Transaction != TransactionMode.DatabaseAtomic ||
+                policy.Idempotency != (management ? IdempotencyMode.OperationResult : IdempotencyMode.None)
+            : policy.Transaction != TransactionMode.ReadOnly || policy.Idempotency != IdempotencyMode.None)
+            throw new InvalidOperationException("Only the closed personnel session and administration writes are activated.");
 
         var response = type.GetInterfaces().Single(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>)).GenericTypeArguments[0];
         var handlerContract = typeof(IRequestHandler<,>).MakeGenericType(type, response);

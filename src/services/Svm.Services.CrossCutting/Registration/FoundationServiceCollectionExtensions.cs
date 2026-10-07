@@ -54,7 +54,7 @@ public static class FoundationServiceCollectionExtensions
         if (services.Any(d => d.IsKeyedService && (IsSinglePort(d.ServiceType) ||
             d.ServiceType.IsGenericType && (d.ServiceType.GetGenericTypeDefinition() == typeof(IRequestHandler<,>) ||
                 d.ServiceType.GetGenericTypeDefinition() == typeof(IPipelineBehavior<,>) ||
-                d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>)))))
+                d.ServiceType.GetGenericTypeDefinition() == typeof(IValidator<>) || d.ServiceType.GetGenericTypeDefinition() == typeof(IIdempotencyRequestAdapter<,>)))))
             throw new InvalidOperationException("Keyed registrations cannot substitute framework ports, handlers or pipeline components.");
         foreach (var group in services.Where(d => IsSinglePort(d.ServiceType)).GroupBy(d => d.ServiceType))
             if (group.Count() != 1) throw new InvalidOperationException($"Conflicting default implementations for {group.Key.FullName}.");
@@ -77,15 +77,24 @@ public static class FoundationServiceCollectionExtensions
             RequireScopedPort(services, typeof(ITrustedCallContextSource));
             RequireScopedPort(services, typeof(IRequestAuthorizer));
         }
-        if (catalog.Bindings.Any(b => PersonnelWriteCapabilities.Contains(b.RequestType)))
+        if (catalog.Bindings.Any(b => PersonnelWriteCapabilities.Contains(b.RequestType) || PersonnelManagementCapabilities.Contains(b.RequestType)))
         {
             RequireScopedPort(services, typeof(IUnitOfWork));
             RequireScopedPort(services, typeof(IPersonnelService));
             RequireScopedPort(services, typeof(IAuditWriter));
             RequireScopedPort(services, typeof(ISessionProofSource));
         }
+        if (catalog.Bindings.Any(b => PersonnelManagementCapabilities.Contains(b.RequestType)))
+        {
+            RequireScopedPort(services, typeof(IPersonnelAdministration));
+            RequireScopedPort(services, typeof(IUserQueries));
+            RequireScopedPort(services, typeof(IOperationResultStore));
+        }
+        if (catalog.Bindings.Any(b => b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)))
+            RequireScopedPort(services, typeof(IUserQueries));
         var expectedHandlers = new HashSet<Type>();
         var expectedValidators = new HashSet<(Type Contract, Type Implementation)>();
+        var expectedAdapters = new Dictionary<Type, System.Reflection.Assembly>();
         foreach (var binding in catalog.Bindings)
         {
             var response = binding.RequestType.GetInterfaces().Single(i => i.IsGenericType &&
@@ -93,6 +102,8 @@ public static class FoundationServiceCollectionExtensions
             var contract = typeof(IRequestHandler<,>).MakeGenericType(binding.RequestType, response);
             expectedHandlers.Add(contract);
             RequireImplementation(services, contract, binding.HandlerType, ServiceLifetime.Scoped);
+            if (catalog.GetPolicy(binding.RequestType).Idempotency == IdempotencyMode.OperationResult)
+                expectedAdapters.Add(typeof(IIdempotencyRequestAdapter<,>).MakeGenericType(binding.RequestType, response), binding.HandlerType.Assembly);
             foreach (var validator in binding.ValidatorTypes)
                 expectedValidators.Add((typeof(IValidator<>).MakeGenericType(binding.RequestType), validator));
         }
@@ -107,8 +118,14 @@ public static class FoundationServiceCollectionExtensions
                 descriptor.Lifetime != ServiceLifetime.Scoped || !expectedValidators.Remove((descriptor.ServiceType, descriptor.ImplementationType))))
                 throw new InvalidOperationException("A Validator bypasses or duplicates the approved registration.");
             if (definition == typeof(IIdempotencyRequestAdapter<,>))
-                throw new InvalidOperationException("Persistent-idempotency Commands are not activated; no request adapter may be registered yet.");
+            {
+                if (!expectedAdapters.Remove(descriptor.ServiceType, out var assembly) || descriptor.IsKeyedService ||
+                    descriptor.Lifetime != ServiceLifetime.Scoped || descriptor.ImplementationType is not { IsAbstract: false, ContainsGenericParameters: false } implementation ||
+                    implementation.Assembly != assembly || !descriptor.ServiceType.IsAssignableFrom(implementation))
+                    throw new InvalidOperationException("An idempotency adapter bypasses the closed administration catalog or its scoped registration.");
+            }
         }
+        if (expectedAdapters.Count != 0) throw new InvalidOperationException("An active idempotency adapter is missing.");
         if (expectedValidators.Count != 0) throw new InvalidOperationException("A required Validator registration was removed.");
         return services;
     }

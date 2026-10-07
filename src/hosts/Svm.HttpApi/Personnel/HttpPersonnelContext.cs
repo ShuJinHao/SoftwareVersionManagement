@@ -6,6 +6,8 @@ using Svm.Services.Contracts.Identity;
 
 namespace Svm.HttpApi.Personnel;
 
+internal sealed record PersonnelEndpointKind(RequestKind Kind);
+
 internal sealed class HttpPersonnelContext(IHttpContextAccessor accessor) : ITrustedCallContextSource, ISessionProofSource
 {
     public SessionProof? Proof => Parse(accessor.HttpContext?.User);
@@ -16,7 +18,7 @@ internal sealed class HttpPersonnelContext(IHttpContextAccessor accessor) : ITru
         var http = accessor.HttpContext;
         if (http is null) return null;
         return new(Proof is { } proof ? new CallActor(ActorKind.Human, proof.SubjectId) : new CallActor(ActorKind.Anonymous),
-            RequestKind.Session, http.TraceIdentifier);
+            http.GetEndpoint()?.Metadata.GetMetadata<PersonnelEndpointKind>()?.Kind ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid), http.TraceIdentifier);
     }
     internal static SessionProof? Parse(ClaimsPrincipal? principal) => principal?.Identity?.IsAuthenticated == true &&
         Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var subject) && subject != Guid.Empty &&
@@ -28,6 +30,11 @@ internal sealed class PersonnelCookieEvents(IPersonnelService personnel) : Cooki
 {
     public override async Task ValidatePrincipal(CookieValidatePrincipalContext context)
     {
+        if (!context.HttpContext.Request.Path.StartsWithSegments("/api"))
+        {
+            context.RejectPrincipal();
+            return;
+        }
         var proof = HttpPersonnelContext.Parse(context.Principal);
         if (proof is null || await personnel.AuthenticateAsync(proof, false, context.HttpContext.RequestAborted) is null)
             throw new RequestRejectedException(RequestFailure.AuthenticationRequired);

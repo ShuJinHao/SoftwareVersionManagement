@@ -4,7 +4,8 @@ public enum RequestFailure
 {
     AuthenticationRequired = 1, CredentialInvalid, PermissionDenied, HumanRequired,
     ResourceNotFound, InstanceSuspended, ValidationFailed, ConfigurationInvalid, DependencyUnavailable,
-    GrantExpired, GrantExhausted, GrantRevoked, RateLimited, InvalidRequest, UnknownField, IdempotencyConflict
+    GrantExpired, GrantExhausted, GrantRevoked, RateLimited, InvalidRequest, UnknownField, IdempotencyConflict,
+    RevisionRequired, RevisionConflict, InvalidState, PayloadTooLarge
 }
 
 public sealed record ValidationIssue(string Field, string Code, string Message);
@@ -24,12 +25,13 @@ public sealed class RequestRejectedException : Exception
     public IReadOnlyList<ValidationIssue> Errors { get; }
     public int StatusCode => Failure switch
     {
-        RequestFailure.InvalidRequest or RequestFailure.UnknownField => 400,
+        RequestFailure.InvalidRequest or RequestFailure.UnknownField or RequestFailure.RevisionRequired => 400,
+        RequestFailure.PayloadTooLarge => 413,
         RequestFailure.RateLimited => 429,
         RequestFailure.AuthenticationRequired or RequestFailure.CredentialInvalid => 401,
         RequestFailure.PermissionDenied or RequestFailure.HumanRequired or RequestFailure.InstanceSuspended => 403,
         RequestFailure.ResourceNotFound => 404,
-        RequestFailure.IdempotencyConflict => 409,
+        RequestFailure.IdempotencyConflict or RequestFailure.RevisionConflict or RequestFailure.InvalidState => 409,
         RequestFailure.ValidationFailed or RequestFailure.GrantExpired or RequestFailure.GrantExhausted or RequestFailure.GrantRevoked => 422,
         RequestFailure.ConfigurationInvalid or RequestFailure.DependencyUnavailable => 503,
         _ => throw new ArgumentOutOfRangeException(nameof(Failure))
@@ -40,6 +42,10 @@ public sealed class RequestRejectedException : Exception
         RequestFailure.InvalidRequest => "INVALID_REQUEST",
         RequestFailure.UnknownField => "UNKNOWN_FIELD",
         RequestFailure.IdempotencyConflict => "IDEMPOTENCY_CONFLICT",
+        RequestFailure.RevisionRequired => "REVISION_REQUIRED",
+        RequestFailure.RevisionConflict => "REVISION_CONFLICT",
+        RequestFailure.InvalidState => "INVALID_STATE",
+        RequestFailure.PayloadTooLarge => "PAYLOAD_TOO_LARGE",
         RequestFailure.RateLimited => "RATE_LIMITED",
         RequestFailure.AuthenticationRequired => "AUTHENTICATION_REQUIRED",
         RequestFailure.CredentialInvalid => "CREDENTIAL_INVALID",

@@ -8,8 +8,13 @@ internal static class SessionErrors
     {
         context.Response.Headers.CacheControl = "no-store";
         try { await next(); }
-        catch (RequestRejectedException error) { await Write(context, error.Code, error.StatusCode, error.StatusCode == 429, error.Errors); }
-        catch (BadHttpRequestException) { await Write(context, "INVALID_REQUEST", 400, false); }
+        catch (RequestRejectedException error)
+        {
+            if (error.Failure == RequestFailure.AuthenticationRequired)
+                context.Response.Cookies.Delete(SessionEndpoints.CookieName, new CookieOptions { Path = "/", Secure = true, HttpOnly = true, SameSite = SameSiteMode.Strict });
+            await Write(context, error.Code, error.StatusCode, error.StatusCode == 429, error.Errors);
+        }
+        catch (BadHttpRequestException error) { await Write(context, error.StatusCode == 413 ? "PAYLOAD_TOO_LARGE" : "INVALID_REQUEST", error.StatusCode == 413 ? 413 : 400, false); }
         catch (PersistenceException error)
         {
             context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Svm.Personnel")
