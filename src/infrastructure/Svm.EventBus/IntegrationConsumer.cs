@@ -60,7 +60,7 @@ internal sealed class UnknownIntegrationContractFilter : IFilter<ReceiveContext>
     public async Task Send(ReceiveContext context, IPipe<ReceiveContext> next)
     {
         await _error.Send(new RescueExceptionReceiveContext(context, new IntegrationConsumptionException(ConsumptionFailure.InvalidMessage)));
-        await next.Send(context);
+        // Error transport completed the quarantine; continuing would also copy to the skipped queue.
     }
     public void Probe(ProbeContext context) => context.CreateFilterScope("svmUnknownContractErrorTransport");
 }

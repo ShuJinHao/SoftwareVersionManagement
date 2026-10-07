@@ -9,6 +9,7 @@ const softwareGrants = ref<Permission[]>([])
 const session = useSession()
 const users = ref<User[]>([]), selected = ref<User | null>(null), loading = ref(false), detailLoading = ref(false), readError = ref(''), notice = ref('')
 const employeeFilter = ref(''), enabledFilter = ref(''), cursors = ref(['']), nextCursor = ref<string | null>(null), readAt = ref('')
+const appliedFilters = ref({ employeeNo: '', isEnabled: '' })
 const mode = ref<'create' | 'edit' | 'permissions' | 'reset' | null>(null), dialog = ref<HTMLDialogElement | null>(null)
 const employeeNo = ref(''), displayName = ref(''), temporaryPassword = ref(''), isEnabled = ref(true), reason = ref(''), grants = ref<string[]>([])
 const labels: Record<string, string> = { 'identity.manage': '管理人员与身份', 'software.create': '登记软件', 'asset.read': '查看现场台账', 'asset.manage': '维护现场台账' }
@@ -20,8 +21,8 @@ async function load() {
   loading.value = true; readError.value = ''
   try {
     const query = new URLSearchParams({ pageSize: '50' })
-    if (employeeFilter.value) query.set('employeeNo', employeeFilter.value)
-    if (enabledFilter.value) query.set('isEnabled', enabledFilter.value)
+    if (appliedFilters.value.employeeNo) query.set('employeeNo', appliedFilters.value.employeeNo)
+    if (appliedFilters.value.isEnabled) query.set('isEnabled', appliedFilters.value.isEnabled)
     const lastCursor = cursors.value[cursors.value.length - 1]
     if (lastCursor) query.set('cursor', lastCursor)
     const page = await request<UserPage>('/api/v1/manage/users?' + query)
@@ -41,7 +42,7 @@ async function select(id: string) {
   }
   finally { detailLoading.value = false }
 }
-async function filter() { cursors.value = ['']; selected.value = null; await load() }
+async function filter() { appliedFilters.value = { employeeNo: employeeFilter.value, isEnabled: enabledFilter.value }; cursors.value = ['']; selected.value = null; await load() }
 async function next() { if (nextCursor.value) { cursors.value.push(nextCursor.value); await load() } }
 async function previous() { if (cursors.value.length > 1) { cursors.value.pop(); await load() } }
 async function open(nextMode: NonNullable<typeof mode.value>) {

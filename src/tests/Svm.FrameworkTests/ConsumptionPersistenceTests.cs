@@ -132,6 +132,31 @@ public sealed class ConsumptionPersistenceTests : IAsyncLifetime
         Assert.Equal(2,(await _broker.TakeAsync("svm.task-control.available.v1")).Count); await host.StopAsync();
     }
 
+    [Fact]
+    public async Task UnknownContractIsQuarantinedOnceAndTheNextValidMessageStillCommits()
+    {
+        var fixture = new ConsumptionFixture(_db.WriterConnection, _db.ReaderConnection, _broker.Options);
+        using var host = fixture.Host(); await host.StartAsync();
+        var message = ConsumptionFixture.Message(_broker.Options);
+        await ConsumptionFixture.RegisterWorkAsync(_db, message);
+        var endpoint = await host.Services.GetRequiredService<IBus>().GetSendEndpoint(new Uri("queue:svm.raw-fixture.v1"));
+        await endpoint.Send(message, send => send.MessageId = message.EventId);
+        await OutboxFixture.WaitAsync(async () => await _broker.QueueCountAsync("svm.raw-fixture.v1") >= 1);
+        var envelope = JsonNode.Parse((await _broker.TakeAsync("svm.raw-fixture.v1")).Single().GetProperty("payload").GetString()!)!;
+        envelope["messageType"] = new JsonArray("urn:message:Unknown:UnknownV9");
+        await _broker.PublishRawAsync("svm.task-preparation.available.v1", envelope.ToJsonString());
+        await OutboxFixture.WaitAsync(async () => await _broker.QueueCountAsync("svm.task-preparation.available.v1_error") >= 1);
+        Assert.Equal(0, fixture.State.Calls); Assert.Equal(0, await fixture.ConsumedAsync());
+        Assert.Equal(0, await fixture.EffectsAsync()); Assert.Equal(0, await fixture.AuditsAsync()); Assert.Equal(0, await fixture.ResultsAsync());
+        Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(_db.ReaderConnection, "SELECT count(*) FROM framework.\"InboxState\""));
+        await ConsumptionFixture.SendAsync(host, message);
+        await OutboxFixture.WaitAsync(async () => await fixture.ConsumedAsync() == 1);
+        await host.StopAsync();
+        Assert.Equal(1, fixture.State.Calls); Assert.Equal(1, await fixture.EffectsAsync());
+        Assert.Equal(1, await _broker.QueueCountAsync("svm.task-preparation.available.v1_error"));
+        Assert.Equal(0, await _broker.QueueCountAsync("svm.task-preparation.available.v1_skipped"));
+    }
+
     [Theory]
     [InlineData("schema")]
     [InlineData("type")]
@@ -139,7 +164,6 @@ public sealed class ConsumptionPersistenceTests : IAsyncLifetime
     [InlineData("software")]
     [InlineData("kind")]
     [InlineData("bodyConflict")]
-    [InlineData("wireType")]
     [InlineData("site")]
     [InlineData("permissionHeader")]
     [InlineData("caseShadow")]
@@ -159,7 +183,6 @@ public sealed class ConsumptionPersistenceTests : IAsyncLifetime
             case "schema": body["schemaVersion"]=99; break;
             case "caseShadow": body["SchemaVersion"]=99; break;
             case "type": body["messageType"]="invalid.v9"; break;
-            case "wireType": envelope["messageType"]=new JsonArray("urn:message:Unknown:UnknownV9"); break;
             case "messageId": envelope["messageId"]=Guid.NewGuid(); break;
             case "software": body["softwareId"]=Guid.NewGuid(); break;
             case "site": body["siteId"]=Guid.NewGuid(); break;

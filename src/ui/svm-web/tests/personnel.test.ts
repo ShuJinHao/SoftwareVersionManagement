@@ -24,6 +24,32 @@ async function mount(session: object) {
   return { root, app }
 }
 describe('personnel access', () => {
+  it('uses applied filters for paging and resets the cursor when querying edited filters', async () => {
+    const fetch = vi.fn(async (_path: string) => Response.json({ items: [], nextCursor: 'fixture-next', serverTime: '2026-10-07T00:00:00Z' }))
+    vi.stubGlobal('fetch', fetch)
+    const pinia = createPinia()
+    useSession(pinia).current = snapshot(false, [{ softwareId: null, operation: 'identity.manage' }]) as never
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/users', component: UsersPage }] })
+    await router.push('/users')
+    const root = document.createElement('div'); document.body.appendChild(root)
+    const app = createApp({ template: '<RouterView />' }).use(pinia).use(router); app.mount(root)
+    try {
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+      const input = root.querySelector('form input') as HTMLInputElement
+      const status = root.querySelector('form select') as HTMLSelectElement
+      input.value = 'NEW'; input.dispatchEvent(new Event('input', { bubbles: true }))
+      status.value = 'false'; status.dispatchEvent(new Event('change', { bubbles: true })); await nextTick()
+      const next = [...root.querySelectorAll('button')].find(button => button.textContent === '下一页')!
+      await vi.waitFor(() => expect(next.disabled).toBe(false)); next.click()
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+      const pageQuery = new URL(String(fetch.mock.calls[1]?.[0]), 'https://fixture.invalid').searchParams
+      expect(pageQuery.get('cursor')).toBe('fixture-next'); expect(pageQuery.has('employeeNo')).toBe(false); expect(pageQuery.has('isEnabled')).toBe(false)
+      root.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(3))
+      const searchQuery = new URL(String(fetch.mock.calls[2]?.[0]), 'https://fixture.invalid').searchParams
+      expect(searchQuery.has('cursor')).toBe(false); expect(searchQuery.get('employeeNo')).toBe('NEW'); expect(searchQuery.get('isEnabled')).toBe('false')
+    } finally { app.unmount() }
+  })
   it('restricts the first-change session to password and exit', async () => {
     const { root, app } = await mount(snapshot(true, [{ softwareId: null, operation: 'identity.manage' }]))
     expect(root.textContent).toContain('首次登录，请修改密码')
