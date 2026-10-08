@@ -70,6 +70,7 @@
     <Package name="Npgsql" />
     <Package name="MassTransit.EntityFrameworkCore" />
     <Package name="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
+    <Reference name="Svm.Core.Packages" />
   </Project>
   <Project name="Svm.Dapper" path="src/infrastructure/Svm.Dapper/Svm.Dapper.csproj" kind="infrastructure">
     <Reference name="Svm.SharedKernel" />
@@ -122,6 +123,8 @@
     <Package name="MediatR" />
     <Package name="Swashbuckle.AspNetCore" />
     <Package name="Microsoft.OpenApi" />
+    <Reference name="Svm.PackageService" />
+    <Reference name="Svm.FileStorage" />
   </Project>
   <Project name="Svm.Worker" path="src/hosts/Svm.Worker/Svm.Worker.csproj" kind="hosts">
     <Reference name="Svm.SharedKernel" />
@@ -139,6 +142,8 @@
     <Reference name="Svm.ServiceDefaults" />
     <Package name="Microsoft.Extensions.Hosting" />
     <Package name="MediatR" />
+    <Reference name="Svm.PackageService" />
+    <Reference name="Svm.FileStorage" />
   </Project>
   <Project name="Svm.Migration" path="src/hosts/Svm.Migration/Svm.Migration.csproj" kind="hosts">
     <Reference name="Svm.Services.Contracts" />
@@ -186,5 +191,18 @@
     <Package name="Microsoft.NET.Test.Sdk" />
     <Package name="xunit.runner.visualstudio" />
     <Package name="Microsoft.AspNetCore.Mvc.Testing" />
+  </Project>
+  <Project name="Svm.Core.Packages" path="src/modules/Packages/Svm.Core.Packages/Svm.Core.Packages.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.PackageService" path="src/modules/Packages/Svm.PackageService/Svm.PackageService.csproj" kind="services">
+    <Reference name="Svm.SharedKernel" />
+    <Reference name="Svm.Services.Contracts" />
+    <Reference name="Svm.Core.Packages" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.FileStorage" path="src/infrastructure/Svm.FileStorage/Svm.FileStorage.csproj" kind="infrastructure">
+    <Reference name="Svm.Services.Contracts" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>
 </Architecture>

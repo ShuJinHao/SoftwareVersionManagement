@@ -151,6 +151,8 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE ALL ON TABLE iam.registrations FROM {reader};");
         sql.AppendLine($"REVOKE DELETE ON TABLE iam.instance_subjects,iam.instance_credentials,iam.enrollment_grants,iam.recovery_grants,iam.registrations,ins.instances,ins.instance_snapshots,ins.installation_evidence,ins.report_stream_receipts FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE iam.registrations,ins.installation_evidence,ins.report_stream_receipts FROM {writer};");
+        sql.AppendLine($"REVOKE DELETE ON TABLE rel.releases,pkg.packages,pkg.works,pkg.replicas,pkg.download_sessions,pkg.dispatches,pkg.receive_attempts FROM {writer};");
+        sql.AppendLine($"REVOKE UPDATE ON TABLE pkg.dispatches,pkg.receive_attempts FROM {writer};");
         return sql.ToString();
     }
 }
