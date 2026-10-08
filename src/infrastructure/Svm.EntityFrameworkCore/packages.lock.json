@@ -84,6 +84,12 @@
           "Svm.SharedKernel": "[1.0.0, )"
         }
       },
+      "svm.core.packages": {
+        "type": "Project",
+        "dependencies": {
+          "Svm.SharedKernel": "[1.0.0, )"
+        }
+      },
       "svm.core.releases": {
         "type": "Project",
         "dependencies": {

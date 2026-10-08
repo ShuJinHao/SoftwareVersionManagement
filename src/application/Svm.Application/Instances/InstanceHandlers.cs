@@ -4,6 +4,7 @@ using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.Application.Instances;
 
@@ -58,8 +59,8 @@ internal sealed class RecoverInstanceCommandHandler(IInstanceAccess access,IMana
 }
 internal sealed class OpenReportStreamCommandHandler(IManagedInstances instances,ICallContext calls,InstanceCompletion c) : IRequestHandler<OpenReportStreamCommand,OperationResult<StreamResult>>
 { public async Task<OperationResult<StreamResult>> Handle(OpenReportStreamCommand x,CancellationToken t) { var id=calls.Current!.Actor.InstanceId!.Value; var v=await instances.OpenStreamAsync(id,x.ExpectedEpoch,t); return await c.CompleteAsync(v,id,"ins.report-streams.open","open report stream",t); } }
-internal sealed class SubmitStatusReportCommandHandler(IManagedInstances instances,ICallContext calls,InstanceCompletion c) : IRequestHandler<SubmitStatusReportCommand,OperationResult<ReportResult>>
-{ public async Task<OperationResult<ReportResult>> Handle(SubmitStatusReportCommand x,CancellationToken t) { var id=calls.Current!.Actor.InstanceId!.Value; var v=await instances.ReportAsync(id,x.Report,t); return await c.CompleteAsync(v,id,"ins.status-reports.accept","installation evidence received",t,record:v.Applied && v.EvidenceId is not null); } }
+internal sealed class SubmitStatusReportCommandHandler(IManagedInstances instances,ICallContext calls,InstanceCompletion c, IReleases? releases = null) : IRequestHandler<SubmitStatusReportCommand,OperationResult<ReportResult>>
+{ public async Task<OperationResult<ReportResult>> Handle(SubmitStatusReportCommand x,CancellationToken t) { if(x.Report.InstalledReleaseId is { } releaseId) { if(releases is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound); await releases.VerifyInstallationAsync(calls.Current!.Actor.SoftwareId!.Value,releaseId,x.Report.InstalledVersion,t); } var id=calls.Current!.Actor.InstanceId!.Value; var v=await instances.ReportAsync(id,x.Report,t); return await c.CompleteAsync(v,id,"ins.status-reports.accept","installation evidence received",t,record:v.Applied && v.EvidenceId is not null); } }
 internal sealed class ListEnrollmentGrantsQueryHandler(IInstanceQueries queries) : IRequestHandler<ListEnrollmentGrantsQuery,InstancePage<GrantView>>
 { public Task<InstancePage<GrantView>> Handle(ListEnrollmentGrantsQuery x,CancellationToken t) => queries.GrantsAsync(x.SoftwareId,x.PageSize,x.After,t); }
 internal sealed class ListInstanceCredentialsQueryHandler(IInstanceQueries queries) : IRequestHandler<ListInstanceCredentialsQuery,InstancePage<CredentialView>>

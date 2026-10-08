@@ -2749,6 +2749,14 @@
       "direct": false
     },
     {
+      "name": "hash-wasm",
+      "version": "4.12.0",
+      "license": "MIT",
+      "integrity": "sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==",
+      "source": "https://registry.npmjs.org/hash-wasm/4.12.0",
+      "embeddedNotice": "docs/licenses/hash-wasm-4.12.0-SHA256.txt"
+    },
+    {
       "name": "hasown",
       "version": "2.0.4",
       "license": "MIT",

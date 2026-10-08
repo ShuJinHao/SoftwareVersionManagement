@@ -10,6 +10,7 @@ using Svm.Services.CrossCutting.DomainEvents;
 using Svm.Services.CrossCutting.Consumption;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Instances;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.Services.CrossCutting.Registration;
 
@@ -33,6 +34,7 @@ public static class FoundationServiceCollectionExtensions
         services.AddSingleton<IProtocolRecovery, ScopedRequestExecutor>();
         services.AddScoped<ISender, Mediator>();
         services.AddSingleton<ScopedRequestExecutor>();
+        services.AddSingleton<ICommandScopeExecutor, CommandScopeExecutor>();
         services.AddSingleton<IOperationResultRecovery, ScopedRequestExecutor>();
         foreach (var pipeline in PipelineTypes)
             services.AddScoped(typeof(IPipelineBehavior<,>), pipeline);
@@ -70,6 +72,7 @@ public static class FoundationServiceCollectionExtensions
         RequireImplementation(services, typeof(IOperationResultRecovery), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
         RequireImplementation(services, typeof(ISender), typeof(Mediator), ServiceLifetime.Scoped);
         RequireImplementation(services, typeof(ScopedRequestExecutor), typeof(ScopedRequestExecutor), ServiceLifetime.Singleton);
+        RequireImplementation(services, typeof(ICommandScopeExecutor), typeof(CommandScopeExecutor), ServiceLifetime.Singleton);
         if (services.Any(d => d.ServiceType == typeof(IIntegrationEventOutbox))) RequireScopedPort(services, typeof(IIntegrationEventOutbox));
 
         var behaviors = services.Where(d => d.ServiceType.IsGenericType &&
@@ -110,6 +113,11 @@ public static class FoundationServiceCollectionExtensions
             RequireScopedPort(services, typeof(IInstanceAccess)); RequireScopedPort(services, typeof(IManagedInstances));
             RequireScopedPort(services, typeof(IInstanceQueries)); RequireScopedPort(services, typeof(IAccessProofSource));
             RequireScopedPort(services, typeof(IOperationResultStore));
+        }
+        if (catalog.Bindings.Any(b => PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType)))
+        {
+            RequireScopedPort(services, typeof(IUnitOfWork)); RequireScopedPort(services, typeof(IReleases));
+            RequireScopedPort(services, typeof(IPackages)); RequireScopedPort(services, typeof(IOperationResultStore));
         }
         var expectedHandlers = new HashSet<Type>();
         var expectedValidators = new HashSet<(Type Contract, Type Implementation)>();

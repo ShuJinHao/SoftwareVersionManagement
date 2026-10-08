@@ -2,6 +2,8 @@
   <PropertyGroup />
   <ItemGroup>
     <None Include="../../ui/svm-web/dist/**/*" Link="wwwroot/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <ProjectReference Include="../../modules/Packages/Svm.PackageService/Svm.PackageService.csproj" />
+    <ProjectReference Include="../../infrastructure/Svm.FileStorage/Svm.FileStorage.csproj" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />

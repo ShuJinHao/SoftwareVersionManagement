@@ -7,6 +7,8 @@ using Svm.Application.Catalog;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Instances;
 using Svm.Application.Instances;
+using Svm.Application.Packages;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.Application;
 
@@ -21,7 +23,20 @@ public static class ApplicationRegistration
 
     public static IServiceCollection AddSvmInstanceApplication(this IServiceCollection services) => AddPersonnel(services, seed: false, management: true, siteCatalog: true, instanceAccess: true);
 
-    private static IServiceCollection AddPersonnel(IServiceCollection services, bool seed, bool management = false, bool siteCatalog = false, bool instanceAccess = false)
+    public static IServiceCollection AddSvmPackageApplication(this IServiceCollection services) => AddPersonnel(services, seed: false, management: true, siteCatalog: true, instanceAccess: true, packageAccess: true);
+
+    public static IReadOnlyList<IntegrationConsumerBinding> PackageConsumers { get; } =
+        Array.AsReadOnly(new[] { IntegrationConsumerBinding.Single<Svm.Services.Contracts.Messaging.V1.PackageWorkAvailableV1, PackageWorkAvailableHandler>() });
+
+    public static IServiceCollection AddSvmPackageWorkerApplication(this IServiceCollection services)
+    {
+        var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
+        services.AddSvmRequestPipeline(bindings.Where(b => PackageCapabilities.IsWorker(b.RequestType)).ToArray());
+        services.AddScoped<IRequestAuthorizer, PackageWorkerAuthorization>();
+        services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
+        return services;
+    }
+    private static IServiceCollection AddPersonnel(IServiceCollection services, bool seed, bool management = false, bool siteCatalog = false, bool instanceAccess = false, bool packageAccess = false)
     {
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
         services.AddSvmRequestPipeline(bindings.Where(b => seed ? b.RequestType == typeof(SeedPersonnelCommand) :
@@ -29,7 +44,8 @@ public static class ApplicationRegistration
                 b.RequestType == typeof(AnonymousSessionQuery) || b.RequestType == typeof(CurrentSessionQuery) ||
                 management && (PersonnelManagementCapabilities.Contains(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) ||
                 siteCatalog && (CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)) ||
-                instanceAccess && (InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)))).ToArray());
+                instanceAccess && (InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)) ||
+                packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType)))).ToArray());
         services.AddScoped<IRequestAuthorizer, PersonnelAuthorization>();
         services.AddScoped<PersonnelCompletion>();
         if (management)
@@ -65,6 +81,17 @@ public static class ApplicationRegistration
             services.AddScoped<IProtocolRequestAdapter<RegisterInstanceCommand,OperationResult<RegistrationResult>>, RegisterInstanceCommandAdapter>();
             services.AddScoped<IProtocolRequestAdapter<RecoverInstanceCommand,OperationResult<RegistrationResult>>, RecoverInstanceCommandAdapter>();
             services.AddScoped<IProtocolRequestAdapter<SubmitStatusReportCommand,OperationResult<ReportResult>>, SubmitStatusReportCommandAdapter>();
+        }
+        if (packageAccess)
+        {
+            services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateReleaseCommand, OperationResult<ReleaseUploadResult>>, CreateReleaseAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<DisableReleaseCommand, OperationResult<ReleaseView>>, DisableReleaseAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RetryPackageCommand, OperationResult<PackageView>>, RetryPackageAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<BeginUploadCommand, OperationResult<UploadReceipt>>, BeginUploadAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<FinishUploadCommand, OperationResult<PackageView>>, FinishUploadAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<FailUploadCommand, OperationResult<PackageView>>, FailUploadAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RecordDownloadEndCommand, OperationResult<bool>>, DownloadEndAdapter>();
         }
         return services;
     }
