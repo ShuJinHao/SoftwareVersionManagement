@@ -9,11 +9,13 @@ namespace Svm.Application.Catalog;
 internal sealed class CatalogCompletion(IPersonnelService personnel, ISessionProofSource proof, IAuditWriter audit,
     ICallContext calls, IUnitOfWork unitOfWork)
 {
-    internal async Task<OperationResult<T>> ExecuteAsync<T>(string operation, string reason, Func<Task<T>> action, Func<T, Guid> reference, CancellationToken token)
+    internal Task<OperationResult<T>> ExecuteAsync<T>(string operation, string reason, Func<Task<T>> action, Func<T, Guid> reference, CancellationToken token) =>
+        ExecuteAsync(operation, reason, _ => action(), reference, token);
+    internal async Task<OperationResult<T>> ExecuteAsync<T>(string operation, string reason, Func<PersonnelView, Task<T>> action, Func<T, Guid> reference, CancellationToken token)
     {
         var actor = await personnel.AuthenticateAsync(proof.Proof ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired), true, token)
             ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
-        var value = await action(); var id = unitOfWork.CurrentOperationId ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        var value = await action(actor); var id = unitOfWork.CurrentOperationId ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         var call = calls.Current ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
         var resource = reference(value);
         audit.Append(new(id, actor.SubjectId, "Human", actor.EmployeeNo, actor.DisplayName, operation, resource, "succeeded", reason, call.CorrelationId));

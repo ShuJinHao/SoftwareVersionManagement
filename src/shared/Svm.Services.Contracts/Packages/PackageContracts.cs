@@ -7,7 +7,9 @@ public sealed record PackageCapabilitiesView(long MaxPackageBytes, int HashChunk
 public sealed record PackageInput(string FileName, long SizeBytes, string Sha256);
 public sealed record ReleaseView(Guid Id, Guid SoftwareId, string Version, string State, string ChangeLevel,
     string ChangeSummary, string ChangeReason, Guid PackageId, bool DownloadAvailable, Guid CreatedBy,
-    DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? DisableReason, long Revision);
+    DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? DisableReason, long Revision,
+    Guid? PublishedBy = null, string? PublishedEmployeeNo = null, DateTimeOffset? PublishedAt = null,
+    Guid? TestEvidenceId = null, string? PublishReason = null, string? PublishConclusion = null);
 public sealed record ReleaseUploadResult(ReleaseView Release, Guid UploadId, string UploadPath);
 public sealed record PackageView(Guid Id, Guid ReleaseId, string State, long? SizeBytes, string? Sha256,
     long ExpectedSize, string ExpectedSha256, int HealthyReplicaCount, bool DownloadAvailable,
@@ -35,6 +37,7 @@ public interface IReleases
     Task<ReleaseView> GetAsync(Guid releaseId, bool protect, CancellationToken token);
     Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token);
     Task<ReleaseView> DisableAsync(Guid id, long revision, string reason, CancellationToken token);
+    Task<ReleaseView> PublishAsync(PublishReleaseCommand input, Guid actorId, string employeeNo, CancellationToken token);
     Task OpenTestAsync(Guid releaseId, Guid packageId, CancellationToken token);
     Task VerifyInstallationAsync(Guid softwareId, Guid releaseId, string? version, CancellationToken token);
 }
@@ -50,6 +53,12 @@ public interface IPackageQueries
 {
     Task<PackageView?> GetAsync(Guid id, bool upload, CancellationToken token);
     Task<PackageWorkView?> WorkAsync(Guid id, CancellationToken token);
+}
+
+/// <summary>Bounded read projection; current software visibility is checked for every requested software.</summary>
+public interface IFormalReleaseAvailability
+{
+    Task<IReadOnlyDictionary<Guid, Guid>> LatestAsync(IReadOnlyList<Guid> softwareIds, CancellationToken token);
 }
 
 // All tokens below are fences for persisted phases, not credentials or caller-granted authority.
@@ -80,6 +89,7 @@ public interface IPackages
     Task FailUploadAsync(Guid uploadId, Guid receiveToken, string code, CancellationToken token);
     Task<PackageWorkAuthority> RetryAsync(Guid id, long revision, Guid initiator, CancellationToken token);
     Task StopAsync(Guid packageId, CancellationToken token);
+    Task VerifyPublishReadyAsync(Guid packageId, Guid releaseId, Guid softwareId, CancellationToken token);
     Task<PackageWorkAuthority> AuthorityAsync(Guid workId, bool protect, CancellationToken token);
     Task AcceptAsync(Guid workId, long dispatch, Guid eventId, CancellationToken token);
     Task<bool> HasDispatchAsync(Guid workId, long dispatch, Guid eventId, CancellationToken token);
@@ -118,12 +128,12 @@ public interface IPackageDownloadProof
 public interface IPackageServiceIdentity { Guid SubjectId { get; } string NodeId { get; } string Role { get; } }
 public static class PackageCapabilities
 {
-    public static IReadOnlyList<Type> Writes { get; } = Array.AsReadOnly(new[] { typeof(CreateReleaseCommand), typeof(DisableReleaseCommand),
+    public static IReadOnlyList<Type> Writes { get; } = Array.AsReadOnly(new[] { typeof(CreateReleaseCommand), typeof(DisableReleaseCommand), typeof(PublishReleaseCommand),
         typeof(RetryPackageCommand), typeof(UploadContentCommand), typeof(BeginUploadCommand), typeof(FinishUploadCommand), typeof(FailUploadCommand),
         typeof(ClaimPackageWorkCommand), typeof(RenewPackageWorkCommand), typeof(CompletePackageWorkCommand), typeof(FailPackageWorkCommand),
         typeof(CheckPackageReplicasCommand), typeof(AuthorizeDownloadCommand), typeof(RecordDownloadEndCommand) });
     public static bool IsWrite(Type type) => Writes.Contains(type);
-    public static bool IsIdempotent(Type type) => type == typeof(CreateReleaseCommand) || type == typeof(DisableReleaseCommand) || type == typeof(RetryPackageCommand) || type == typeof(RecordDownloadEndCommand) || IsPhase(type);
+    public static bool IsIdempotent(Type type) => type == typeof(CreateReleaseCommand) || type == typeof(DisableReleaseCommand) || type == typeof(PublishReleaseCommand) || type == typeof(RetryPackageCommand) || type == typeof(RecordDownloadEndCommand) || IsPhase(type);
     public static bool IsPhase(Type type) => type == typeof(BeginUploadCommand) || type == typeof(FinishUploadCommand) || type == typeof(FailUploadCommand);
     public static bool IsQuery(Type type) => type == typeof(GetUploadTargetQuery) || type == typeof(GetPackageCapabilitiesQuery) || type == typeof(CheckUploadQuery) || type == typeof(ListReleasesQuery) || type == typeof(GetReleaseQuery) ||
         type == typeof(GetPackageQuery) || type == typeof(GetPackageWorkQuery) || type == typeof(GetTestEvidenceQuery) || type == typeof(GetDownloadAuditQuery) ||

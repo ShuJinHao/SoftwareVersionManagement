@@ -79,7 +79,7 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
     };
     private async Task<Guid?> ReleaseAsync(object x, CancellationToken token) => x switch
     {
-        DisableReleaseCommand c => c.ReleaseId, GetReleaseQuery q => q.ReleaseId, GetClientReleaseQuery q => q.ReleaseId, GetTestEvidenceQuery q => q.ReleaseId,
+        PublishReleaseCommand c => c.ReleaseId, DisableReleaseCommand c => c.ReleaseId, GetReleaseQuery q => q.ReleaseId, GetClientReleaseQuery q => q.ReleaseId, GetTestEvidenceQuery q => q.ReleaseId,
         GetPackageQuery q => (await packages.GetAsync(q.PackageId, q.Upload, false, token)).ReleaseId,
         GetClientPackageQuery q => (await packages.GetAsync(q.PackageId, false, false, token)).ReleaseId,
         RetryPackageCommand c => (await packages.GetAsync(c.PackageId, false, false, token)).ReleaseId,

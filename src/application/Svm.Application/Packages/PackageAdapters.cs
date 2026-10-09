@@ -30,6 +30,17 @@ internal sealed class DisableReleaseAdapter(IReleases releases) : PackageAdapter
     public override OperationRequestData Describe(DisableReleaseCommand x) => new(x.Key, OperationValue.Object(G("releaseId", x.ReleaseId)), OperationValue.Object(N("expectedRevision", x.ExpectedRevision), S("reason", x.Reason)));
     public override async Task<OperationResult<ReleaseView>> RestoreAsync(OperationResultReference r, CancellationToken token) => OperationResult<ReleaseView>.Completed(r.OperationId, await releases.GetAsync(Id(r), false, token), Id(r));
 }
+internal sealed class PublishReleaseAdapter(IReleases releases, IPackages packages) : PackageAdapter<PublishReleaseCommand, ReleaseView>
+{
+    public override OperationRequestData Describe(PublishReleaseCommand x) => new(x.Key, OperationValue.Object(G("releaseId", x.ReleaseId)),
+        OperationValue.Object(N("expectedRevision", x.ExpectedRevision), G("testEvidenceId", x.TestEvidenceId), S("publishReason", x.PublishReason), S("publishConclusion", x.PublishConclusion)));
+    public override async Task<OperationResult<ReleaseView>> RestoreAsync(OperationResultReference reference, CancellationToken token)
+    {
+        var release = await releases.GetAsync(Id(reference), false, token);
+        var available = (await packages.GetAsync(release.PackageId, false, false, token)).DownloadAvailable;
+        return OperationResult<ReleaseView>.Completed(reference.OperationId, release with { DownloadAvailable = available }, release.Id);
+    }
+}
 internal sealed class RetryPackageAdapter(IPackages packages) : PackageAdapter<RetryPackageCommand, PackageView>
 {
     public override OperationRequestData Describe(RetryPackageCommand x) => new(x.Key, OperationValue.Object(G("packageId", x.PackageId)), OperationValue.Object(N("expectedRevision", x.ExpectedRevision), S("reason", x.Reason)));

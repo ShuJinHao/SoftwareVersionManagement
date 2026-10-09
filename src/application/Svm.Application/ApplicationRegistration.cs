@@ -87,6 +87,7 @@ public static class ApplicationRegistration
             services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateReleaseCommand, OperationResult<ReleaseUploadResult>>, CreateReleaseAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<DisableReleaseCommand, OperationResult<ReleaseView>>, DisableReleaseAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<PublishReleaseCommand, OperationResult<ReleaseView>>, PublishReleaseAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<RetryPackageCommand, OperationResult<PackageView>>, RetryPackageAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<BeginUploadCommand, OperationResult<UploadReceipt>>, BeginUploadAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<FinishUploadCommand, OperationResult<PackageView>>, FinishUploadAdapter>();

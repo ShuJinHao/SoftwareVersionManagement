@@ -6,7 +6,8 @@ namespace Svm.Dapper;
 
 public static class ReleaseQueryRegistration
 {
-    public static IServiceCollection AddSvmReleaseQueries(this IServiceCollection services) => services.AddScoped<IReleaseQueries, ReleaseQueries>().AddScoped<IPackageQueries, PackageQueries>();
+    public static IServiceCollection AddSvmReleaseQueries(this IServiceCollection services) => services.AddScoped<IReleaseQueries, ReleaseQueries>()
+        .AddScoped<IPackageQueries, PackageQueries>().AddScoped<IFormalReleaseAvailability, FormalReleaseAvailability>();
 }
 internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext calls, PackageExecutionOptions options) : IReleaseQueries
 {
@@ -14,6 +15,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
     private const string Projection = """
         SELECT r."Id",r."SoftwareId",r."Major",r."Minor",r."Patch",r."State",r."ChangeLevel",r."ChangeSummary",r."ChangeReason",r."PackageId",
           r."CreatedBy",r."CreatedAt",r."DisabledAt",r."DisableReason",r."Revision",p."SizeBytes",p."Sha256",
+          r."PublishedBy",r."PublishedEmployeeNo",r."PublishedAt",r."TestEvidenceId",r."PublishReason",r."PublishConclusion",
           (r."State" IN ('Test','Formal') AND p."State"='Ready' AND NOT p."Disabled" AND EXISTS
              (SELECT 1 FROM pkg.replicas cp WHERE cp."PackageId"=p."Id" AND cp."State"='Healthy'
                 AND cp."CheckedAt">clock_timestamp()-make_interval(secs=>@freshSeconds))) AS "DownloadAvailable"
@@ -41,7 +43,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
     private Task<IReadOnlyList<Row>> Rows(ReleaseListInput input, bool available, CancellationToken token) => session.QueryAsync<Row>(
         "SELECT * FROM (" + Projection + " WHERE r.\"SoftwareId\"=@software AND " + Visible + """
           AND (CAST(@state AS text) IS NULL OR r."State"=@state)
-          AND (CAST(@channel AS text) IS NULL OR (@channel='Formal' AND r."State"='Formal') OR (@channel='Test' AND r."State" IN ('Staging','Test','Disabled')))
+          AND (CAST(@channel AS text) IS NULL OR (@channel='Formal' AND r."PublishedAt" IS NOT NULL) OR (@channel='Test' AND r."PublishedAt" IS NULL))
           AND (CAST(@afterId AS uuid) IS NULL OR (r."Major",r."Minor",r."Patch",r."Id")<(@major,@minor,@patch,@afterId))
         ) s WHERE (NOT @available OR s."DownloadAvailable") ORDER BY s."Major" DESC,s."Minor" DESC,s."Patch" DESC,s."Id" DESC LIMIT @take
         """, new { software = input.SoftwareId, state = input.State, channel = input.Channel, afterId = input.After?.Id,
@@ -90,9 +92,12 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         public string State { get; set; } = ""; public string ChangeLevel { get; set; } = ""; public string ChangeSummary { get; set; } = ""; public string ChangeReason { get; set; } = "";
         public Guid PackageId { get; set; } public bool DownloadAvailable { get; set; } public Guid CreatedBy { get; set; } public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? DisabledAt { get; set; } public string? DisableReason { get; set; } public long Revision { get; set; }
+        public Guid? PublishedBy { get; set; } public string? PublishedEmployeeNo { get; set; } public DateTimeOffset? PublishedAt { get; set; }
+        public Guid? TestEvidenceId { get; set; } public string? PublishReason { get; set; } public string? PublishConclusion { get; set; }
         public long? SizeBytes { get; set; } public string? Sha256 { get; set; }
         public ReleaseView View => new(Id, SoftwareId, $"{Major}.{Minor}.{Patch}", State, ChangeLevel, ChangeSummary, ChangeReason,
-            PackageId, DownloadAvailable, CreatedBy, CreatedAt, DisabledAt, DisableReason, Revision);
+            PackageId, DownloadAvailable, CreatedBy, CreatedAt, DisabledAt, DisableReason, Revision,
+            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion);
         public ReleasePosition Position => new(Major, Minor, Patch, Id);
     }
 }

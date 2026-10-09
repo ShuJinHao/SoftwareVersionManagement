@@ -16,6 +16,7 @@ internal sealed class SvmDbContextModelSnapshot : ModelSnapshot
         CatalogV1Model.Configure(modelBuilder);
         InstanceAccessV1Model.Configure(modelBuilder);
         ReleasePackagesV1Model.Configure(modelBuilder);
+        ReleasePublicationV1Model.Configure(modelBuilder);
     }
     internal static void Configure(ModelBuilder modelBuilder) => modelBuilder.HasDefaultSchema("framework").HasAnnotation("ProductVersion", "8.0.31");
 
