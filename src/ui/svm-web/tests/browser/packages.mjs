@@ -24,8 +24,8 @@ try {
   await write(`devices/${device.id}/software-bindings`, { softwareId: software.id, reason: '版本浏览器夹具映射' }); user = await get('/api/v1/manage/users/' + session.subjectId)
   await write('subjects/' + user.id + '/permissions', { permissions: [...user.permissions, ...['release.upload', 'release.disable', 'audit.read', 'enrollment.manage'].map(operation => ({ softwareId: software.id, operation }))], expectedRevision: user.revision, reason: '显式版本包职责' }, 'PUT')
   phase = 'site software entry and real empty formal view'
-  await page.goto(config.url + '/site'); await page.getByRole('button', { name: '包验证工序 PKG-BROWSER-P' }).click(); await page.getByRole('button', { name: '包验证设备 PKG-BROWSER-D' }).click(); await page.getByRole('link', { name: '测试版本与安装包', exact: true }).click()
-  await page.getByRole('button', { name: '正式版本', exact: true }).click(); await expect(page.getByText('尚无正式版本。测试转正式将在后续批次开放。')).toBeVisible(); await page.getByRole('button', { name: '测试版本', exact: true }).click()
+  await page.goto(config.url + '/site'); await page.getByRole('button', { name: '包验证工序 PKG-BROWSER-P' }).click(); await page.getByRole('button', { name: '包验证设备 PKG-BROWSER-D' }).click(); await page.getByRole('link', { name: '版本与安装包', exact: true }).click()
+  await page.getByRole('button', { name: '正式版本', exact: true }).click(); await expect(page.getByText('尚无正式版本。完成测试并转正式后将在此展示。')).toBeVisible(); await page.getByRole('button', { name: '测试版本', exact: true }).click()
   phase = 'web worker chunked hash and original upload response loss'
   const bytes = randomBytes(3 * 1024 * 1024 + 41), hash = createHash('sha256').update(bytes).digest('hex')
   await page.getByRole('button', { name: '登记版本并上传', exact: true }).click(); await page.getByLabel('更新内容').fill('真实浏览器双副本验证'); await page.getByLabel('变更原因').fill('一次性功能验证')

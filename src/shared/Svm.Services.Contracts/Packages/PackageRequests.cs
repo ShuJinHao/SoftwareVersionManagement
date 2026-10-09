@@ -10,6 +10,11 @@ public sealed record CreateReleaseCommand(Guid Key, Guid SoftwareId, string Chan
     TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "release.disable")]
 public sealed record DisableReleaseCommand(Guid Key, Guid ReleaseId, long ExpectedRevision, string Reason) : ICommand<ReleaseView>;
 
+[RequestPolicy("releases.PublishReleaseCommand", ModuleOwner.Releases, RequestKind.Manage, RequestScope.Software,
+    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "release.publish")]
+public sealed record PublishReleaseCommand(Guid Key, Guid ReleaseId, long ExpectedRevision, Guid TestEvidenceId,
+    string PublishReason, string PublishConclusion) : ICommand<ReleaseView>;
+
 [RequestPolicy("packages.RetryPackageCommand", ModuleOwner.Packages, RequestKind.Manage, RequestScope.Software,
     TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "release.upload")]
 public sealed record RetryPackageCommand(Guid Key, Guid PackageId, long ExpectedRevision, string Reason) : ICommand<PackageView>;

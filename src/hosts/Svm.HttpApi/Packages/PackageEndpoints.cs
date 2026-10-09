@@ -38,6 +38,13 @@ internal static class PackageEndpoints
         group.MapPost("/releases/{releaseId:guid}/disable", async (Guid releaseId, HttpContext http, ISender sender, IAntiforgery csrf) =>
         { using var doc = await Input(http, csrf, ["reason", "expectedRevision"]); return Results.Json((await sender.Send(new DisableReleaseCommand(Key(http), releaseId, Revision(doc.RootElement), Text(doc.RootElement, "reason")), http.RequestAborted)).Value); });
         group.MapPut("/uploads/{uploadId:guid}/content", Receive);
+        group.MapPost("/releases/{releaseId:guid}/publish", async (Guid releaseId, HttpContext http, ISender sender, IAntiforgery csrf) =>
+        {
+            using var doc = await Input(http, csrf, ["testEvidenceId", "publishReason", "publishConclusion", "expectedRevision"]); var body = doc.RootElement;
+            if (!body.TryGetProperty("testEvidenceId", out var value) || value.ValueKind != JsonValueKind.String || !value.TryGetGuid(out var evidence)) throw Invalid();
+            return Results.Json((await sender.Send(new PublishReleaseCommand(Key(http), releaseId, Revision(body), evidence,
+                Text(body, "publishReason"), Text(body, "publishConclusion")), http.RequestAborted)).Value);
+        });
         group.MapGet("/uploads/{uploadId:guid}", async (Guid uploadId, HttpContext http, ISender sender) => { Empty(http); return Results.Json(await sender.Send(new GetPackageQuery(uploadId, true), http.RequestAborted)); });
         group.MapGet("/packages/{packageId:guid}", async (Guid packageId, HttpContext http, ISender sender) => { Empty(http); return Results.Json(await sender.Send(new GetPackageQuery(packageId), http.RequestAborted)); });
         group.MapPost("/packages/{packageId:guid}/retry", async (Guid packageId, HttpContext http, ISender sender, IAntiforgery csrf) =>

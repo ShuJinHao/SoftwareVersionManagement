@@ -12,6 +12,19 @@ public static class PackageRegistration
 internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, TimeProvider clock,
     PackageNodeCatalog nodes, PackageLimits limits, PackageExecutionOptions execution) : IPackages
 {
+    public async Task VerifyPublishReadyAsync(Guid id, Guid releaseId, Guid softwareId, CancellationToken token)
+    {
+        RequireWrite(); nodes.Validate(); var package = await Existing(id, true, token);
+        if (package.ReleaseId != releaseId || package.SoftwareId != softwareId)
+            throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        var replicas = await repository.ReplicasAsync(id, true, token);
+        var boundary = clock.GetUtcNow().AddSeconds(-execution.ReplicaCheckSeconds * 2);
+        if (package.Disabled || package.State != "Ready" || package.SizeBytes != package.ExpectedSize ||
+            package.Sha256 != package.ExpectedSha256 || replicas.Count != 2 ||
+            !replicas.Select(x => x.NodeId).Order(StringComparer.Ordinal).SequenceEqual(nodes.Nodes.Order(StringComparer.Ordinal)) ||
+            replicas.Any(x => x.State != "Healthy" || x.CheckedAt is null || x.CheckedAt <= boundary))
+            throw new RequestRejectedException(RequestFailure.InvalidState);
+    }
     public async Task<Guid?> SoftwareForAsync(string resource, Guid id, bool protect, CancellationToken token)
     {
         if (resource == "package") return (await repository.GetAsync(id, protect, token))?.SoftwareId;

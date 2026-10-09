@@ -51,6 +51,7 @@ public sealed class ReportStreamReceipt
 }
 public interface IManagedInstanceRepository
 {
+    Task<InstallationEvidence?> EvidenceAsync(Guid id, CancellationToken token);
     Task<ManagedInstance?> GetAsync(Guid id, bool protect, CancellationToken token);
     Task<InstanceSnapshot> SnapshotAsync(Guid id, bool protect, CancellationToken token);
     Task<ReportStreamReceipt?> StreamReceiptAsync(Guid operationId, CancellationToken token);

@@ -40,6 +40,8 @@ internal sealed class InstanceAccessRepository(SvmDbContext context,IUnitOfWork 
 }
 internal sealed class ManagedInstanceRepository(SvmDbContext context,IUnitOfWork unitOfWork) : IManagedInstanceRepository
 {
+    public Task<InstallationEvidence?> EvidenceAsync(Guid id, CancellationToken token) =>
+        context.Set<InstallationEvidence>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token);
     public async Task<ManagedInstance?> GetAsync(Guid id,bool protect,CancellationToken token)
     {
         if(protect) RequireWrite(); var q=context.Set<ManagedInstance>().FromSqlRaw("SELECT * FROM ins.instances WHERE \"Id\"={0}"+(protect?" FOR UPDATE":""),id);

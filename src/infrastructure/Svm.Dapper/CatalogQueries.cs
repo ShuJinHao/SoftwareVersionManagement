@@ -3,6 +3,7 @@ using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.Dapper;
 
@@ -38,7 +39,7 @@ internal sealed class CatalogReadScope(ReadQuerySession session, SiteCatalogOpti
     internal static CatalogPage<T> Page<T>(IReadOnlyList<T> rows, int size, Func<T, CatalogPosition> position)
     { var items = rows.Take(size).ToArray(); return new(items, rows.Count > size ? position(items[^1]) : null); }
 }
-internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogReadScope scope) : ISoftwareCatalogQueries
+internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogReadScope scope, IFormalReleaseAvailability? availability = null) : ISoftwareCatalogQueries
 {
     private const string Projection = """
         SELECT s."Id",s."Code",s."Name",s."Category",s."Description",NULL::uuid AS "LatestAvailableFormalReleaseId",s."Revision"
@@ -53,13 +54,19 @@ internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogRe
     public async Task<SoftwareView?> GetAsync(Guid id, CancellationToken token)
     {
         await scope.EnsureAsync(null, token);
-        return (await session.QueryAsync<SoftwareView>(Projection + " WHERE s.\"Id\"=@id AND " + Visible, new { id, subjectId = scope.SubjectId }, token)).SingleOrDefault();
+        var item = (await session.QueryAsync<SoftwareView>(Projection + " WHERE s.\"Id\"=@id AND " + Visible, new { id, subjectId = scope.SubjectId }, token)).SingleOrDefault();
+        if (item is null || availability is null) return item;
+        var latest = await availability.LatestAsync([id], token);
+        return item with { LatestAvailableFormalReleaseId = latest.TryGetValue(id, out var releaseId) ? releaseId : null };
     }
     public async Task<CatalogPage<SoftwareView>> ListAsync(CatalogListInput input, CancellationToken token)
     {
         await scope.EnsureAsync(null, token);
         var rows = await session.QueryAsync<SoftwareView>(Projection + " WHERE " + Visible + " AND " + Filter + " ORDER BY s.\"Code\" COLLATE \"C\",s.\"Id\" LIMIT @take", Parameters(input), token);
-        return CatalogReadScope.Page(rows, input.PageSize, x => new(x.Code, x.Id));
+        var page = CatalogReadScope.Page(rows, input.PageSize, x => new(x.Code, x.Id));
+        if (availability is null) return page;
+        var latest = await availability.LatestAsync(page.Items.Select(x => x.Id).ToArray(), token);
+        return page with { Items = page.Items.Select(x => x with { LatestAvailableFormalReleaseId = latest.TryGetValue(x.Id, out var id) ? id : null }).ToArray() };
     }
     public async Task<PermissionOptionsPage> PermissionOptionsAsync(CatalogListInput input, CancellationToken token)
     {
@@ -71,7 +78,7 @@ internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogRe
     private object Parameters(CatalogListInput x) => new { subjectId = scope.SubjectId, code = CatalogReadScope.Prefix(x.Filter.Code), name = CatalogReadScope.Contains(x.Filter.Name),
         category = x.Filter.Category, afterKey = x.After?.SortKey, afterId = x.After?.Id, take = x.PageSize + 1 };
 }
-internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock=null) : ISiteAssetQueries
+internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock=null, IFormalReleaseAvailability? availability = null) : ISiteAssetQueries
 {
     private const string ProcessProjection = "SELECT p.\"Id\",p.\"SiteId\",p.\"Code\",p.\"Name\",p.\"Revision\" FROM ins.processes p";
     private const string DeviceProjection = """
@@ -152,7 +159,12 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
             """,new { deviceId,subjectId=scope.SubjectId,siteId=scope.Site.SiteId,softwareId=input.Filter.SoftwareId,category=input.Filter.Category,
                 afterKey=input.After?.SortKey,afterId=input.After?.Id,take=input.PageSize+1 },token);
         var items=rows.Take(input.PageSize).ToArray();
-        return new(items.Select(x=>new DeviceSoftwareInventoryItem(new(x.SoftwareId,x.Code,x.Name,x.Category,x.Description,null,x.SoftwareRevision),
+        if (availability is not null)
+        {
+            var latest = await availability.LatestAsync(items.Select(x => x.SoftwareId).Distinct().ToArray(), token);
+            foreach (var row in items) row.LatestAvailableFormalReleaseId = latest.TryGetValue(row.SoftwareId, out var id) ? id : null;
+        }
+        return new(items.Select(x=>new DeviceSoftwareInventoryItem(new(x.SoftwareId,x.Code,x.Name,x.Category,x.Description,x.LatestAvailableFormalReleaseId,x.SoftwareRevision),
             new(x.BindingId,x.DeviceId,x.SoftwareId,x.BindingRevision,x.IsActive),x.Id==Guid.Empty?null:x.View(scope.Site,(clock??TimeProvider.System).GetUtcNow()))).ToArray(),
             rows.Count>input.PageSize?new(items[^1].Code,items[^1].RowId):null);
     }

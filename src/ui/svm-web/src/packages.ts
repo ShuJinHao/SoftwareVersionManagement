@@ -4,6 +4,8 @@ export interface Release {
   id: string; softwareId: string; version: string; state: 'Staging' | 'Test' | 'Formal' | 'Disabled'
   changeLevel: 'Patch' | 'Minor' | 'Major'; changeSummary: string; changeReason: string; packageId: string
   downloadAvailable: boolean; createdBy: string; createdAt: string; disabledAt: string | null; disableReason: string | null; revision: number
+  publishedBy: string | null; publishedEmployeeNo: string | null; publishedAt: string | null
+  testEvidenceId: string | null; publishReason: string | null; publishConclusion: string | null
 }
 export interface Package {
   id: string; releaseId: string; state: 'Uploading' | 'Verifying' | 'Ready' | 'Failed'; sizeBytes: number | null; sha256: string | null
