@@ -7,11 +7,12 @@ namespace Svm.ReleaseService;
 
 public static class ReleaseRegistration
 {
-    public static IServiceCollection AddSvmReleases(this IServiceCollection services) => services.AddScoped<IReleases, Releases>();
+    public static IServiceCollection AddSvmReleases(this IServiceCollection services) => services.AddScoped<IReleases, Releases>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
 }
 internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRepository software,
     IUnitOfWork unit, TimeProvider clock) : IReleases
 {
+    public async Task<IReadOnlyList<ReleaseView>> FormalCandidatesAsync(Guid id, CancellationToken token) => (await repository.FormalCandidatesAsync(id, token)).Select(View).ToArray();
     public async Task<Guid?> SoftwareForAsync(Guid id, bool protect, CancellationToken token) => (await repository.GetAsync(id, protect, token))?.SoftwareId;
     public async Task<ReleaseView> GetAsync(Guid id, bool protect, CancellationToken token) => View(await Existing(id, protect, token));
     public async Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token)

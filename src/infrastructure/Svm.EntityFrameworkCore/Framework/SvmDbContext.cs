@@ -32,6 +32,8 @@ internal sealed class SvmDbContext : DbContext
         Catalog.CatalogModel.Configure(modelBuilder);
         Instances.InstanceModel.Configure(modelBuilder);
         Packages.ReleasePackageModel.Configure(modelBuilder);
+        Tasks.TaskModel.Configure(modelBuilder);
+        Tasks.IntegrationMaterialModel.Configure(modelBuilder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess) => throw new InvalidOperationException("Only the unit of work can save module changes.");

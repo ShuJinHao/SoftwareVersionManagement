@@ -159,7 +159,7 @@ internal sealed class LocalApi : IAsyncDisposable
     { _process = process; _configuration = configuration; _thumbprint = thumbprint; _siteConfiguration = siteConfiguration; _instanceConfiguration = instanceConfiguration; }
     internal static async Task<LocalApi> StartAsync(PersistenceDatabase database, string? writer = null, SiteCatalogOptions? site = null,
         Svm.Services.Contracts.Instances.InstanceAccessOptions? instanceAccess = null,
-        Svm.FileStorage.PackageFileOptions? packages = null, Svm.EventBus.MessagingOptions? messaging = null, int publicPort = 0)
+        Svm.FileStorage.PackageFileOptions? packages = null, Svm.EventBus.MessagingOptions? messaging = null, int publicPort = 0, Svm.Services.Contracts.Tasks.TaskOptions? tasks = null)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "build/postgres.local.json"))) root = root.Parent;
@@ -179,7 +179,7 @@ internal sealed class LocalApi : IAsyncDisposable
         info.Environment["ASPNETCORE_URLS"] = packages is null ? "https://127.0.0.1:0" : $"https://0.0.0.0:{publicPort}";
         info.Environment["Kestrel__Certificates__Default__Path"] = certPath;
         info.Environment["Kestrel__Certificates__Default__Password"] = certPassword;
-        info.Environment.Remove("SVM_PACKAGE_CONFIG_FILE"); info.Environment.Remove("SVM_MESSAGING_CONFIG_FILE");
+        info.Environment.Remove("SVM_TASK_CONFIG_FILE"); info.Environment.Remove("SVM_PACKAGE_CONFIG_FILE"); info.Environment.Remove("SVM_MESSAGING_CONFIG_FILE");
         info.Environment["Logging__LogLevel__Default"] = "Information";
         info.Environment.Remove("SVM_SITE_CONFIG_FILE");
         info.Environment.Remove("SVM_INSTANCE_ACCESS_CONFIG_FILE");
@@ -211,6 +211,7 @@ internal sealed class LocalApi : IAsyncDisposable
         {
             var path = await OutboxFixture.PrivateJsonAsync(messaging); api._packageConfigurations.Add(path); info.Environment["SVM_MESSAGING_CONFIG_FILE"] = path;
         }
+        if(tasks is not null) { var path=await OutboxFixture.PrivateJsonAsync(tasks); api._packageConfigurations.Add(path); info.Environment["SVM_TASK_CONFIG_FILE"]=path; }
         api._process.OutputDataReceived += (_, e) => api.Capture(e.Data);
         api._process.ErrorDataReceived += (_, e) => api.Capture(e.Data);
         api._process.Exited += (_, _) => api._ready.TrySetException(new InvalidOperationException("Local API exited before readiness; diagnostics retained in test memory."));

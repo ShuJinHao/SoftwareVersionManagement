@@ -1,0 +1,19 @@
+export interface TaskWindow { notBefore: string; latestStart: string }
+export interface DeploymentCapabilities { defaultStartLocalTime: string; defaultLatestStartLocalTime: string; timeZone: string; batchSize: number; failureLimit: number; resultWaitSeconds: number; selectionChunkSize: number; maxSelectionMembers: number; pollRetrySeconds: number }
+export interface Selection { id: string; mode: string; state: string; memberCount: number; receivedChunkCount: number; revision: number }
+export interface Deployment { id: string; softwareId: string; targetReleaseId: string; state: string; window: TaskWindow; parameters: { batchSize: number; failureLimit: number; resultWaitSeconds: number }; selectedCount: number; processedCount: number; acceptedCount: number; rejectedCount: number; resultCounts: { succeeded: number; failed: number; canceled: number; closedUnknown: number; unfinished: number }; pauseReasons: { code: string; scope: string }[]; controlPending: boolean; revision: number }
+export interface Batch { id: string; ordinal: number; state: string; taskCount: number; deferredCount: number; failedCount: number; failureRevision: number; reviewedFailureRevision: number; timedOutCount: number; earliestResponseDeadlineAt: string | null }
+export interface InstanceTask { id: string; instanceId: string; deploymentId: string; batchId: string | null; state: string; waitReason: string | null; isDeferred: boolean; terminalResult: string | null; lastReportedProgress: string | null; responseDeadlineAt: string | null; startAuthorizedAt: string | null; mustBeginBefore: string | null; retryOfTaskId: string | null; manualClosure: { subjectId: string; reason: string; onsiteEvidence: string; closedAt: string } | null; revision: number }
+export interface Admission { instanceId: string; decision: string; reasonCode: string | null; taskId: string | null }
+export interface Receipt { id: string; eventId: string; sequence: number; kind: string; progress: string | null; result: string | null; detail: string | null; applied: boolean; lateAfterClosure: boolean; receivedAt: string }
+export interface IntegrationMaterial { id: string; releaseId: string; revision: number; dataLocations: string[]; updateBehavior: string; rollbackBehavior: string; recoveryPlan: string; verificationConclusion: string | null; evidenceReferences: string[]; reason: string; recordedAt: string }
+export const taskEnded = (state: string) => ['Succeeded', 'Failed', 'Canceled', 'ClosedUnknown'].includes(state)
+export const taskState = (state: string) => ({ Preparing: '准备中', Running: '进行中', Paused: '已暂停', Rejected: '无合格目标', Canceled: '已取消', Completed: '跟踪结束', Queued: '等待批次', Available: '可领取', AwaitingResult: '等待安装结果', Succeeded: '成功', Failed: '失败', ClosedUnknown: '已关闭 · 结果未知', Pending: '待开放', Open: '开放', Closed: '结束' }[state] ?? state)
+export const admissionReason = (code: string | null) => code ? ({ INSTANCE_BUSY: '已有未结束任务', INSTANCE_SUSPENDED: '接入已暂停', CURRENT_VERSION_UNKNOWN: '无法判断当前版本', ROLLBACK_REQUIRED: '需要回退，更新任务拒绝', ALREADY_AT_TARGET: '已经是目标版本', OUT_OF_SCOPE: '不属于当前软件', RETRY_SOURCE_INVALID: '原任务尚未结束或不存在', TARGET_UNAVAILABLE: '目标不可供包' }[code] ?? code) : '合格'
+export function utcInput(value: string) { if (!value) return null; const d = new Date(value + 'Z'); return Number.isFinite(d.getTime()) ? d.toISOString() : null }
+export const lines = (value: string) => value.split(/\r?\n/).map(x => x.trim()).filter(Boolean)
+
+export interface TaskWork { id: string; kind: string; state: string; stage: string; processedItems: number; lastErrorCode: string | null; revision: number }
+export interface ControlItem { taskId: string; outcome: string; reasonCode: string | null }
+
+export const waitReason = (value: string | null) => ({ WindowMissed: "已错过开始时段", Paused: "暂停等待", NoHealthyPackage: "包副本暂不可用", CompatibilityUnknown: "兼容条件未知", PrecheckRejected: "本机检查未通过", ReceiptTimeout: "等待结果超时" }[value ?? ""] ?? value ?? "")

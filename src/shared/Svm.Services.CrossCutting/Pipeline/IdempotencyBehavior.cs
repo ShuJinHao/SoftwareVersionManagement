@@ -1,4 +1,5 @@
 using MediatR;
+using Svm.Services.Contracts.Tasks;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.CrossCutting.Idempotency;
 using Svm.Services.CrossCutting.Registration;
@@ -12,7 +13,7 @@ internal sealed class IdempotencyBehavior<TRequest, TResponse>(RequestCatalog ca
     {
         var policy = catalog.GetPolicy(request.GetType());
         if (policy.Idempotency == IdempotencyMode.None) return await next();
-        if (policy.Idempotency is IdempotencyMode.EnrollmentProtocol or IdempotencyMode.ReportSequence)
+        if (policy.Idempotency is IdempotencyMode.EnrollmentProtocol or IdempotencyMode.ReportSequence or IdempotencyMode.ReceiptSequence or IdempotencyMode.SelectionChunk)
             return protocolAdapter is null ? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid) :
                 await protocols.ExecuteAsync(request, policy, protocolAdapter, () => next(), cancellationToken);
         if (policy.Idempotency != IdempotencyMode.OperationResult || adapter is null)

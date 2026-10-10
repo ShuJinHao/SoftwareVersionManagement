@@ -23,6 +23,9 @@ using Svm.FileStorage;
 using Svm.PackageService;
 using Svm.HttpApi.Packages;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Tasks;
+using Svm.TaskService;
+using Svm.HttpApi.Tasks;
 
 namespace Svm.HttpApi;
 
@@ -38,10 +41,13 @@ public partial class Program
             options.ValidateOnBuild = true;
         });
 
+        var taskOptions = TaskConfiguration.LoadFromEnvironment();
         var packageFiles = PackageFileOptions.LoadFromEnvironment();
         var messaging = MessagingConfiguration.LoadFromEnvironment();
         if (packageFiles is not null && messaging is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
-        if (packageFiles is null) builder.Services.AddSvmInstanceApplication();
+        if (taskOptions is not null && packageFiles is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        if (taskOptions is not null) builder.Services.AddSvmTaskApplication();
+        else if (packageFiles is null) builder.Services.AddSvmInstanceApplication();
         else builder.Services.AddSvmPackageApplication();
         var persistence = PersistenceConfiguration.LoadFromEnvironment();
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
@@ -61,6 +67,8 @@ public partial class Program
         builder.Services.AddScoped<UserCursor>();
         if (messaging is not null) builder.Services.AddSvmMessaging(messaging, delivery: false);
         builder.Services.AddScoped<PackageCursor>();
+        builder.Services.AddScoped<TaskCursor>();
+        if (taskOptions is not null) builder.Services.AddSingleton(taskOptions).AddSvmTasks().AddSvmTaskQueries();
         builder.Services.AddScoped<HttpPackageIdentity>();
         builder.Services.AddScoped<IPackageServiceIdentity>(p => p.GetRequiredService<HttpPackageIdentity>());
         builder.Services.AddScoped<IPackageDownloadProof>(p => p.GetRequiredService<HttpPackageIdentity>());
@@ -130,6 +138,7 @@ public partial class Program
         app.MapSiteCatalog();
         app.MapInstanceAccess();
         app.MapPackages(packageFiles is not null);
+        app.MapTasks(taskOptions is not null);
         app.MapPackageInternal(packageFiles is not null);
         app.Map("/api/{**path}", (HttpContext http) => Results.Json(new { code = "RESOURCE_NOT_FOUND", traceId = http.TraceIdentifier, retryable = false }, statusCode: 404));
         app.MapFallbackToFile("{*path:nonfile}", "index.html");

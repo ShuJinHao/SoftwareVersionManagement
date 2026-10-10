@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup />
   <ItemGroup>
+    <ProjectReference Include="../../modules/Tasks/Svm.Core.Tasks/Svm.Core.Tasks.csproj" />
     <ProjectReference Include="../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />
     <ProjectReference Include="../../shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
     <ProjectReference Include="../../modules/Identity/Svm.Core.Identity/Svm.Core.Identity.csproj" />
