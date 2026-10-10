@@ -96,6 +96,12 @@
           "Svm.SharedKernel": "[1.0.0, )"
         }
       },
+      "svm.core.tasks": {
+        "type": "Project",
+        "dependencies": {
+          "Svm.SharedKernel": "[1.0.0, )"
+        }
+      },
       "svm.entityframeworkcore": {
         "type": "Project",
         "dependencies": {
@@ -110,6 +116,7 @@
           "Svm.Core.Instances": "[1.0.0, )",
           "Svm.Core.Packages": "[1.0.0, )",
           "Svm.Core.Releases": "[1.0.0, )",
+          "Svm.Core.Tasks": "[1.0.0, )",
           "Svm.Services.Contracts": "[1.0.0, )",
           "Svm.SharedKernel": "[1.0.0, )"
         }

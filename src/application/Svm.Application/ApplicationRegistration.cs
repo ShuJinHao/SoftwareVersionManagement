@@ -8,6 +8,8 @@ using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Instances;
 using Svm.Application.Instances;
 using Svm.Application.Packages;
+using Svm.Application.Tasks;
+using Svm.Services.Contracts.Tasks;
 using Svm.Services.Contracts.Packages;
 
 namespace Svm.Application;
@@ -36,7 +38,18 @@ public static class ApplicationRegistration
         services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
         return services;
     }
-    private static IServiceCollection AddPersonnel(IServiceCollection services, bool seed, bool management = false, bool siteCatalog = false, bool instanceAccess = false, bool packageAccess = false)
+    public static IServiceCollection AddSvmTaskApplication(this IServiceCollection services) => AddPersonnel(services, seed: false, management: true, siteCatalog: true, instanceAccess: true, packageAccess: true, taskAccess: true);
+    public static IReadOnlyList<IntegrationConsumerBinding> TaskConsumers { get; } = Array.AsReadOnly(PackageConsumers.Concat(new[] {
+        IntegrationConsumerBinding.Single<Svm.Services.Contracts.Messaging.V1.TaskPreparationAvailableV1, TaskPreparationAvailableHandler>(),
+        IntegrationConsumerBinding.Single<Svm.Services.Contracts.Messaging.V1.TaskControlAvailableV1, TaskControlAvailableHandler>() }).ToArray());
+    public static IServiceCollection AddSvmTaskWorkerApplication(this IServiceCollection services)
+    {
+        var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
+        services.AddSvmRequestPipeline(bindings.Where(b => TaskCapabilities.IsInternal(b.RequestType) || PackageCapabilities.IsWorker(b.RequestType)).ToArray());
+        services.AddScoped<IRequestAuthorizer, TaskWorkerAuthorization>(); services.AddScoped<TaskAuthorization>(); services.AddScoped<TaskOperations>(); services.AddScoped<TaskDispatch>();
+        services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>(); return services;
+    }
+    private static IServiceCollection AddPersonnel(IServiceCollection services, bool seed, bool management = false, bool siteCatalog = false, bool instanceAccess = false, bool packageAccess = false, bool taskAccess = false)
     {
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
         services.AddSvmRequestPipeline(bindings.Where(b => seed ? b.RequestType == typeof(SeedPersonnelCommand) :
@@ -45,7 +58,7 @@ public static class ApplicationRegistration
                 management && (PersonnelManagementCapabilities.Contains(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) ||
                 siteCatalog && (CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)) ||
                 instanceAccess && (InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)) ||
-                packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType)))).ToArray());
+                packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType)) || taskAccess && TaskCapabilities.Contains(b.RequestType))).ToArray());
         services.AddScoped<IRequestAuthorizer, PersonnelAuthorization>();
         services.AddScoped<PersonnelCompletion>();
         if (management)
@@ -93,6 +106,21 @@ public static class ApplicationRegistration
             services.AddScoped<IIdempotencyRequestAdapter<FinishUploadCommand, OperationResult<PackageView>>, FinishUploadAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<FailUploadCommand, OperationResult<PackageView>>, FailUploadAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<RecordDownloadEndCommand, OperationResult<bool>>, DownloadEndAdapter>();
+        }
+        if (taskAccess)
+        {
+            services.AddScoped<TaskAuthorization>(); services.AddScoped<TaskOperations>(); services.AddScoped<TaskDispatch>();
+        services.AddScoped<IIdempotencyRequestAdapter<CreateTargetSelectionCommand, OperationResult<SelectionView>>, CreateTargetSelectionCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<SealTargetSelectionCommand, OperationResult<SelectionView>>, SealTargetSelectionCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<CreateDeploymentCommand, OperationResult<DeploymentView>>, CreateDeploymentCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<ControlDeploymentCommand, OperationResult<DeploymentView>>, ControlDeploymentCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<CreateDeploymentControlWorkCommand, OperationResult<TaskWorkView>>, CreateDeploymentControlWorkCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<ControlInstanceTaskCommand, OperationResult<TaskView>>, ControlInstanceTaskCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<ClaimInstanceTaskCommand, OperationResult<Guid>>, ClaimInstanceTaskCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<StartInstanceTaskCommand, OperationResult<StartGrant>>, StartInstanceTaskCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<RecordIntegrationMaterialCommand, OperationResult<IntegrationMaterialView>>, RecordIntegrationMaterialCommandAdapter>();
+        services.AddScoped<IProtocolRequestAdapter<PutTargetChunkCommand, OperationResult<SelectionView>>, PutTargetChunkCommandAdapter>();
+        services.AddScoped<IProtocolRequestAdapter<SubmitTaskReceiptCommand, OperationResult<ReceiptResult>>, SubmitTaskReceiptCommandAdapter>();
         }
         return services;
     }

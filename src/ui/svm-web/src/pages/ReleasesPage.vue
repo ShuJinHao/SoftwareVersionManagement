@@ -160,6 +160,7 @@ onMounted(async () => {
 onUnmounted(() => { disposed = true; globalPending.value = false; hashAbort?.abort(); uploadAbort?.abort(); file.value = null; window.removeEventListener('beforeunload', unload); if (poll) clearTimeout(poll) })
 </script>
 <template>
+  <RouterLink v-if="session.can('deployment.create',softwareId) || session.can('instance.read',softwareId)" class="text-link" :to="{ path: '/deployments', query: { softwareId, releaseId: selected?.state === 'Formal' ? selected.id : undefined } }">正式版本更新投放</RouterLink>
   <section class="workspace">
     <div class="page-heading"><div><div class="eyebrow">软件版本</div><h1>{{ software?.name ?? '版本与安装包' }}</h1><p v-if="software" class="muted">{{ software.code }} · {{ categoryName(software.category) }} · 同软件设备共用版本库</p></div><button v-if="canUpload" class="primary" :disabled="locked || !maxBytes" @click="begin">登记版本并上传</button></div>
     <p v-if="failure" class="error" role="alert">{{ failure }}</p><p v-if="notice" class="success" role="status">{{ notice }}</p>

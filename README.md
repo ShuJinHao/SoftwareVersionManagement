@@ -6,38 +6,39 @@
 
 ## 当前状态
 
-项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权、设备映射，以及实例登记/恢复、独立凭据和状态上报 API 及同源网页；进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础保留。设备软件按真实接入事实区分“尚未登记”“尚未上报”和报告新鲜度，展示实际版本、IP、运行及接入状态；已有版本登记、包上传/双副本校验、测试版本/包查询、受保护下载、停用及关联安装证据；已实现选择安装证据、填写结论转正式、正式查询/下载及最新可用正式版；任务尚未实现。
+项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权、设备映射，以及实例登记/恢复、独立凭据和状态上报 API 及同源网页；进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础保留。设备软件按真实接入事实区分“尚未登记”“尚未上报”和报告新鲜度，展示实际版本、IP、运行及接入状态；已有版本登记、包上传/双副本校验、测试版本/包查询、受保护下载、停用及关联安装证据；已实现选择安装证据、填写结论转正式、正式查询/下载及最新可用正式版；正式版 Update 任务已有实现，本批实际验证见框架设计第 11.1 节，完整验收仍待执行。
 
 | 已有实现 | 后续实现 |
 |---|---|
-| 27 个 C# 项目、92 条普通项目引用、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
-| DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 管理系统凭据与正式工作身份 |
-| PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 批量任务和部分回退 |
+| 29 个 C# 项目、99 条普通项目引用、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
+| DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 管理系统凭据与完整观测 |
+| PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 部分回退与结构化兼容声明 |
 | 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部管理系统的凭据接入 |
-| 人员管理、四项厂级及软件范围授权、软件目录、工序/设备/映射维护与现场导航 | 投放及现场验收 |
-| 受限登记许可、单次恢复、独立实例凭据吊销、报告流/快照、安装履历及接入管理网页 | 任务与厂家现场验收 |
+| 人员管理、四项厂级及软件范围授权、软件目录、工序/设备/映射维护与现场导航 | 厂家现场验收 |
+| 受限登记许可、单次恢复、独立实例凭据吊销、报告流/快照、安装履历及接入管理网页 | 厂家现场验收 |
 | 版本登记/编号、流式包上传、双副本/Test、证据转正式、正式查询/下载、停用历史及网页 | 兼容声明、包清理 |
+| 正式版 Update 的目标封存、逐项准入、批次、领取/许可/回执、控制及恢复网页 | 部分回退与结构化兼容声明 |
 | 所属模块的类型化领域事件处理器、Scoped 串行派发、提交成功后的内部确认 | 实际业务事件及领域事实到版本化集成消息的转换 |
 | 持久化幂等协调器、六模块操作结果存储、人员管理 HTTP 幂等及提交结果核实 | 其他业务 HTTP 幂等接入及完整事务/消息验收 |
-| 三类固定 V1 消息、MassTransit EF Bus Outbox、Worker 投递及 RabbitMQ 断线/重启恢复 | TSK 等后续生产者/消费者与持续业务去重 |
-| 显式消费目录、原生 Consumer Outbox/Inbox 事务、当前授权先于去重、有界重试及崩溃恢复 | TSK 正式工作及完整消费观测 |
+| 三类固定 V1 消息、MassTransit EF Bus Outbox、Worker 投递及 RabbitMQ 断线/重启恢复 | 完整业务与生产恢复验收 |
+| 显式消费目录、原生 Consumer Outbox/Inbox 事务、当前授权先于去重、有界重试及崩溃恢复 | 完整消费观测及生产验收 |
 | 密码哈希、随机凭据校验及密钥保护证书加载 | 已确认包的清理、完整日志/观测/健康检查接入 |
 
 会话接口为 `GET/POST/DELETE /api/v1/session` 和 `POST /api/v1/session/password`。新增 `GET/POST /api/v1/manage/users`、`GET/PATCH /api/v1/manage/users/{userId}`、`POST /api/v1/manage/users/{userId}/reset-password`、`PUT /api/v1/manage/subjects/{subjectId}/permissions`，均仅允许已首次改密且当前具有 `identity.manage` 的人员。
 
-工号唯一且不可修改，无删除历史主体接口；新建/重置要求下次改密，停用/重置同事务撤销旧会话。IAM 事务锁与主体保护保证并发操作后至少保留一名启用且持有厂级 `identity.manage` 的人员。管理员可编辑四项厂级权限及现有目录中的软件范围操作；新增软件授权必须引用真实软件。软件创建者只同事务取得 `software.read`、`instance.read`、`instance.manage`。发布仅开放人员 PublishReleaseCommand，任务、兼容声明与清理 Command 继续禁用；包接收/修复用例登记 Outbox，配置完整的 Worker 只注册 PackageWorkAvailableV1 正式消费者。
+工号唯一且不可修改，无删除历史主体接口；新建/重置要求下次改密，停用/重置同事务撤销旧会话。IAM 事务锁与主体保护保证并发操作后至少保留一名启用且持有厂级 `identity.manage` 的人员。管理员可编辑四项厂级权限及现有目录中的软件范围操作；新增软件授权必须引用真实软件。软件创建者只同事务取得 `software.read`、`instance.read`、`instance.manage`。发布与 TaskCapabilities 精确列出的 Update 用例开放；回退、兼容声明与清理 Command 继续禁用。包与任务用例登记 Outbox，配置完整时 Worker 注册三个固定消费者，消息事务只保存接收事实。
 
 现场接口为 `/api/v1/manage/site`、`processes`、`devices`、`software` 及设备下的 `software-bindings`、`software-inventory`；另有 `permission-options` 为人员管理员提供有界授权候选。台账查看/维护分别要求 `asset.read`/`asset.manage`；映射维护另需对应软件 `instance.manage`，资料修改需 `release.upload`。软件清单按 software.read 过滤，设备软件汇总另需 instance.read；数量只描述过滤后的本页对象。代码、设备编号和软件分类不可修改，映射逻辑撤销保留标识，重建继续 revision；原键重放仅核实，不再次改变关联。真实登记与映射引用确认同事务，已引用映射不能撤销；登记与撤销并发由数据库保护裁决。
 
 接入管理路径为 `/api/v1/manage/enrollment-grants`、`instances`、实例下的 `credentials`、`recovery-grants`、`version-history`、`lifecycle`，以及凭据/许可的撤销路径；签发、查询和撤销凭据或许可需软件 enrollment.manage，仅人员，创建软件不会自动取得该权限。厂家使用 `/api/v1/enrollment/instances`、`recoveries` 登记及恢复，独立实例 Bearer 调用 `/api/v1/client/context`、`report-streams`、`status-reports`；正文不能改绑设备或冒充实例。恢复保留身份和安装履历，同事务吊销旧凭据、关闭旧流；接入暂停只拒绝 API，不控制现场软件。
 
-登记许可失效后禁止新增登记；原键、原请求与仍有效的原实例秘密可核实原成功结果，不重新创建或占名额。报告按实例/代次/序号去重，当前相同内容重放不刷新接收时间，同序号不同内容返回 REPORT_CONFLICT，旧序号或旧流 applied=false。快照每实例一行，首次安装事实和安装变化另存履历，不为每分钟心跳追加永久通用幂等记录。严格超过五分钟显示状态未知并保留最后事实，接入方至少每分钟调用一次。现场版本允许未关联平台记录，installedReleaseId 非空时核验真实版本的软件归属及精确版本号，安装履历可关联测试证据；latestAvailableFormalReleaseId 按数字版本选取当前可供包的正式版本，实际安装版本仍取上报；任务字段仍为空。
+登记许可失效后禁止新增登记；原键、原请求与仍有效的原实例秘密可核实原成功结果，不重新创建或占名额。报告按实例/代次/序号去重，当前相同内容重放不刷新接收时间，同序号不同内容返回 REPORT_CONFLICT，旧序号或旧流 applied=false。快照每实例一行，首次安装事实和安装变化另存履历，不为每分钟心跳追加永久通用幂等记录。严格超过五分钟显示状态未知并保留最后事实，接入方至少每分钟调用一次。现场版本允许未关联平台记录，installedReleaseId 非空时核验真实版本的软件归属及精确版本号，安装履历可关联测试证据；latestAvailableFormalReleaseId 按数字版本选取当前可供包的正式版本，实际安装版本仍取上报；latestTaskId/latestTaskResult 从权限过滤后的有界查询取得，任务结果不自动改写安装事实。
 
 网页与 API 同源，通过 HTTPS 和现有 Cookie/CSRF 使用真实数据。管理写请求携带 `Idempotency-Key`，修改和撤销已有资源另带 `expectedRevision`；当前授权先于重放，合法重放先于旧修订比较。响应不明时页面仅在内存保留原请求及操作键，由人员手动核实，不自动换键或重发；核实时的授权拒绝不能证明原请求已回滚，仍保留原键。密码不写浏览器持久存储。分页默认 50、最大 200；人员按工号/ID，台账及软件按代码或设备编号/ID 固定排序。现场游标绑定主体、部署、筛选、页长和权限修订，默认有效 15 分钟，撤权后旧游标失效。
 
 领域事件仅在当前进程和数据库事务内使用，按显式订阅目录执行本模块规则。缺失处理器、非法归属、重复事件标识、处理循环超限、异常或取消均拒绝提交；每事务默认上限 1000，可由 `DomainEventOptions` 调整。数据库确认提交成功才确认已处理事件；回滚或提交结果未知保留待处理事件，沿用既有幂等核实，不自动重执行。具体注册与事务边界见[框架设计第 7.2 节](docs/软件框架设计.md#72-领域事件)。
 
-Application 通过类型化端口登记三类固定消息；业务、审计、幂等结果及 Outbox 共同提交或回滚。HttpApi 只登记，Worker 使用 MassTransit 8.3.6 原生服务投递到三个固定持久队列；确认丢失允许重复交付，保持原 MessageId 和正文。消费基础在原生事务中保存处理事实、Inbox 完成标记及后续消息，提交确认后才确认领域事件；提交未知只在新 Scope 重新授权并查询，不就地重执行。包配置完整时 Worker 启用一个包工作消费者和原生 Inbox 清理；消息事务只保存接收事实，执行器在事务外复制文件。不可变派发记录与工作接收事实在 Inbox 窗口外继续阻止重复推进；未配置包能力仍为空业务目录。FND-06、FND-08、FND-09 均为部分通过；详见[框架设计第 8 节](docs/软件框架设计.md#8-事件总线mq-和持久化工作)。
+Application 通过类型化端口登记三类固定消息；业务、审计、幂等结果及 Outbox 共同提交或回滚。HttpApi 只登记，Worker 使用 MassTransit 8.3.6 原生服务投递到三个固定持久队列；确认丢失允许重复交付，保持原 MessageId 和正文。消费基础在原生事务中保存处理事实、Inbox 完成标记及后续消息，提交确认后才确认领域事件；提交未知只在新 Scope 重新授权并查询，不就地重执行。包配置完整时启用包消费者，任务配置完整时另启用两个 TSK 消费者；非空目录启用原生 Inbox 清理。消息事务只保存接收事实，执行器在事务外复制文件。不可变派发记录与工作接收事实在 Inbox 窗口外继续阻止重复推进；未配置包能力仍为空业务目录。FND-06、FND-08、FND-09 均为部分通过；详见[框架设计第 8 节](docs/软件框架设计.md#8-事件总线mq-和持久化工作)。
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
@@ -57,25 +58,37 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 `eng/packages/nginx.mjs <私有配置绝对路径> <输出绝对路径>` 生成固定两节点网关；镜像摘要在 build/nginx.packages.json。Nginx 要求 auth_request、TLS 及对副本目录的受限读取，公开端口转发同源网页/API，内部副本端口仅允许固定网关证书。生产须设置匹配服务账号的 workerUser/文件权限及网络隔离；本机夹具 root 只用于专用容器。可信结束日志只含请求标识、节点/代次、时间、字节及结果，Worker 采集器的持久游标在重启后继续；提交未知仅查询核实，不自动重发结束写入。HEAD 不生成下载事实，Range 的 ETag 不代替 SHA-256。
 
-本批新增 `20261011000100_ReleasePublication`，发布资料/证据引用/不可变保护与索引迁移、快照及审阅 SQL `artifacts/release-publication/release-publication-upgrade.sql` 仅在一次性测试库验证；八份旧迁移保持，svm_dev 未升级。两个本机逻辑节点是功能验证环境，不证明不同故障域、容量或生产高可用。测试/清理证据和未覆盖项见框架设计第 11 节。
+此前发布批次新增 `20261011000100_ReleasePublication`，发布资料/证据引用/不可变保护与索引迁移、快照及审阅 SQL `artifacts/release-publication/release-publication-upgrade.sql` 仅在一次性测试库验证；八份旧迁移保持，svm_dev 未升级。两个本机逻辑节点是功能验证环境，不证明不同故障域、容量或生产高可用。测试/清理证据和未覆盖项见框架设计第 11 节。
+
+## 正式版本更新任务
+
+本批只开放 Update，管理入口包含 target-selections（创建/成员块/封存）、deployments（创建/准入/批次/逐台查询及暂停/继续/改期/取消）、tasks（暂缓/恢复/取消/人工关闭）和 deployment-work（游标与逐项结果）。实例用独立 Bearer 访问 tasks、claim、attempts/{id}/start、receipts；只操作自身任务。创建要求 deployment.create，查看要求 instance.read，控制要求 deployment.control，继续另需 deployment.create，人工关闭另需 task.closeUnknown；不自动授权。
+
+软件范围 deployment-capabilities 返回配置时段和有界分块参数。版本 integration-materials 按修订追加数据位置、升级行为和恢复资料，写入 release.upload、读取 software.read；资料不等于结构化兼容声明或现场验收。网页从设备软件/正式版本进入投放，支持明确选择与筛选封存、逐项准入、批次/逐台进度及控制，提交结果未知保留原键和正文人工核实。
+
+SVM_TASK_CONFIG_FILE 指向受限绝对 JSON 文件，字段为 defaultStartLocalTime、defaultLatestStartLocalTime（HH:mm）、batchSize、failureLimit、resultWaitSeconds、selectionChunkSize、leaseSeconds、pollRetrySeconds、maxSelectionMembers、snapshotTimeoutSeconds；均须显式提供，不给生产隐含默认值。取值边界见[框架设计 6.10 节](docs/软件框架设计.md#610-当前正式版本更新任务)。同时要求厂区、包和消息配置；缺配置任务接口返回 CONFIGURATION_INVALID，无效配置拒绝启动。
+
+业务、审计、幂等及 Outbox 同事务。显式成员块保留合法格式的请求标识并自然去重；不存在或外软件实例在准入阶段逐项 OUT_OF_SCOPE，不泄露名称、位置或版本，其余合格对象继续；筛选成员在框架自有受限 REPEATABLE READ 事务内物化后封存，普通分页不能替代快照。准备/控制工作只在已接收且有效租约代次下分块推进；已接收工作沿原游标恢复，未接收工作继续时的新代次派发记录与 Outbox 同事务保存，原键重放不重复登记。暂停/继续返回 DeploymentView，改期/取消返回 TaskWorkView、202、Location 及 Retry-After，写入响应不额外要求 instance.read；批次扫描以数据库时间和事实为准。每实例最多一个未结束任务，同投放最多一个开放批次。许可前重查当前身份、发起授权、时段、暂停、方向、包和本机数据保护；拒绝不保存附带快照。回执首个有效终态锁定，重复不计数；人工关闭保留 Unknown，迟到事实不影响新任务/当前安装快照。
+
+新增 20261012000100_TaskWorkflow，任务技术/业务表及 REL 数据保护资料、冻结模型和审阅 SQL 位于 artifacts/deployment-update/deployment-update-upgrade.sql；九份旧迁移不改。仅一次性库执行，svm_dev 未升级。完整 Architecture 为唯一固定门禁，其余选择和实际结果见框架设计第 11.1 节；不因文档或 Git 交付重复运行测试。
 
 ## 目录与依赖方向
 
 | 目录 | 内容 |
 |---|---|
 | `src/shared` | SharedKernel 领域基础、Contracts 内层契约、CrossCutting 公共应用管道 |
-| `src/modules` | Identity、Releases、Packages、Instances、Audit；每个模块的 Core 与 Service 放在同一目录 |
+| `src/modules` | Identity、Releases、Packages、Instances、Tasks、Audit；每个模块的 Core 与 Service 放在同一目录 |
 | `src/application` | Application 应用用例与跨模块协调 |
 | `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配、FileStorage 流式文件及 mTLS 副本通道 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
-| `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护、软件目录、登记许可、实例详情/履历与版本包网页 |
+| `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护、软件目录、登记许可、实例详情/履历、版本包与更新投放网页 |
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
 | `build`、`eng` | 引用白名单、依赖/工具链清单和本机开发脚本 |
 | `docs` | 七份设计与验收文档 |
 
 内层定义端口，基础设施实现端口，Hosts 注册具体实现。模块 Core、Service 和 Application 不引用数据库、消息或安全技术实现；完整引用图由[软件框架设计第 3 节](docs/软件框架设计.md#3-目录类库和完整引用关系)及 `build/Architecture.xml` 共同约束。
 
-业务仍分 IAM、REL、PKG、INS、TSK、AUD 六个逻辑模块。此前删除四个空 PKG/TSK 工程；版本与安装包批次建立有实际实现的 Svm.Core.Packages、Svm.PackageService 和 Svm.FileStorage，TSK 仍保留逻辑职责、schema、权限和契约，不重建空工程。已实现模块的 Core 与 Service 保持独立程序集，类型名、命名空间和依赖边界不变；模块位置见[模块设计第 1 节](docs/模块设计.md#1-模块与调用方向)。
+业务仍分 IAM、REL、PKG、INS、TSK、AUD 六个逻辑模块。此前删除四个空 PKG/TSK 工程；版本与安装包批次建立有实际实现的 Svm.Core.Packages、Svm.PackageService 和 Svm.FileStorage，本批创建有实际实现的 Svm.Core.Tasks、Svm.TaskService，保存目标、投放/批次、逐台执行/回执、控制与恢复事实。已实现模块的 Core 与 Service 保持独立程序集，类型名、命名空间和依赖边界不变；模块位置见[模块设计第 1 节](docs/模块设计.md#1-模块与调用方向)。
 
 ## 文档入口
 
@@ -89,7 +102,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 6. [架构测试与验收要求](docs/架构测试与验收要求.md)
 7. [软件框架设计](docs/软件框架设计.md)
 
-字段、路径和状态契约以详细设计为准；厂家文档登记/恢复及上报已按真实接口验证，版本/包及下载可按当前接口联调；人员发布已开放，兼容声明、任务和清理仍属后续设计。Cloud 只提供固定公开提交的架构与工程机制参考，平台不对接其业务、主数据或身份。聊天示例不作为实际厂区/设备数据，文档中的虚构值不得用于播种或默认配置。
+字段、路径和状态契约以详细设计为准；厂家文档登记/恢复及上报已按真实接口验证，版本/包及下载可按当前接口联调；人员发布及正式版 Update 已开放，兼容声明、回退和清理仍属后续设计。Cloud 只提供固定公开提交的架构与工程机制参考，平台不对接其业务、主数据或身份。聊天示例不作为实际厂区/设备数据，文档中的虚构值不得用于播种或默认配置。
 
 ## 本机准备
 
@@ -128,7 +141,7 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog、InstanceAccess、ReleasesAndPackages 及本批 ReleasePublication 仅在一次性测试库执行。InstanceAccess 建立九张 IAM/INS 表；ReleasesAndPackages 建立七张 REL/PKG 表。ReleasePublication 追加六项发布字段、证据/人员引用及不可变保护；不生成默认实例、版本、许可或授权，八份旧迁移不改，快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
+OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog、InstanceAccess、ReleasesAndPackages 、ReleasePublication 及本批 TaskWorkflow 仅在一次性测试库执行。InstanceAccess 建立九张 IAM/INS 表；ReleasesAndPackages 建立七张 REL/PKG 表。ReleasePublication 追加六项发布字段、证据/人员引用及不可变保护；不生成默认实例、版本、许可或授权，九份旧迁移不改，快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
 
 ```sh
 mkdir -p artifacts/releases-packages

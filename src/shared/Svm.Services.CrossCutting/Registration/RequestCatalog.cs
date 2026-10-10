@@ -1,6 +1,7 @@
 using System.Reflection;
 using FluentValidation;
 using MediatR;
+using Svm.Services.Contracts.Tasks;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Catalog;
@@ -72,10 +73,11 @@ public sealed class RequestCatalog
         var management = PersonnelManagementCapabilities.Contains(type);
         var catalogWrite = CatalogCapabilities.IsWrite(type);
         var instanceWrite = InstanceCapabilities.IsWrite(type);
-        var mode = type == typeof(SubmitStatusReportCommand) ? IdempotencyMode.ReportSequence :
+        var mode = type == typeof(SubmitTaskReceiptCommand) ? IdempotencyMode.ReceiptSequence : type == typeof(PutTargetChunkCommand) ? IdempotencyMode.SelectionChunk :
+            type == typeof(SubmitStatusReportCommand) ? IdempotencyMode.ReportSequence :
             type == typeof(RegisterInstanceCommand) || type == typeof(RecoverInstanceCommand) ? IdempotencyMode.EnrollmentProtocol :
-            management || catalogWrite || instanceWrite || PackageCapabilities.IsIdempotent(type) ? IdempotencyMode.OperationResult : IdempotencyMode.None;
-        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite && !instanceWrite && !PackageCapabilities.IsWrite(type)) || policy.Transaction != (type == typeof(UploadContentCommand) ? TransactionMode.PhasedFile : TransactionMode.DatabaseAtomic) ||
+            management || catalogWrite || instanceWrite || PackageCapabilities.IsIdempotent(type) || TaskCapabilities.IsIdempotent(type) ? IdempotencyMode.OperationResult : IdempotencyMode.None;
+        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite && !instanceWrite && !PackageCapabilities.IsWrite(type) && !TaskCapabilities.IsWrite(type)) || policy.Transaction != (type == typeof(UploadContentCommand) ? TransactionMode.PhasedFile : TransactionMode.DatabaseAtomic) ||
                 policy.Idempotency != mode
             : policy.Transaction != TransactionMode.ReadOnly || policy.Idempotency != IdempotencyMode.None)
             throw new InvalidOperationException("Only the closed personnel, catalog, instance-access and package writes are activated.");

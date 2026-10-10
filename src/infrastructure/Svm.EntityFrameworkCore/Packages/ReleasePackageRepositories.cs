@@ -9,6 +9,7 @@ namespace Svm.EntityFrameworkCore.Packages;
 
 internal sealed class ReleaseRepository(SvmDbContext context, IUnitOfWork unit) : IReleaseRepository
 {
+    public async Task<IReadOnlyList<SoftwareRelease>> FormalCandidatesAsync(Guid id, CancellationToken token) => await context.Set<SoftwareRelease>().AsNoTracking().Where(x => x.SoftwareId == id && x.State == "Formal").OrderByDescending(x => x.Major).ThenByDescending(x => x.Minor).ThenByDescending(x => x.Patch).Take(1000).ToListAsync(token);
     public async Task<SoftwareRelease?> GetAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();

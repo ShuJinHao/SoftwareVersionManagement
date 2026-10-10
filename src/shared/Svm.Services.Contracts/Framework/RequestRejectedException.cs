@@ -5,7 +5,7 @@ public enum RequestFailure
     AuthenticationRequired = 1, CredentialInvalid, PermissionDenied, HumanRequired,
     ResourceNotFound, InstanceSuspended, ValidationFailed, ConfigurationInvalid, DependencyUnavailable,
     GrantExpired, GrantExhausted, GrantRevoked, RateLimited, InvalidRequest, UnknownField, IdempotencyConflict,
-    RevisionRequired, RevisionConflict, InvalidState, PayloadTooLarge, RegistrationConflict, ReportConflict, VersionConflict, UploadInProgress, ChecksumMismatch, NoHealthyReplica
+    RevisionRequired, RevisionConflict, InvalidState, PayloadTooLarge, RegistrationConflict, ReportConflict, VersionConflict, UploadInProgress, ChecksumMismatch, NoHealthyReplica, ReceiptConflict, RollbackRequired, CurrentVersionUnknown, RetrySourceInvalid
 }
 
 public sealed record ValidationIssue(string Field, string Code, string Message);
@@ -31,7 +31,7 @@ public sealed class RequestRejectedException : Exception
         RequestFailure.AuthenticationRequired or RequestFailure.CredentialInvalid => 401,
         RequestFailure.PermissionDenied or RequestFailure.HumanRequired or RequestFailure.InstanceSuspended => 403,
         RequestFailure.ResourceNotFound => 404,
-        RequestFailure.IdempotencyConflict or RequestFailure.RevisionConflict or RequestFailure.InvalidState or RequestFailure.RegistrationConflict or RequestFailure.ReportConflict or RequestFailure.VersionConflict or RequestFailure.UploadInProgress => 409,
+        RequestFailure.ReceiptConflict or RequestFailure.RollbackRequired or RequestFailure.CurrentVersionUnknown or RequestFailure.RetrySourceInvalid or RequestFailure.IdempotencyConflict or RequestFailure.RevisionConflict or RequestFailure.InvalidState or RequestFailure.RegistrationConflict or RequestFailure.ReportConflict or RequestFailure.VersionConflict or RequestFailure.UploadInProgress => 409,
         RequestFailure.ValidationFailed or RequestFailure.GrantExpired or RequestFailure.GrantExhausted or RequestFailure.GrantRevoked or RequestFailure.ChecksumMismatch => 422,
         RequestFailure.ConfigurationInvalid or RequestFailure.DependencyUnavailable or RequestFailure.NoHealthyReplica => 503,
         _ => throw new ArgumentOutOfRangeException(nameof(Failure))
@@ -39,6 +39,10 @@ public sealed class RequestRejectedException : Exception
 
     private static string GetCode(RequestFailure failure) => failure switch
     {
+        RequestFailure.ReceiptConflict => "RECEIPT_CONFLICT",
+        RequestFailure.RollbackRequired => "ROLLBACK_REQUIRED",
+        RequestFailure.CurrentVersionUnknown => "CURRENT_VERSION_UNKNOWN",
+        RequestFailure.RetrySourceInvalid => "RETRY_SOURCE_INVALID",
         RequestFailure.InvalidRequest => "INVALID_REQUEST",
         RequestFailure.UnknownField => "UNKNOWN_FIELD",
         RequestFailure.IdempotencyConflict => "IDEMPOTENCY_CONFLICT",

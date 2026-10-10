@@ -7,7 +7,7 @@ using Svm.Services.Contracts.Framework;
 
 namespace Svm.EntityFrameworkCore.Framework;
 
-internal sealed class PostgresUnitOfWork(SvmDbContext context, IDomainEventDispatcher domainEvents, DomainEventOptions domainEventOptions) : IUnitOfWork
+internal sealed class PostgresUnitOfWork(SvmDbContext context, IDomainEventDispatcher domainEvents, DomainEventOptions domainEventOptions, Svm.Services.Contracts.Tasks.ITargetSnapshotContext? snapshot = null) : IUnitOfWork
 {
     private sealed class Operation(Guid id)
     {
@@ -68,7 +68,7 @@ internal sealed class PostgresUnitOfWork(SvmDbContext context, IDomainEventDispa
         {
             if (context.Database.CurrentTransaction is { } current)
             {
-                if (!context.ConsumerTransactions.Owns(current))
+                if (snapshot?.IsMaterializing == true || !context.ConsumerTransactions.Owns(current))
                     throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting, operationId);
                 transaction = current; joinedConsumer = true; context.ConsumerTransactions.BusinessActive = true;
             }
@@ -76,7 +76,9 @@ internal sealed class PostgresUnitOfWork(SvmDbContext context, IDomainEventDispa
             {
                 await context.Database.OpenConnectionAsync(cancellationToken);
                 await EnsureRuntimeRoleAsync((NpgsqlConnection)context.Database.GetDbConnection(), cancellationToken);
-                transaction = await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+                transaction = await context.Database.BeginTransactionAsync(snapshot?.IsMaterializing == true ? IsolationLevel.RepeatableRead : IsolationLevel.ReadCommitted, cancellationToken);
+                if (snapshot?.IsMaterializing == true)
+                    await context.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('statement_timeout', {snapshot.TimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "s"}, true)", cancellationToken);
             }
             var result = await action(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();

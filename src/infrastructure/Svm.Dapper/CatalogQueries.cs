@@ -78,7 +78,7 @@ internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogRe
     private object Parameters(CatalogListInput x) => new { subjectId = scope.SubjectId, code = CatalogReadScope.Prefix(x.Filter.Code), name = CatalogReadScope.Contains(x.Filter.Name),
         category = x.Filter.Category, afterKey = x.After?.SortKey, afterId = x.After?.Id, take = x.PageSize + 1 };
 }
-internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock=null, IFormalReleaseAvailability? availability = null) : ISiteAssetQueries
+internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock=null, IFormalReleaseAvailability? availability = null, Svm.Services.Contracts.Tasks.ITaskQueries? tasks = null) : ISiteAssetQueries
 {
     private const string ProcessProjection = "SELECT p.\"Id\",p.\"SiteId\",p.\"Code\",p.\"Name\",p.\"Revision\" FROM ins.processes p";
     private const string DeviceProjection = """
@@ -159,6 +159,7 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
             """,new { deviceId,subjectId=scope.SubjectId,siteId=scope.Site.SiteId,softwareId=input.Filter.SoftwareId,category=input.Filter.Category,
                 afterKey=input.After?.SortKey,afterId=input.After?.Id,take=input.PageSize+1 },token);
         var items=rows.Take(input.PageSize).ToArray();
+        if (tasks is not null) { var summaries = await tasks.LatestAsync(items.Where(x => x.Id != Guid.Empty).Select(x => x.Id).ToArray(), token); foreach (var row in items) if (summaries.TryGetValue(row.Id, out var summary)) { row.LatestTaskId = summary.TaskId; row.LatestTaskResult = summary.Result; } }
         if (availability is not null)
         {
             var latest = await availability.LatestAsync(items.Select(x => x.SoftwareId).Distinct().ToArray(), token);
