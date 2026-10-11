@@ -5,11 +5,13 @@ using Svm.Services.Contracts.Instances;
 using Svm.Application.Instances;
 using Svm.Application.Packages;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Releases;
+using Svm.Application.Releases;
 
 namespace Svm.Application.Personnel;
 
 internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessionProofSource proofSource, IUnitOfWork unitOfWork,
-    IPersonnelAdministration? administration = null, ISiteAssets? assets = null, ISoftwareCatalog? software = null, InstanceAuthorization? instanceAuthorization = null, PackageAuthorization? packageAuthorization = null, Svm.Application.Tasks.TaskAuthorization? taskAuthorization = null) : IRequestAuthorizer
+    IPersonnelAdministration? administration = null, ISiteAssets? assets = null, ISoftwareCatalog? software = null, InstanceAuthorization? instanceAuthorization = null, PackageAuthorization? packageAuthorization = null, Svm.Application.Tasks.TaskAuthorization? taskAuthorization = null, GitLabAuthorization? gitLab = null) : IRequestAuthorizer
 {
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
     {
@@ -43,6 +45,8 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
         if (request.Request is CurrentSessionQuery or ChangePasswordCommand or LogoutCommand)
             return AuthorizationDecision.Allow(AuthorizationTarget.Global());
         if (person.MustChangePassword) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        if (GitLabCapabilities.Contains(request.Request.GetType()))
+            return gitLab is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await gitLab.AuthorizeAsync(request, person, cancellationToken);
         if (Svm.Services.Contracts.Tasks.TaskCapabilities.Contains(request.Request.GetType()))
             return taskAuthorization is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await taskAuthorization.AuthorizeAsync(request, person, cancellationToken);
         if (PackageCapabilities.IsWrite(request.Request.GetType()) || PackageCapabilities.IsQuery(request.Request.GetType()))

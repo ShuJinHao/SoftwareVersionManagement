@@ -23,6 +23,10 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
     public Guid PackageId { get; private set; }
     public Guid CreatedBy { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+    public string SourceKind { get; private set; } = "Manual";
+    public Guid? SourceBindingId { get; private set; }
+    public string? SourceTag { get; private set; }
+    public string? SourceFactsJson { get; private set; }
     public Guid? PublishedBy { get; private set; }
     public string? PublishedEmployeeNo { get; private set; }
     public DateTimeOffset? PublishedAt { get; private set; }
@@ -35,18 +39,30 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
     public string Version => $"{Major}.{Minor}.{Patch}";
     public void OpenTest()
     {
+        if (SourceKind != "Manual") throw new InvalidOperationException("Imported releases cannot enter testing.");
         if (State == "Test") return;
         if (State != "Staging") throw new InvalidOperationException("Release cannot open for testing.");
         State = "Test"; Revision++;
     }
     public void Publish(Guid evidenceId, string reason, string conclusion, Guid actorId, string employeeNo, DateTimeOffset now)
     {
+        if (SourceKind != "Manual") throw new InvalidOperationException("Imported releases cannot be manually published.");
         if (State != "Test" || PublishedAt is not null) throw new InvalidOperationException("Release cannot be published.");
         if (evidenceId == Guid.Empty || actorId == Guid.Empty || string.IsNullOrWhiteSpace(employeeNo) ||
             string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(conclusion)) throw new ArgumentException("Publication facts are required.");
         TestEvidenceId = evidenceId; PublishReason = reason; PublishConclusion = conclusion;
         PublishedBy = actorId; PublishedEmployeeNo = employeeNo; PublishedAt = now.ToUniversalTime();
         State = "Formal"; Revision++;
+    }
+    public void SetGitLabSource(Guid binding, string tag, string facts)
+    {
+        if (State != "Staging" || SourceBindingId is not null) throw new InvalidOperationException("Source is immutable.");
+        SourceKind = "GitLab"; SourceBindingId = binding; SourceTag = tag; SourceFactsJson = facts;
+    }
+    public void OpenImportedFormal(DateTimeOffset now)
+    {
+        if (SourceKind != "GitLab" || State != "Staging") throw new InvalidOperationException("Import is not staged.");
+        State = "Formal"; PublishedAt = now; Revision++;
     }
     public void Disable(string reason, DateTimeOffset now)
     { if (State == "Disabled") throw new InvalidOperationException("Release is disabled."); State = "Disabled"; DisableReason = reason; DisabledAt = now; Revision++; }

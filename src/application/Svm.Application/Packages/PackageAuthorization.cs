@@ -3,11 +3,13 @@ using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Releases;
+using Svm.Application.Releases;
 
 namespace Svm.Application.Packages;
 
 internal sealed class PackageAuthorization(IPackages packages, IReleases releases, ISoftwareCatalog software,
-    IUnitOfWork unit, IPersonnelWorkAuthorization personnelWork, IPackageServiceIdentity? service = null,
+    IUnitOfWork unit, IPersonnelWorkAuthorization personnelWork, IReleaseImports imports, IPackageServiceIdentity? service = null,
     IInstanceAccess? access = null, IManagedInstances? instances = null, IAccessProofSource? machineProof = null)
 {
     public async ValueTask<AuthorizationDecision> ExternalAsync(AuthorizationRequest x, PersonnelView? person, CancellationToken token)
@@ -28,7 +30,12 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
         if (!await software.ExistsAsync(id.Value, write, token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         // REL precedes PKG locks for every cross-module operation.
         var release = await ReleaseAsync(x.Request, token);
-        if (release is { } r) await releases.GetAsync(r, write, token);
+        if (release is { } r)
+        {
+            var selected = await releases.GetAsync(r, write, token);
+            if (selected.SourceKind == "GitLab" && x.Request is UploadContentCommand or BeginUploadCommand or FinishUploadCommand or FailUploadCommand or RetryPackageCommand)
+                return AuthorizationDecision.Deny(RequestFailure.InvalidState);
+        }
         return AuthorizationDecision.Allow(AuthorizationTarget.Software(id.Value));
     }
     public async ValueTask<AuthorizationDecision> InternalAsync(AuthorizationRequest x, CancellationToken token)
@@ -56,7 +63,10 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
                 if (target == Guid.Empty || service.Role == "Peer" && x.Request is not GetPackageAuthorityQuery)
                     return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 var w = await packages.AuthorityAsync(target, false, token); softwareId = w.SoftwareId;
-                if (w.Kind != "Repair" && !await personnelWork.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token))
+                var source = await releases.GetAsync(w.ReleaseId, false, token);
+                if (w.Kind != "Repair" && !(source.SourceKind == "GitLab"
+                    ? await imports.AuthorizesPackageAsync(w.ReleaseId, w.InitiatorId, w.SoftwareId, token)
+                    : await personnelWork.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
                     return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 await ProtectPackage(w.PackageId, w.SoftwareId, protect, token);
                 if ((await releases.GetAsync(w.ReleaseId, protect, token)).State == "Disabled") return AuthorizationDecision.Deny(RequestFailure.InvalidState);
@@ -106,8 +116,8 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
     };
 }
 
-internal sealed class PackageWorkerAuthorization(PackageAuthorization authorization) : IRequestAuthorizer
+internal sealed class PackageWorkerAuthorization(PackageAuthorization authorization, GitLabAuthorization gitLab) : IRequestAuthorizer
 {
     public ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest x,CancellationToken t) =>
-        PackageCapabilities.IsWorker(x.Request.GetType()) ? authorization.InternalAsync(x,t) : ValueTask.FromResult(AuthorizationDecision.Deny(RequestFailure.PermissionDenied));
+        GitLabCapabilities.IsInternal(x.Request.GetType()) ? gitLab.AuthorizeAsync(x, null, t) : PackageCapabilities.IsWorker(x.Request.GetType()) ? authorization.InternalAsync(x,t) : ValueTask.FromResult(AuthorizationDecision.Deny(RequestFailure.PermissionDenied));
 }

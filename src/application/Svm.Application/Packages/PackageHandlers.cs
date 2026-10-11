@@ -7,6 +7,7 @@ using Svm.Services.Contracts.Instances;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Messaging.V1;
 using Svm.Application.Catalog;
+using Svm.Services.Contracts.Releases;
 
 namespace Svm.Application.Packages;
 
@@ -16,12 +17,13 @@ internal sealed class PackageDispatch(SiteCatalogOptions site, TimeProvider cloc
         w.DispatchEventId, clock.GetUtcNow(), w.WorkId, null, site.Require().SiteId, w.SoftwareId,
         w.Kind == "Repair" ? PackageWorkKind.Repair : PackageWorkKind.UploadVerificationAndCopy, w.WorkId, w.DispatchSequence);
 }
-internal sealed class CreateReleaseCommandHandler(IReleases releases, IPackages packages, ICallContext calls, CatalogCompletion completion)
+internal sealed class CreateReleaseCommandHandler(IReleases releases, IPackages packages, ICallContext calls, CatalogCompletion completion, IReleaseImports imports)
     : IRequestHandler<CreateReleaseCommand, OperationResult<ReleaseUploadResult>>
 {
     public Task<OperationResult<ReleaseUploadResult>> Handle(CreateReleaseCommand x, CancellationToken token) =>
         completion.ExecuteAsync("rel.release.create", x.ChangeReason, async () =>
         {
+            if (await imports.IsBoundAsync(x.SoftwareId, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
             var actor = calls.Current!.Actor.ActorId!.Value; var packageId = Guid.NewGuid();
             var release = await releases.CreateAsync(x, packageId, actor, token);
             var uploadId = await packages.CreateAsync(packageId, release.Id, release.SoftwareId, actor, x.Package, token);
@@ -34,13 +36,14 @@ internal sealed class DisableReleaseCommandHandler(IReleases releases, IPackages
     public Task<OperationResult<ReleaseView>> Handle(DisableReleaseCommand x, CancellationToken token) => completion.ExecuteAsync(
         "rel.release.disable", x.Reason, async () => { var r = await releases.DisableAsync(x.ReleaseId, x.ExpectedRevision, x.Reason, token); await packages.StopAsync(r.PackageId, token); return r; }, x => x.Id, token);
 }
-internal sealed class PublishReleaseCommandHandler(IReleases releases, IPackages packages, IManagedInstances instances, CatalogCompletion completion)
+internal sealed class PublishReleaseCommandHandler(IReleases releases, IPackages packages, IManagedInstances instances, CatalogCompletion completion, IReleaseImports imports)
     : IRequestHandler<PublishReleaseCommand, OperationResult<ReleaseView>>
 {
     public Task<OperationResult<ReleaseView>> Handle(PublishReleaseCommand x, CancellationToken token) =>
         completion.ExecuteAsync("rel.release.publish", x.PublishReason, async actor =>
         {
             var release = await releases.GetAsync(x.ReleaseId, true, token);
+            if (await imports.IsBoundAsync(release.SoftwareId, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
             if (release.Revision != x.ExpectedRevision) throw new RequestRejectedException(RequestFailure.RevisionConflict);
             if (release.State != "Test") throw new RequestRejectedException(RequestFailure.InvalidState);
             await instances.VerifyInstallationEvidenceAsync(x.TestEvidenceId, release.SoftwareId, release.Id, release.Version, token);
@@ -123,13 +126,18 @@ internal sealed class RenewPackageWorkCommandHandler(IPackages packages, IUnitOf
     public async Task<OperationResult<bool>> Handle(RenewPackageWorkCommand x, CancellationToken token)
     { await packages.RenewAsync(x.Lease, clock.GetUtcNow(), token); return OperationResult<bool>.Completed(unit.CurrentOperationId!.Value, true, x.Lease.Work.WorkId); }
 }
-internal sealed class CompletePackageWorkCommandHandler(IPackages packages, IReleases releases, IUnitOfWork unit, IAuditWriter audit, ICallContext calls)
+internal sealed class CompletePackageWorkCommandHandler(IPackages packages, IReleases releases, IUnitOfWork unit, IAuditWriter audit, ICallContext calls, IReleaseImports imports)
     : IRequestHandler<CompletePackageWorkCommand, OperationResult<PackageView>>
 {
     public async Task<OperationResult<PackageView>> Handle(CompletePackageWorkCommand x, CancellationToken token)
     {
         var view = await packages.CompleteAsync(x.Lease, x.Facts, token);
-        await releases.OpenTestAsync(view.ReleaseId, view.Id, token);
+        if (x.Lease.Work.Kind != "Repair")
+        {
+            var release = await releases.GetAsync(view.ReleaseId, true, token);
+            if (release.SourceKind == "GitLab") await imports.CompleteReleaseAsync(view.ReleaseId, view.Id, token);
+            else await releases.OpenTestAsync(view.ReleaseId, view.Id, token);
+        }
         var op = unit.CurrentOperationId!.Value;
         audit.Append(new(op, calls.Current!.Actor.ActorId, "Service", null, null, "pkg.work.completed", view.Id,
             "succeeded", "two independently verified copies", calls.Current.CorrelationId));

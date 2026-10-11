@@ -8,10 +8,11 @@ import { categoryName, type Page, type Software } from '../catalog'
 import { releaseState, packageStage, uploadPackage, type Release, type Package, type ReleaseUpload, type TestEvidence, type DownloadAudit } from '../packages'
 import { pendingWriteKey } from '../mutation'
 import { hashFile } from '../packages/hashFile'
+import type { ReleaseSource, ReleaseSyncWork } from '../packages'
 
 const route = useRoute(), session = useSession(), mutation = useProtectedMutation()
 const { busy, uncertain, error } = mutation
-const globalPending = inject(pendingWriteKey, ref(false)), pendingAction = ref<'retry' | 'disable' | 'publish' | null>(null)
+const globalPending = inject(pendingWriteKey, ref(false)), pendingAction = ref<'retry' | 'disable' | 'publish' | 'sync' | null>(null)
 const softwareId = typeof route.query.softwareId === 'string' ? route.query.softwareId : ''
 const software = ref<Software | null>(null), channel = ref(route.query.channel === 'Formal' ? 'Formal' : 'Test'), items = ref<Release[]>([]), selected = ref<Release | null>(null)
 const evidenceNext = ref<string | null>(null), auditNext = ref<string | null>(null)
@@ -21,10 +22,31 @@ const creating = ref(false), level = ref('Patch'), summary = ref(''), reason = r
 const file = ref<File | null>(null), digest = ref(''), hashedBytes = ref(0), hashing = ref(false), uploading = ref(false), uploadUnknown = ref(false)
 const registered = ref<ReleaseUpload | null>(null), maxBytes = ref<number | null>(null), actionReason = ref('')
 const chosenEvidence = ref(''), publishReason = ref(''), publishConclusion = ref('')
-const canPublish = computed(() => session.can('release.publish', softwareId))
+const source = ref<ReleaseSource | null>(null), syncWork = ref<ReleaseSyncWork | null>(null), historicalTag = ref('')
+const canSync = computed(() => source.value?.kind === 'GitLab' && source.value.enabled && session.can('release.upload', softwareId))
+const canPublish = computed(() => source.value?.kind === 'Manual' && session.can('release.publish', softwareId))
 const publishReady = computed(() => selected.value?.state === 'Test' && pkg.value?.state === 'Ready' && pkg.value.healthyReplicaCount === 2 && pkg.value.sizeBytes === pkg.value.expectedSize && pkg.value.sha256 === pkg.value.expectedSha256)
 const locked = computed(() => mutation.blocked.value || uploading.value || uploadUnknown.value)
-const canUpload = computed(() => session.can('release.upload', softwareId)), canDisable = computed(() => session.can('release.disable', softwareId))
+const canUpload = computed(() => source.value?.kind === 'Manual' && session.can('release.upload', softwareId)), canDisable = computed(() => session.can('release.disable', softwareId))
+const syncStages: Record<string, string> = { Pending: '等待同步', Scanning: '扫描发布', Historical: '历史版本，需手动同步', Downloading: '拉取安装包', VerifyingSource: '重新核对来源', PackageProcessing: '校验及形成双副本', Completed: '已完成', Conflict: '来源冲突，需人工核查' }
+async function loadSource() {
+  source.value = await request<ReleaseSource>(`/api/v1/manage/software/${softwareId}/release-source`)
+  if ((!syncWork.value || syncWork.value.kind === 'Scan' && syncWork.value.stage === 'Completed') && source.value.latestWorkId) syncWork.value = await request<ReleaseSyncWork>(`/api/v1/manage/release-sync-work/${source.value.latestWorkId}`)
+}
+async function synchronize() {
+  if (!session.current || uncertain.value && pendingAction.value !== 'sync') return
+  pendingAction.value = 'sync'
+  const result = await mutation.perform<ReleaseSyncWork>(`/api/v1/manage/software/${softwareId}/release-sync`, 'POST', { tag: historicalTag.value || null }, session.current.csrfToken)
+  if (mutation.completed.value && result) { syncWork.value = result; notice.value = '同步工作已登记，导入成功后可手动创建设备更新投放。'; await loadSource() }
+  else await session.load()
+}
+async function refreshSync() {
+  try {
+    if (syncWork.value) syncWork.value = await request<ReleaseSyncWork>(`/api/v1/manage/release-sync-work/${syncWork.value.id}`)
+    await loadSource(); await load()
+    if (syncWork.value?.releaseId && syncWork.value.stage === 'Completed') await detail(syncWork.value.releaseId)
+  } catch (e) { await failed(e) }
+}
 let hashAbort: AbortController | null = null, uploadAbort: AbortController | null = null, poll: ReturnType<typeof setTimeout> | null = null
 let disposed = false
 async function failed(e: unknown) {
@@ -144,6 +166,7 @@ async function previous() { cursors.value.pop(); await load() }
 async function refresh() { if (selected.value && !mutation.uncertain.value) { await detail(selected.value.id); mutation.error.value = ''; actionReason.value = '' } }
 async function tick() {
   if (disposed) return
+  if (!locked.value && source.value?.kind === 'GitLab' && syncWork.value && !['Completed', 'Conflict'].includes(syncWork.value.stage)) await refreshSync()
   if (!locked.value && selected.value && pkg.value && ['AwaitingReceipt', 'Copying', 'Receiving'].includes(pkg.value.processingStage)) await detail(selected.value.id)
   if (!disposed) poll = setTimeout(tick, 5000)
 }
@@ -153,7 +176,7 @@ watch([mutation.blocked, uploading, uploadUnknown], ([write, stream, unknown]) =
 watch(creating, value => { if (!value) hashAbort?.abort() })
 onMounted(async () => {
   window.addEventListener('beforeunload', unload)
-  try { maxBytes.value = (await request<{ maxPackageBytes: number }>('/api/v1/manage/capabilities')).maxPackageBytes; await load(); if (typeof route.query.releaseId === 'string') await detail(route.query.releaseId) }
+  try { await loadSource(); if (source.value?.kind === 'GitLab' && route.query.channel !== 'Test') channel.value = 'Formal'; maxBytes.value = (await request<{ maxPackageBytes: number }>('/api/v1/manage/capabilities')).maxPackageBytes; await load(); if (typeof route.query.releaseId === 'string') await detail(route.query.releaseId) }
   catch (e) { await failed(e) }
   poll = setTimeout(tick, 5000)
 })
@@ -164,22 +187,31 @@ onUnmounted(() => { disposed = true; globalPending.value = false; hashAbort?.abo
   <section class="workspace">
     <div class="page-heading"><div><div class="eyebrow">软件版本</div><h1>{{ software?.name ?? '版本与安装包' }}</h1><p v-if="software" class="muted">{{ software.code }} · {{ categoryName(software.category) }} · 同软件设备共用版本库</p></div><button v-if="canUpload" class="primary" :disabled="locked || !maxBytes" @click="begin">登记版本并上传</button></div>
     <p v-if="failure" class="error" role="alert">{{ failure }}</p><p v-if="notice" class="success" role="status">{{ notice }}</p>
+    <section v-if="source?.kind === 'GitLab'" class="panel gitlab-source" aria-label="GitLab 正式版本来源">
+      <h2>GitLab 正式版本</h2><p>研发测试与正式发布在 GitLab 完成。平台核对来源和双副本后开放下载，设备投放由人员另行创建。</p>
+      <p class="muted">{{ source.baseUri }} · 项目 {{ source.projectId }} · 包 {{ source.packageName }} · {{ source.enabled ? '同步已启用' : '同步未启用' }}</p>
+      <p v-if="source.lastSyncedAt">最近同步核对：{{ new Date(source.lastSyncedAt).toLocaleString() }}</p><p v-if="source.lastErrorCode" class="error">{{ source.lastErrorCode }}</p>
+      <form v-if="canSync || uncertain && pendingAction === 'sync'" @submit.prevent="synchronize"><label>历史 Tag（留空扫描正式发布）<input v-model="historicalTag" maxlength="34" placeholder="v1.2.3" :disabled="locked" /></label><button class="primary" :disabled="busy || uncertain && pendingAction !== 'sync'">{{ uncertain ? '核实原同步操作' : '立即同步' }}</button></form>
+      <p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">原操作键和正文保留在本页内存中，请人工核实，页面不会自动重发。</p>
+      <div v-if="syncWork"><p>{{ syncWork.tag ?? '发布扫描' }} · {{ syncStages[syncWork.stage] ?? syncWork.stage }}</p><p v-if="syncWork.lastErrorCode" class="error">{{ syncWork.lastErrorCode }}</p><button :disabled="busy" @click="refreshSync">核对同步进度</button><button v-if="syncWork.releaseId" :disabled="locked" @click="detail(syncWork.releaseId)">查看导入版本</button></div>
+    </section>
     <div class="tab-row"><button :aria-pressed="channel === 'Test'" :disabled="locked" @click="channel = 'Test'; changeChannel()">测试版本</button><button :aria-pressed="channel === 'Formal'" :disabled="locked" @click="channel = 'Formal'; changeChannel()">正式版本</button></div>
     <div class="dialog-actions"><button :disabled="locked || loading" @click="load(true)">刷新列表</button><button v-if="software?.latestAvailableFormalReleaseId" :disabled="locked" @click="latestFormal">查看最新可用正式版</button></div>
     <div class="account-layout">
-      <section class="panel"><div v-if="loading" class="empty" role="status">正在读取版本…</div><div v-else-if="!items.length" class="empty">{{ channel === 'Formal' ? '尚无正式版本。完成测试并转正式后将在此展示。' : '没有可查看的测试版本。' }}</div>
+      <section class="panel"><div v-if="loading" class="empty" role="status">正在读取版本…</div><div v-else-if="!items.length" class="empty">{{ channel === 'Formal' ? (source?.kind === 'GitLab' ? '尚无可用的 GitLab 正式版本，请查看同步进度。' : '尚无正式版本。完成测试并转正式后将在此展示。') : '没有可查看的测试版本。' }}</div>
         <div v-else class="table-scroll"><table><thead><tr><th>版本</th><th>状态</th><th>更新内容</th><th>登记时间</th></tr></thead><tbody><tr v-for="item in items" :key="item.id" :class="{ selected: selected?.id === item.id }"><td><button class="text-button" :disabled="locked" @click="detail(item.id)">{{ item.version }}</button></td><td>{{ releaseState(item.state) }}</td><td>{{ item.changeSummary }}</td><td>{{ new Date(item.createdAt).toLocaleString() }}</td></tr></tbody></table></div>
         <footer class="pagination"><span>本页可查看 {{ items.length }} 项</span><div><button :disabled="loading || locked || cursors.length <= 1" @click="previous">上一页</button><button :disabled="loading || locked || !nextCursor" @click="next">下一页</button></div></footer>
       </section>
       <aside class="panel detail"><template v-if="selected"><h2>{{ selected.version }} <span class="badge">{{ releaseState(selected.state) }}</span></h2><p class="description">{{ selected.changeSummary }}</p><dl><div><dt>变更级别</dt><dd>{{ selected.changeLevel }}</dd></div><div><dt>变更原因</dt><dd>{{ selected.changeReason }}</dd></div><div><dt>修订</dt><dd>{{ selected.revision }}</dd></div><div v-if="selected.disabledAt"><dt>停用原因</dt><dd>{{ selected.disableReason }}</dd></div></dl>
-        <template v-if="pkg"><h3>安装包</h3><dl><div><dt>处理阶段</dt><dd>{{ packageStage(pkg.processingStage) }}</dd></div><div><dt>已核对副本</dt><dd>{{ pkg.healthyReplicaCount }} / 2</dd></div><div><dt>大小</dt><dd>{{ pkg.sizeBytes ?? '尚未确认' }} 字节（预期 {{ pkg.expectedSize }}）</dd></div><div><dt>SHA-256</dt><dd class="digest">{{ pkg.sha256 ?? '尚未确认' }}</dd></div></dl><p v-if="pkg.lastErrorCode" class="error">{{ pkg.lastErrorCode }}</p><a v-if="pkg.downloadAvailable && pkg.downloadPath" class="primary text-link" :href="pkg.downloadPath" download>下载安装包</a><p v-else class="muted">当前不可下载。首次开放测试版须完成两个副本核对。</p>
+        <template v-if="pkg"><h3>安装包</h3><dl><div><dt>处理阶段</dt><dd>{{ packageStage(pkg.processingStage) }}</dd></div><div><dt>已核对副本</dt><dd>{{ pkg.healthyReplicaCount }} / 2</dd></div><div><dt>大小</dt><dd>{{ pkg.sizeBytes ?? '尚未确认' }} 字节（预期 {{ pkg.expectedSize }}）</dd></div><div><dt>SHA-256</dt><dd class="digest">{{ pkg.sha256 ?? '尚未确认' }}</dd></div></dl><p v-if="pkg.lastErrorCode" class="error">{{ pkg.lastErrorCode }}</p><a v-if="pkg.downloadAvailable && pkg.downloadPath" class="primary text-link" :href="pkg.downloadPath" download>下载安装包</a><p v-else class="muted">当前不可下载。首次开放下载须完成两个副本核对。</p>
           <button v-if="canUpload && selected.state === 'Staging' && ['AwaitingUpload', 'UploadFailed', 'Receiving'].includes(pkg.processingStage)" :disabled="locked" @click="resume">重传原版本安装包</button>
           <label v-if="canDisable && selected.state !== 'Disabled' || canUpload && pkg.processingStage === 'CopyFailed'">操作原因<input v-model="actionReason" maxlength="256" :disabled="locked" /></label>
           <div class="dialog-actions"><button v-if="canUpload && pkg.processingStage === 'CopyFailed'" :disabled="busy || !actionReason || uncertain && pendingAction !== 'retry'" @click="retry">{{ uncertain ? '核实原操作' : '重试副本工作' }}</button><button v-if="canDisable && selected.state !== 'Disabled'" :disabled="busy || !actionReason || uncertain && pendingAction !== 'disable'" @click="disable">{{ uncertain ? '核实原操作' : '停用版本' }}</button><button v-if="error && !uncertain" @click="refresh">加载最新详情</button></div><p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">结果待核实；原请求及操作键保留在当前页面内存中。</p>
         </template>
-        <section v-if="selected.publishedAt" class="publication-history" aria-labelledby="publication-history-title"><h3 id="publication-history-title">正式发布记录</h3><dl><div><dt>发布工号</dt><dd>{{ selected.publishedEmployeeNo }}</dd></div><div><dt>发布时间</dt><dd>{{ new Date(selected.publishedAt).toLocaleString() }}</dd></div><div><dt>通过原因</dt><dd>{{ selected.publishReason }}</dd></div><div><dt>测试结论</dt><dd class="conclusion">{{ selected.publishConclusion }}</dd></div><div><dt>证据标识</dt><dd>{{ selected.testEvidenceId }}</dd></div></dl></section>
+        <section v-if="selected.publishedAt && selected.sourceKind !== 'GitLab'" class="publication-history" aria-labelledby="publication-history-title"><h3 id="publication-history-title">正式发布记录</h3><dl><div><dt>发布工号</dt><dd>{{ selected.publishedEmployeeNo }}</dd></div><div><dt>发布时间</dt><dd>{{ new Date(selected.publishedAt).toLocaleString() }}</dd></div><div><dt>通过原因</dt><dd>{{ selected.publishReason }}</dd></div><div><dt>测试结论</dt><dd class="conclusion">{{ selected.publishConclusion }}</dd></div><div><dt>证据标识</dt><dd>{{ selected.testEvidenceId }}</dd></div></dl></section>
         <section v-if="selected.state === 'Test' && canPublish || uncertain && pendingAction === 'publish'" class="publication-panel" aria-labelledby="publication-title"><h3 id="publication-title">测试转正式</h3><p class="muted">选择此版本的真实安装证据并填写结论，工号和时间由平台记录。</p><p v-if="!publishReady" class="muted">发布需两个当前健康副本；请等待核对或修复后刷新详情。</p><p v-if="!evidence.length" class="muted">尚无可选择的安装证据，不能发布。</p><form @submit.prevent="publish"><fieldset :disabled="locked"><label>安装证据<select v-model="chosenEvidence" required><option value="" disabled>选择安装上报</option><option v-for="item in evidence" :key="item.id" :value="item.id">{{ item.installedVersion }} · {{ item.instanceId }} · {{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</option></select></label><label>测试通过原因<input v-model="publishReason" required maxlength="256" /></label><label>测试结论<textarea v-model="publishConclusion" required maxlength="2000" rows="3" /></label></fieldset><button class="primary" :disabled="busy || uncertain && pendingAction !== 'publish' || !uncertain && (!canPublish || !publishReady || !chosenEvidence || !publishReason.trim() || !publishConclusion.trim())">{{ uncertain ? '核实原发布操作' : '转为正式版' }}</button></form></section>
-        <h3>测试安装证据</h3><p class="muted">下载完成不代表安装成功；证据来自实例引用此版本的有效上报。</p><ul v-if="evidence.length" class="permission-list"><li v-for="item in evidence" :key="item.id">{{ item.installedVersion }} · {{ item.instanceId }}<small>{{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</small></li></ul><p v-else class="muted">尚无关联安装证据。</p><button v-if="evidenceNext" @click="moreEvidence">更多安装证据</button>
+        <section v-if="selected.sourceKind === 'GitLab' && selected.source"><h3>GitLab 发布来源</h3><dl><div><dt>正式 Tag</dt><dd>{{ selected.source.manifest.tag }}</dd></div><div><dt>提交 SHA</dt><dd class="digest">{{ selected.source.manifest.commitSha }}</dd></div><div><dt>源端发布时间</dt><dd>{{ new Date(selected.source.releasedAt).toLocaleString() }}</dd></div><div><dt>构建流水线</dt><dd><a :href="selected.source.pipelineUrl" target="_blank" rel="noopener noreferrer">{{ selected.source.manifest.pipelineId }}</a> · Job {{ selected.source.manifest.jobId }}</dd></div></dl><p class="muted">无需平台再次测试转正式，实际安装情况仍以实例上报为准。</p></section>
+        <h3>{{ selected.sourceKind === 'GitLab' ? '安装上报事实' : '测试安装证据' }}</h3><p class="muted">下载完成不代表安装成功；证据来自实例引用此版本的有效上报。</p><ul v-if="evidence.length" class="permission-list"><li v-for="item in evidence" :key="item.id">{{ item.installedVersion }} · {{ item.instanceId }}<small>{{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</small></li></ul><p v-else class="muted">尚无关联安装证据。</p><button v-if="evidenceNext" @click="moreEvidence">更多安装证据</button>
         <template v-if="session.can('audit.read', softwareId)"><h3>下载传输记录（当前页）</h3><ul v-if="audits.length" class="permission-list"><li v-for="item in audits" :key="item.requestId">{{ item.employeeNo ?? item.actorKind }} · {{ item.state }}<small>{{ item.bytesSent ?? '尚未取得可信结束记录' }} 字节 · {{ item.startedAt }}</small></li></ul><p v-else class="muted">本页无此版本的下载记录。</p><button v-if="auditNext" @click="moreAudit()">更多下载记录</button></template>
       </template><div v-else class="empty">选择版本，查看更新详情、包处理和关联证据。</div></aside>
     </div>
@@ -193,6 +225,9 @@ onUnmounted(() => { disposed = true; globalPending.value = false; hashAbort?.abo
   </section>
 </template>
 <style scoped>
+.gitlab-source { padding: 1.5rem; display: grid; gap: .75rem; overflow-wrap: anywhere; }
+.gitlab-source h2, .gitlab-source p { margin: 0; }
+.gitlab-source form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .75rem; max-width: 44rem; }
 .digest { overflow-wrap: anywhere; word-break: break-word; min-width: 0; font-family: monospace; font-size: .82rem; }
 .detail dl > div { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); gap: .75rem; }
 .detail dd { min-width: 0; overflow-wrap: anywhere; }

@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权、设备映射，以及实例登记/恢复、独立凭据和状态上报 API 及同源网页；进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础保留。设备软件按真实接入事实区分“尚未登记”“尚未上报”和报告新鲜度，展示实际版本、IP、运行及接入状态；已有版本登记、包上传/双副本校验、测试版本/包查询、受保护下载、停用及关联安装证据；已实现选择安装证据、填写结论转正式、正式查询/下载及最新可用正式版；正式版 Update 任务已有实现，本批实际验证见框架设计第 11.1 节，完整验收仍待执行。
+项目已有管理、接入、版本包及正式版更新业务，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权、设备映射，以及实例登记/恢复、独立凭据和状态上报 API 及同源网页；进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础保留。设备软件按真实接入事实区分“尚未登记”“尚未上报”和报告新鲜度，展示实际版本、IP、运行及接入状态；未绑定软件已有人工版本登记、包上传/双副本校验、测试下载、安装证据转正式及停用历史；GitLab 绑定软件已接通正式来源导入、双副本就绪后直接开放正式版，再由人员显式创建 Update 任务。本批实际验证见框架设计第 11.1 节，真实 GitLab 联调和完整验收仍待执行。
 
 | 已有实现 | 后续实现 |
 |---|---|
@@ -17,6 +17,7 @@
 | 人员管理、四项厂级及软件范围授权、软件目录、工序/设备/映射维护与现场导航 | 厂家现场验收 |
 | 受限登记许可、单次恢复、独立实例凭据吊销、报告流/快照、安装履历及接入管理网页 | 厂家现场验收 |
 | 版本登记/编号、流式包上传、双副本/Test、证据转正式、正式查询/下载、停用历史及网页 | 兼容声明、包清理 |
+| GitLab HTTPS 正式来源、不可变清单、扫描/导入恢复、双副本直接 Formal 及同步网页 | 真实 GitLab/企业证书/令牌/流水线联调；Webhook、Runner 推送、离线导入 |
 | 正式版 Update 的目标封存、逐项准入、批次、领取/许可/回执、控制及恢复网页 | 部分回退与结构化兼容声明 |
 | 所属模块的类型化领域事件处理器、Scoped 串行派发、提交成功后的内部确认 | 实际业务事件及领域事实到版本化集成消息的转换 |
 | 持久化幂等协调器、六模块操作结果存储、人员管理 HTTP 幂等及提交结果核实 | 其他业务 HTTP 幂等接入及完整事务/消息验收 |
@@ -42,7 +43,19 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
-## 版本与安装包
+## GitLab 正式版本导入
+
+已接通“GitLab 正式发布 → 后台拉取 → 校验及双副本 → 正式版本 → 现有设备更新与上报”。GitLab 负责研发和测试，平台保存来源事实与本地不可覆盖包，并管理厂内更新。导入不要求本地测试证据或人员再次发布，不自动创建投放，也不改变实例上报版本。
+
+`SVM_GITLAB_CONFIG_FILE` 显式绑定已有软件、GitLab HTTPS 地址/项目、Generic 包和受限集成主体；元数据 API 与包下载使用独立只读凭据。首期由部署人员维护，网页展示脱敏来源、Tag/提交/流水线和同步状态。完整配置、清单 V1、恢复规则及可复制 CI 示例见 [GitLab 接入说明](eng/gitlab/README.md)。
+
+首轮持久分页，只导入最高合格正式版；其余历史按 Tag 手动导入。以后发现新 Tag 时保留低版本维护补丁；重复同步不重复创建，同 Tag 内容变更或软件数字版本冲突拒绝覆盖。GitLab 删除不删除本地历史；本地停用仍受原权限控制。绑定软件的默认入口为正式版本和同步工作，禁止新建人工版本或人工转正式，既有人工历史可查询。未绑定软件沿用下文人工流程。
+
+新增只读 release-source、release-sync-work（software.read）及 release-sync（release.upload，人员 Cookie/CSRF/幂等，202）；详细契约见设计 8.3.1。来源核验、网络及文件在事务外，阶段事实/审计/Outbox 短事务提交，提交未知只在新 Scope 核实。正式版副本修复只更新包事实，不重新开放 Test。
+
+新增 `20261013000100_GitLabReleaseImport`、冻结模型及快照；审阅 SQL 在 `artifacts/gitlab-import/gitlab-import-upgrade.sql`，只在一次性测试库执行。十份旧迁移、29 工程/99 条引用和依赖锁不变，开发库不升级。实际 GitLab 尚未搭建，当前使用 HTTPS 协议夹具验证；企业证书、令牌权限、实际流水线和厂家现场验收仍待完成。
+
+## 版本与安装包（未绑定 GitLab 的人工来源）
 
 人员从现场设备的对应软件入口进入测试/正式视图，登记变更级别、更新说明和包。浏览器 Web Worker 按 1 MiB 分块计算 SHA-256，支持进度与取消，服务端重新校验实际大小和摘要。REL 软件锁与唯一约束保护编号；首版 1.0.0，失败和重传沿用原版本及 uploadId。测试视图展示从未发布的版本，正式视图展示已发布及发布后停用的历史，按保留的发布事实分类。
 
@@ -79,7 +92,7 @@ SVM_TASK_CONFIG_FILE 指向受限绝对 JSON 文件，字段为 defaultStartLoca
 | `src/shared` | SharedKernel 领域基础、Contracts 内层契约、CrossCutting 公共应用管道 |
 | `src/modules` | Identity、Releases、Packages、Instances、Tasks、Audit；每个模块的 Core 与 Service 放在同一目录 |
 | `src/application` | Application 应用用例与跨模块协调 |
-| `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配、FileStorage 流式文件及 mTLS 副本通道 |
+| `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配、FileStorage 流式文件、mTLS 副本通道及 GitLab HTTPS 适配 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
 | `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护、软件目录、登记许可、实例详情/履历、版本包与更新投放网页 |
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
@@ -141,7 +154,7 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog、InstanceAccess、ReleasesAndPackages 、ReleasePublication 及本批 TaskWorkflow 仅在一次性测试库执行。InstanceAccess 建立九张 IAM/INS 表；ReleasesAndPackages 建立七张 REL/PKG 表。ReleasePublication 追加六项发布字段、证据/人员引用及不可变保护；不生成默认实例、版本、许可或授权，九份旧迁移不改，快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
+OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog、InstanceAccess、ReleasesAndPackages、ReleasePublication、TaskWorkflow 及本批 GitLabReleaseImport 仅在一次性测试库执行。InstanceAccess 建立九张 IAM/INS 表；ReleasesAndPackages 建立七张 REL/PKG 表。ReleasePublication 追加六项发布字段、证据/人员引用及不可变保护；GitLabReleaseImport 保留人工历史并区分两种来源。不生成默认实例、版本、许可或额外授权，十份旧迁移不改，快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
 
 ```sh
 mkdir -p artifacts/releases-packages

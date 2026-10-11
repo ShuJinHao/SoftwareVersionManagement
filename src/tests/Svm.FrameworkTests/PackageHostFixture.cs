@@ -26,6 +26,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     internal string DirectoryPath { get; } = Path.Combine(OutboxFixture.Root, ".cache", "package-verification-" + Guid.NewGuid().ToString("N"));
     internal PackageCopyProxy? CopyProxy { get; private set; }
     internal Svm.Services.Contracts.Tasks.TaskOptions? Tasks { get; private set; }
+    internal GitLabOptions? GitLab { get; private set; }
     internal string GatewayUrl { get; private set; } = "";
     internal string CertificatePassword { get; } = Guid.NewGuid().ToString("N");
     internal MessagingOptions Messaging => Broker.Options with { SiteId = Site.Require().SiteId, QueryDelaySeconds = 1 };
@@ -55,6 +56,12 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     { var worker = await PackageProcess.StartAsync(this, options); _workers.Add(worker); return worker; }
     internal async Task RestartApiBAsync()
     { await ApiB.DisposeAsync(); ApiB = await LocalApi.StartAsync(Personnel.Database, site: Site, instanceAccess: InstanceFixture.Limits, packages: B, messaging: Messaging, publicPort: ApiPortB,tasks:Tasks); }
+    internal async Task ConfigureGitLabAsync(GitLabOptions options)
+    {
+        GitLab = options; await ApiA.DisposeAsync(); await ApiB.DisposeAsync();
+        ApiA = await LocalApi.StartAsync(Personnel.Database, site: Site, instanceAccess: InstanceFixture.Limits, packages: A, messaging: Messaging, publicPort: ApiPortA, tasks: Tasks, gitLab: GitLab);
+        ApiB = await LocalApi.StartAsync(Personnel.Database, site: Site, instanceAccess: InstanceFixture.Limits, packages: B, messaging: Messaging, publicPort: ApiPortB, tasks: Tasks, gitLab: GitLab);
+    }
     internal HttpClient Client(CookieContainer cookies) => ApiA.Client(cookies);
     internal string Replica(PackageFileOptions node, Guid id) => Path.Combine(node.RootPath, "replicas", id.ToString("D") + ".bin");
     internal static int Port() { var l = new TcpListener(IPAddress.Loopback, 0); l.Start(); var port = ((IPEndPoint)l.LocalEndpoint).Port; l.Stop(); return port; }
@@ -128,12 +135,13 @@ internal sealed class PackageProcess : IAsyncDisposable
     {
         var configs = new List<string> { await OutboxFixture.PrivateJsonAsync(new { writerConnectionString = f.Personnel.Database.WriterConnection, readerConnectionString = f.Personnel.Database.ReaderConnection }), await OutboxFixture.PrivateJsonAsync(f.Messaging), await OutboxFixture.PrivateJsonAsync(f.Site), await OutboxFixture.PrivateJsonAsync(options) };
         var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root, "eng/dotnet")) { WorkingDirectory = OutboxFixture.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false }; info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net8.0/Svm.Worker.dll"));
+        info.Environment.Remove("SVM_GITLAB_CONFIG_FILE"); if (f.GitLab is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.GitLab)); info.Environment["SVM_GITLAB_CONFIG_FILE"] = configs[^1]; }
         info.Environment.Remove("SVM_TASK_CONFIG_FILE"); if(f.Tasks is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.Tasks)); info.Environment["SVM_TASK_CONFIG_FILE"]=configs[^1]; }
         foreach (var (name, i) in new[] { ("SVM_PERSISTENCE_CONFIG_FILE", 0), ("SVM_MESSAGING_CONFIG_FILE", 1), ("SVM_SITE_CONFIG_FILE", 2), ("SVM_PACKAGE_CONFIG_FILE", 3) }) info.Environment[name] = configs[i]; info.Environment["Logging__LogLevel__Default"] = "Information"; info.Environment["Logging__LogLevel__MassTransit"] = "Warning";
         var p = new Process { StartInfo = info, EnableRaisingEvents = true }; var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); PackageProcess? worker = null;
         p.Exited += (_, _) => ready.TrySetException(new InvalidOperationException("Package Worker exited before readiness; redacted log retained."));
         p.OutputDataReceived += (_, e) => { if (e.Data is null) return; lock (worker!._logs) worker._logs.AppendLine(e.Data); if (e.Data.Contains("Application started.", StringComparison.Ordinal)) ready.TrySetResult(); };
-        try { Assert.True(p.Start()); worker = new(p, configs.ToArray(), [f.CertificatePassword, f.Messaging.Password]); p.BeginOutputReadLine(); await ready.Task.WaitAsync(TimeSpan.FromSeconds(25)); Assert.False(p.HasExited); return worker; }
+        try { Assert.True(p.Start()); worker = new(p, configs.ToArray(), [f.CertificatePassword, f.Messaging.Password, .. (f.GitLab?.Credentials.SelectMany(c => new[] { c.ApiToken, c.PackageToken }) ?? [])]); p.BeginOutputReadLine(); await ready.Task.WaitAsync(TimeSpan.FromSeconds(25)); Assert.False(p.HasExited); return worker; }
         catch { if (worker is not null) await worker.DisposeAsync(); else { foreach (var c in configs) File.Delete(c); p.Dispose(); } throw; }
     }
     public async ValueTask DisposeAsync()

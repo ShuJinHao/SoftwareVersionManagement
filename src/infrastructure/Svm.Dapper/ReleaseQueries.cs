@@ -1,13 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Releases;
 
 namespace Svm.Dapper;
 
 public static class ReleaseQueryRegistration
 {
     public static IServiceCollection AddSvmReleaseQueries(this IServiceCollection services) => services.AddScoped<IReleaseQueries, ReleaseQueries>()
-        .AddScoped<IPackageQueries, PackageQueries>().AddScoped<IFormalReleaseAvailability, FormalReleaseAvailability>();
+        .AddScoped<IPackageQueries, PackageQueries>().AddScoped<IFormalReleaseAvailability, FormalReleaseAvailability>().AddScoped<IReleaseImportQueries, ReleaseImportQueries>();
 }
 internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext calls, PackageExecutionOptions options) : IReleaseQueries
 {
@@ -16,6 +17,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         SELECT r."Id",r."SoftwareId",r."Major",r."Minor",r."Patch",r."State",r."ChangeLevel",r."ChangeSummary",r."ChangeReason",r."PackageId",
           r."CreatedBy",r."CreatedAt",r."DisabledAt",r."DisableReason",r."Revision",p."SizeBytes",p."Sha256",
           r."PublishedBy",r."PublishedEmployeeNo",r."PublishedAt",r."TestEvidenceId",r."PublishReason",r."PublishConclusion",
+          r."SourceKind",r."SourceFactsJson",
           (r."State" IN ('Test','Formal') AND p."State"='Ready' AND NOT p."Disabled" AND EXISTS
              (SELECT 1 FROM pkg.replicas cp WHERE cp."PackageId"=p."Id" AND cp."State"='Healthy'
                 AND cp."CheckedAt">clock_timestamp()-make_interval(secs=>@freshSeconds))) AS "DownloadAvailable"
@@ -43,7 +45,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
     private Task<IReadOnlyList<Row>> Rows(ReleaseListInput input, bool available, CancellationToken token) => session.QueryAsync<Row>(
         "SELECT * FROM (" + Projection + " WHERE r.\"SoftwareId\"=@software AND " + Visible + """
           AND (CAST(@state AS text) IS NULL OR r."State"=@state)
-          AND (CAST(@channel AS text) IS NULL OR (@channel='Formal' AND r."PublishedAt" IS NOT NULL) OR (@channel='Test' AND r."PublishedAt" IS NULL))
+          AND (CAST(@channel AS text) IS NULL OR (@channel='Formal' AND r."PublishedAt" IS NOT NULL) OR (@channel='Test' AND r."SourceKind"='Manual' AND r."PublishedAt" IS NULL))
           AND (CAST(@afterId AS uuid) IS NULL OR (r."Major",r."Minor",r."Patch",r."Id")<(@major,@minor,@patch,@afterId))
         ) s WHERE (NOT @available OR s."DownloadAvailable") ORDER BY s."Major" DESC,s."Minor" DESC,s."Patch" DESC,s."Id" DESC LIMIT @take
         """, new { software = input.SoftwareId, state = input.State, channel = input.Channel, afterId = input.After?.Id,
@@ -95,9 +97,10 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         public Guid? PublishedBy { get; set; } public string? PublishedEmployeeNo { get; set; } public DateTimeOffset? PublishedAt { get; set; }
         public Guid? TestEvidenceId { get; set; } public string? PublishReason { get; set; } public string? PublishConclusion { get; set; }
         public long? SizeBytes { get; set; } public string? Sha256 { get; set; }
+        public string SourceKind { get; set; } = "Manual"; public string? SourceFactsJson { get; set; }
         public ReleaseView View => new(Id, SoftwareId, $"{Major}.{Minor}.{Patch}", State, ChangeLevel, ChangeSummary, ChangeReason,
             PackageId, DownloadAvailable, CreatedBy, CreatedAt, DisabledAt, DisableReason, Revision,
-            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion);
+            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion, SourceKind, GitLabFacts.Decode(SourceFactsJson));
         public ReleasePosition Position => new(Major, Minor, Patch, Id);
     }
 }
