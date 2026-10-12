@@ -64,7 +64,7 @@ public partial class Program
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<InstanceCursor>();
         builder.Services.AddSingleton(InstanceAccessConfiguration.LoadFromEnvironment());
-        builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances();
+        builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases();
         builder.Services.AddSingleton(personnel.Management);
         builder.Services.AddScoped<UserCursor>();
         if (messaging is not null) builder.Services.AddSvmMessaging(messaging, delivery: false);
@@ -75,7 +75,7 @@ public partial class Program
         builder.Services.AddScoped<IPackageServiceIdentity>(p => p.GetRequiredService<HttpPackageIdentity>());
         builder.Services.AddScoped<IPackageDownloadProof>(p => p.GetRequiredService<HttpPackageIdentity>());
         if (packageFiles is not null)
-            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleases().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization();
+            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization();
         if (gitLab is not null) builder.Services.AddSvmGitLab(gitLab);
         builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();

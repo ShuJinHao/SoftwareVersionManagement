@@ -62,9 +62,9 @@ public sealed class Deployment : AggregateRoot<StrongId<Deployment>>
       if (State != "Preparing") State = "Paused"; Revision++; }
     public void Resume(Guid subject) { AuthorizationSubjectId = subject; PauseCodes = ""; State = IsPrepared ? "Running" : "Preparing"; Revision++; }
     public void BeginControl() { ControlPending = true; Pause("ManualPause"); }
-    public void FinishControl(string kind, DateTimeOffset? start, DateTimeOffset? end)
+    public void FinishControl(string kind, DateTimeOffset? start, DateTimeOffset? end, bool unfinishedTasksRemain)
     { ControlPending = false; if (kind == "Reschedule") { NotBefore = start!.Value; LatestStart = end!.Value; }
-      if (kind == "Cancel") State = "Canceled"; Revision++; }
+      if (kind == "Cancel") State = unfinishedTasksRemain ? "Paused" : "Canceled"; Revision++; }
     public void Complete() { State = "Completed"; Revision++; }
 }
 public sealed record AdmissionItem(StrongId<Deployment> DeploymentId, Guid InstanceId, string Decision, string? ReasonCode, Guid? TaskId);

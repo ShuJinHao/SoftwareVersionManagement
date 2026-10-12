@@ -12,6 +12,39 @@ namespace Svm.FrameworkTests;
 public sealed class InstanceHttpTests
 {
     [Fact]
+    public async Task PlatformReleaseReportsRemainValidatedWhenPackageFilesAreDisabled()
+    {
+        await using var f = await PackageFixture.CreateAsync();
+        var release = (await f.SendAsync(f.Create())).Value.Release;
+        var other = (await f.Instances.Site.SoftwareAsync("REPORT-OTHER")).Value;
+        var user = await f.Instances.Site.UserAsync(f.Instances.Site.Proof.SubjectId);
+        await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(), user.Id, user.Revision,
+            user.Permissions.Append(new(other.Id, "release.upload")).ToArray(), "夹具另一软件版本授权"));
+        var foreign = (await f.SendAsync(f.Create() with { SoftwareId = other.Id })).Value.Release;
+        var enrolled = await f.Instances.EnrollAsync();
+        await using var api = await LocalApi.StartAsync(f.Database, site: f.Instances.Site.Options, instanceAccess: InstanceFixture.Limits);
+        using var machine = api.Client(new CookieContainer());
+        var bearer = enrolled.Proof.Id + "." + enrolled.Proof.Secret;
+        await Ok(await Machine(machine, api.Url, "/api/v1/client/report-streams", bearer,
+            new { expectedEpoch = enrolled.Registration.StreamEpoch }, Guid.NewGuid()));
+        var report = InstanceFixture.Report(version: release.Version) with { InstalledReleaseId = release.Id };
+        var saved = await Ok(await Machine(machine, api.Url, "/api/v1/client/status-reports", bearer, report));
+        var replay = await Ok(await Machine(machine, api.Url, "/api/v1/client/status-reports", bearer, report));
+        Assert.Equal(saved.GetProperty("lastAcceptedAt").GetString(), replay.GetProperty("lastAcceptedAt").GetString());
+        await Code(await Machine(machine, api.Url, "/api/v1/client/status-reports", bearer,
+            report with { ReportSeq = 2, InstalledReleaseId = Guid.NewGuid() }), 404, "RESOURCE_NOT_FOUND");
+        await Code(await Machine(machine, api.Url, "/api/v1/client/status-reports", bearer,
+            report with { ReportSeq = 2, InstalledReleaseId = foreign.Id, InstalledVersion = foreign.Version }), 404, "RESOURCE_NOT_FOUND");
+        await Code(await Machine(machine, api.Url, "/api/v1/client/status-reports", bearer,
+            report with { ReportSeq = 2, InstalledVersion = "9.9.9" }), 422, "VALIDATION_FAILED");
+        await Code(await Machine(machine, api.Url, "/api/v1/client/versions", bearer), 503, "CONFIGURATION_INVALID");
+        await Code(await Machine(machine, api.Url, "/api/v1/client/packages/" + release.PackageId, bearer), 503, "CONFIGURATION_INVALID");
+        var current = await f.Instances.SendAsync(new GetInstanceQuery(enrolled.Registration.InstanceId));
+        Assert.Equal(release.Id, current.LastSnapshot!.InstalledReleaseId); Assert.Equal(1, current.LastSnapshot.ReportSeq);
+        Assert.Equal(1, await f.Count("ins.installation_evidence"));
+        api.AssertRedacted(enrolled.Proof.Secret);
+    }
+    [Fact]
     public async Task TwoHttpsNodesRegisterReportRecoverAndRevokeWithSafeDocumentedResponses()
     {
         await using var db=await PersonnelDatabase.CreateAsync(); var site=new SiteCatalogOptions(Guid.NewGuid(),"接入 HTTP 夹具","Asia/Shanghai");

@@ -240,7 +240,12 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
         }
         foreach (var b in touched.Values)
             if (w.Kind == "Cancel" && b.State == "Pending" && (await repository.BatchCountsAsync(b.Id.Value, now, ct)).Unfinished == 0) b.Close();
-        if (items.Count == 0) { d.FinishControl(w.Kind, w.NewNotBefore, w.NewLatestStart); w.Complete(); } else w.Yield(now.AddSeconds(options.PollRetrySeconds!.Value));
+        if (items.Count == 0)
+        {
+            var unfinished = w.Kind == "Cancel" && (await repository.CountsAsync(d.Id.Value, ct)).Unfinished > 0;
+            d.FinishControl(w.Kind, w.NewNotBefore, w.NewLatestStart, unfinished); w.Complete();
+        }
+        else w.Yield(now.AddSeconds(options.PollRetrySeconds!.Value));
     }
     private async Task Schedule(Deployment d, DateTimeOffset now, bool available, CancellationToken ct)
     {

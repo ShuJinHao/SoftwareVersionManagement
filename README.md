@@ -69,6 +69,8 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 `SVM_PACKAGE_CONFIG_FILE` 指向权限受限的绝对 JSON 路径，同时须有匹配厂区的 SVM_SITE_CONFIG_FILE/SVM_MESSAGING_CONFIG_FILE；配置字段及边界见[框架设计 6.8 节](docs/软件框架设计.md#68-当前版本与安装包)。HttpApi 只登记 Outbox，Worker 启用包消费者、原生 Inbox 清理及执行器；未配置包能力仍可使用既有管理/接入，包接口返回 CONFIGURATION_INVALID。无效配置拒绝启动，没有内存或单副本降级。
 
+未配置包文件能力时，已有平台版本的安装上报仍通过数据库核验软件归属及版本号。启用包能力时，启动检查包根目录读写、下载日志目录读取/遍历及父级路径；拒绝链接、文件冒充目录或权限不足。日志目录须由部署准备，Worker 不要求其写权限；已有目录权限和包内容保持原样。证书角色完整性补充检查暂缓，现有 HTTPS/mTLS 校验保留。
+
 `eng/packages/nginx.mjs <私有配置绝对路径> <输出绝对路径>` 生成固定两节点网关；镜像摘要在 build/nginx.packages.json。Nginx 要求 auth_request、TLS 及对副本目录的受限读取，公开端口转发同源网页/API，内部副本端口仅允许固定网关证书。生产须设置匹配服务账号的 workerUser/文件权限及网络隔离；本机夹具 root 只用于专用容器。可信结束日志只含请求标识、节点/代次、时间、字节及结果，Worker 采集器的持久游标在重启后继续；提交未知仅查询核实，不自动重发结束写入。HEAD 不生成下载事实，Range 的 ETag 不代替 SHA-256。
 
 此前发布批次新增 `20261011000100_ReleasePublication`，发布资料/证据引用/不可变保护与索引迁移、快照及审阅 SQL `artifacts/release-publication/release-publication-upgrade.sql` 仅在一次性测试库验证；八份旧迁移保持，svm_dev 未升级。两个本机逻辑节点是功能验证环境，不证明不同故障域、容量或生产高可用。测试/清理证据和未覆盖项见框架设计第 11 节。
@@ -82,6 +84,8 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 SVM_TASK_CONFIG_FILE 指向受限绝对 JSON 文件，字段为 defaultStartLocalTime、defaultLatestStartLocalTime（HH:mm）、batchSize、failureLimit、resultWaitSeconds、selectionChunkSize、leaseSeconds、pollRetrySeconds、maxSelectionMembers、snapshotTimeoutSeconds；均须显式提供，不给生产隐含默认值。取值边界见[框架设计 6.10 节](docs/软件框架设计.md#610-当前正式版本更新任务)。同时要求厂区、包和消息配置；缺配置任务接口返回 CONFIGURATION_INVALID，无效配置拒绝启动。
 
 业务、审计、幂等及 Outbox 同事务。显式成员块保留合法格式的请求标识并自然去重；不存在或外软件实例在准入阶段逐项 OUT_OF_SCOPE，不泄露名称、位置或版本，其余合格对象继续；筛选成员在框架自有受限 REPEATABLE READ 事务内物化后封存，普通分页不能替代快照。准备/控制工作只在已接收且有效租约代次下分块推进；已接收工作沿原游标恢复，未接收工作继续时的新代次派发记录与 Outbox 同事务保存，原键重放不重复登记。暂停/继续返回 DeploymentView，改期/取消返回 TaskWorkView、202、Location 及 Retry-After，写入响应不额外要求 instance.read；批次扫描以数据库时间和事实为准。每实例最多一个未结束任务，同投放最多一个开放批次。许可前重查当前身份、发起授权、时段、暂停、方向、包和本机数据保护；拒绝不保存附带快照。回执首个有效终态锁定，重复不计数；人工关闭保留 Unknown，迟到事实不影响新任务/当前安装快照。
+
+投放取消按对象返回结果。控制工作完成后，仍有已获开始许可的未结束任务则投放保持 Paused，继续跟踪回执、超时及人工关闭；只有全部未结束对象均已取消才进入 Canceled。控制工作完成不代表整个投放结束，也不会自动开放后续批次。
 
 新增 20261012000100_TaskWorkflow，任务技术/业务表及 REL 数据保护资料、冻结模型和审阅 SQL 位于 artifacts/deployment-update/deployment-update-upgrade.sql；九份旧迁移不改。仅一次性库执行，svm_dev 未升级。完整 Architecture 为唯一固定门禁，其余选择和实际结果见框架设计第 11.1 节；不因文档或 Git 交付重复运行测试。
 

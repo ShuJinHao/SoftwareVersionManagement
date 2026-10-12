@@ -14,6 +14,59 @@ namespace Svm.FrameworkTests;
 [Trait("Category","Business")]
 public sealed class DeploymentControlTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PartialCancelKeepsAuthorizedTasksTrackedUntilReceiptOrUnknownClosure(bool closeUnknown)
+    {
+        await using var f = await TaskFixture.CreateAsync(); var release = await Formal(f);
+        var instances = new[] { await Enroll(f), await Enroll(f), await Enroll(f) };
+        var deployment = await Deployment(f, release.Id, instances.Select(x => x.Id).ToArray());
+        await Prepare(f, deployment.WorkId!.Value); await Tick(f, deployment.Value.Id);
+        var tasks = (await f.SendAsync(new ListInstanceTasksQuery(new(f.SoftwareId, deployment.Value.Id)))).Items;
+        var active = tasks.First(x => x.State == "Available"); var instance = instances.Single(x => x.Id == active.InstanceId);
+        var attempt = (await f.SendAsync(new ClaimInstanceTaskCommand(Guid.NewGuid(), active.Id), access: instance.Proof, instance: instance.Id)).Value;
+        var permit = (await f.SendAsync(new StartInstanceTaskCommand(Guid.NewGuid(), attempt,
+            new(NotInstalled(2), new(PackageFixture.Input.Sha256, true))), access: instance.Proof, instance: instance.Id)).Value;
+        var view = await f.SendAsync(new GetDeploymentQuery(deployment.Value.Id));
+        var command = new CreateDeploymentControlWorkCommand(Guid.NewGuid(), view.Id, view.Revision, "Cancel", "取消未获许可对象，保留执行跟踪");
+        var control = await f.SendAsync(command); await Prepare(f, control.WorkId!.Value);
+        var works = await f.Count("tsk.works"); var replay = await f.SendAsync(command);
+        Assert.Equal(control.WorkId, replay.WorkId); Assert.Equal("Completed", replay.Value.State);
+        Assert.Equal(works, await f.Count("tsk.works"));
+        var items = (await f.SendAsync(new ListTaskControlItemsQuery(control.WorkId.Value))).Items;
+        Assert.Equal(2, items.Count(x => x.Outcome == "Applied"));
+        Assert.Equal("ALREADY_AUTHORIZED", Assert.Single(items, x => x.Outcome == "Skipped").ReasonCode);
+        Assert.Equal("Completed", (await f.SendAsync(new GetTaskWorkQuery(control.WorkId.Value))).State);
+        view = await f.SendAsync(new GetDeploymentQuery(view.Id));
+        Assert.Equal("Paused", view.State); Assert.False(view.ControlPending);
+        Assert.Equal(2, view.ResultCounts.Canceled); Assert.Equal(1, view.ResultCounts.Unfinished);
+        Assert.Equal(permit.StartAuthorizedAt, (await f.SendAsync(new GetInstanceTaskQuery(active.Id))).StartAuthorizedAt);
+        var schedule = await PersistenceDatabase.ScalarAsync<Guid>(f.Database.ReaderConnection,
+            $"SELECT \"Id\" FROM tsk.works WHERE \"ResourceId\"='{view.Id}' AND \"Kind\"='Schedule'");
+        await Tick(f, view.Id);
+        Assert.NotEqual("Completed", (await f.SendAsync(new GetTaskWorkQuery(schedule))).State);
+        Assert.DoesNotContain((await f.SendAsync(new GetDeploymentBatchesQuery(view.Id))).Items, x => x.Ordinal > 1 && x.State == "Open");
+        if (closeUnknown)
+        {
+            f.Instances.Clock.Advance(TimeSpan.FromSeconds(31)); await Tick(f, view.Id);
+            view = await f.SendAsync(new GetDeploymentQuery(view.Id));
+            Assert.Equal("Paused", view.State); Assert.Contains(view.PauseReasons, x => x.Code == "ReceiptTimeout");
+            Assert.NotEqual("Completed", (await f.SendAsync(new GetTaskWorkQuery(schedule))).State);
+            active = await f.SendAsync(new GetInstanceTaskQuery(active.Id));
+            await f.SendAsync(new ControlInstanceTaskCommand(Guid.NewGuid(), active.Id, active.Revision, "CloseUnknown",
+                "现场结束跟踪", "夹具核实：安装进程已结束，结果未知", true));
+        }
+        else
+        {
+            var receipt = new SubmitTaskReceiptCommand(attempt, new(Guid.NewGuid(), 3, "Terminal", Result: "Succeeded"));
+            Assert.True((await f.SendAsync(receipt, access: instance.Proof, instance: instance.Id)).Value.Applied);
+            Assert.Equal(1, (await f.SendAsync(new GetDeploymentQuery(view.Id))).ResultCounts.Succeeded);
+        }
+        await Tick(f, view.Id);
+        Assert.Equal("Completed", (await f.SendAsync(new GetDeploymentQuery(view.Id))).State);
+        Assert.Equal("Completed", (await f.SendAsync(new GetTaskWorkQuery(schedule))).State);
+    }
     [Fact]
     public async Task SequencedReceiptsDoNotRegressOrCountTwiceAndFailureRequiresExactReview()
     {
@@ -96,6 +149,7 @@ public sealed class DeploymentControlTests
         v=await f.SendAsync(new GetDeploymentQuery(v.Id)); Assert.False(v.ControlPending); Assert.Equal("Paused",v.State);
         var cancel=await f.SendAsync(new CreateDeploymentControlWorkCommand(Guid.NewGuid(),v.Id,v.Revision,"Cancel","cancel pending")); await Prepare(f,cancel.WorkId!.Value);
         Assert.Equal("Canceled",(await f.SendAsync(new GetInstanceTaskQuery(t.Id))).State);
+        Assert.Equal("Canceled",(await f.SendAsync(new GetDeploymentQuery(v.Id))).State);
         var items=await f.SendAsync(new ListTaskControlItemsQuery(cancel.WorkId.Value)); Assert.Equal("Applied",Assert.Single(items.Items).Outcome);
         user=await f.Instances.Site.UserAsync(user.Id);
         await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(),user.Id,user.Revision,user.Permissions.Where(p=>p.Operation!="deployment.control").ToArray(),"夹具撤销当前控制授权"));
