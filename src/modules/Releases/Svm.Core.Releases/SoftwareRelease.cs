@@ -23,6 +23,12 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
     public Guid PackageId { get; private set; }
     public Guid CreatedBy { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+    public Guid? PublishedBy { get; private set; }
+    public string? PublishedEmployeeNo { get; private set; }
+    public DateTimeOffset? PublishedAt { get; private set; }
+    public Guid? TestEvidenceId { get; private set; }
+    public string? PublishReason { get; private set; }
+    public string? PublishConclusion { get; private set; }
     public DateTimeOffset? DisabledAt { get; private set; }
     public string? DisableReason { get; private set; }
     public long Revision { get; private set; } = 1;
@@ -32,6 +38,15 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
         if (State == "Test") return;
         if (State != "Staging") throw new InvalidOperationException("Release cannot open for testing.");
         State = "Test"; Revision++;
+    }
+    public void Publish(Guid evidenceId, string reason, string conclusion, Guid actorId, string employeeNo, DateTimeOffset now)
+    {
+        if (State != "Test" || PublishedAt is not null) throw new InvalidOperationException("Release cannot be published.");
+        if (evidenceId == Guid.Empty || actorId == Guid.Empty || string.IsNullOrWhiteSpace(employeeNo) ||
+            string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(conclusion)) throw new ArgumentException("Publication facts are required.");
+        TestEvidenceId = evidenceId; PublishReason = reason; PublishConclusion = conclusion;
+        PublishedBy = actorId; PublishedEmployeeNo = employeeNo; PublishedAt = now.ToUniversalTime();
+        State = "Formal"; Revision++;
     }
     public void Disable(string reason, DateTimeOffset now)
     { if (State == "Disabled") throw new InvalidOperationException("Release is disabled."); State = "Disabled"; DisableReason = reason; DisabledAt = now; Revision++; }

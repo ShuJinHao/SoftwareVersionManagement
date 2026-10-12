@@ -13,6 +13,9 @@ internal static class ReleasePackageModel
         r.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<SoftwareRelease>(x)).ValueGeneratedNever(); r.Ignore(x => x.DomainEvents); r.Ignore(x => x.Version);
         r.Property(x => x.State).HasMaxLength(32); r.Property(x => x.ChangeLevel).HasMaxLength(16); r.Property(x => x.ChangeSummary).HasMaxLength(2000);
         r.Property(x => x.ChangeReason).HasMaxLength(256); r.Property(x => x.DisableReason).HasMaxLength(256);
+        r.Property(x => x.PublishedEmployeeNo).HasMaxLength(64); r.Property(x => x.PublishReason).HasMaxLength(256);
+        r.Property(x => x.PublishConclusion).HasMaxLength(2000);
+        r.HasIndex(x => new { x.SoftwareId, x.PublishedAt });
         r.HasIndex(x => new { x.SoftwareId, x.Major, x.Minor, x.Patch }).IsUnique(); r.HasIndex(x => x.PackageId).IsUnique();
         var p = model.Entity<PackageAsset>(); p.ToTable("packages", "pkg"); p.HasKey(x => x.Id);
         p.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<PackageAsset>(x)).ValueGeneratedNever(); p.Ignore(x => x.DomainEvents);

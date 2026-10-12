@@ -15,6 +15,13 @@ public static class ManagedInstanceRegistration
 }
 internal sealed class ManagedInstances(IManagedInstanceRepository repository, IUnitOfWork unitOfWork, SiteCatalogOptions options, TimeProvider clock) : IManagedInstances
 {
+    public async Task VerifyInstallationEvidenceAsync(Guid evidenceId, Guid softwareId, Guid releaseId, string version, CancellationToken token)
+    {
+        var evidence = await repository.EvidenceAsync(evidenceId, token) ?? throw Missing();
+        if (evidence.SoftwareId != softwareId || evidence.InstalledReleaseId != releaseId) throw Missing();
+        if (evidence.InstallationState != "Installed" || evidence.InstalledVersion != version)
+            throw new RequestRejectedException(RequestFailure.InvalidState);
+    }
     public async Task<InstanceIdentity?> GetIdentityAsync(Guid id,bool protect,CancellationToken token)
     { var i=await repository.GetAsync(id,protect,token); return i is null ? null : View(i); }
     public Task CreateAsync(Guid id,Guid softwareId,Guid deviceId,Guid installationKey,CancellationToken token)

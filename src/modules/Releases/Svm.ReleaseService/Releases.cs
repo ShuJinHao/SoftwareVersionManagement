@@ -32,6 +32,14 @@ internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRe
         if (release.State == "Disabled") throw new RequestRejectedException(RequestFailure.InvalidState);
         release.Disable(reason, clock.GetUtcNow()); return View(release);
     }
+    public async Task<ReleaseView> PublishAsync(PublishReleaseCommand input, Guid actorId, string employeeNo, CancellationToken token)
+    {
+        RequireWrite(); var release = await Existing(input.ReleaseId, true, token);
+        if (release.Revision != input.ExpectedRevision) throw new RequestRejectedException(RequestFailure.RevisionConflict);
+        if (release.State != "Test" || release.PublishedAt is not null) throw new RequestRejectedException(RequestFailure.InvalidState);
+        release.Publish(input.TestEvidenceId, input.PublishReason, input.PublishConclusion, actorId, employeeNo, clock.GetUtcNow());
+        return View(release);
+    }
     public async Task OpenTestAsync(Guid id, Guid packageId, CancellationToken token)
     {
         RequireWrite(); var release = await Existing(id, true, token);
@@ -48,5 +56,6 @@ internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRe
         await repository.GetAsync(id, protect, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
     private void RequireWrite() { if (unit.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
     private static ReleaseView View(SoftwareRelease r) => new(r.Id.Value, r.SoftwareId, r.Version, r.State, r.ChangeLevel,
-        r.ChangeSummary, r.ChangeReason, r.PackageId, false, r.CreatedBy, r.CreatedAt, r.DisabledAt, r.DisableReason, r.Revision);
+        r.ChangeSummary, r.ChangeReason, r.PackageId, false, r.CreatedBy, r.CreatedAt, r.DisabledAt, r.DisableReason, r.Revision,
+        r.PublishedBy, r.PublishedEmployeeNo, r.PublishedAt, r.TestEvidenceId, r.PublishReason, r.PublishConclusion);
 }

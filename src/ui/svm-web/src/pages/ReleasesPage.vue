@@ -11,15 +11,18 @@ import { hashFile } from '../packages/hashFile'
 
 const route = useRoute(), session = useSession(), mutation = useProtectedMutation()
 const { busy, uncertain, error } = mutation
-const globalPending = inject(pendingWriteKey, ref(false)), pendingAction = ref<'retry' | 'disable' | null>(null)
+const globalPending = inject(pendingWriteKey, ref(false)), pendingAction = ref<'retry' | 'disable' | 'publish' | null>(null)
 const softwareId = typeof route.query.softwareId === 'string' ? route.query.softwareId : ''
-const software = ref<Software | null>(null), channel = ref('Test'), items = ref<Release[]>([]), selected = ref<Release | null>(null)
+const software = ref<Software | null>(null), channel = ref(route.query.channel === 'Formal' ? 'Formal' : 'Test'), items = ref<Release[]>([]), selected = ref<Release | null>(null)
 const evidenceNext = ref<string | null>(null), auditNext = ref<string | null>(null)
 const pkg = ref<Package | null>(null), evidence = ref<TestEvidence[]>([]), audits = ref<DownloadAudit[]>([])
 const cursors = ref(['']), nextCursor = ref<string | null>(null), loading = ref(false), failure = ref(''), notice = ref('')
 const creating = ref(false), level = ref('Patch'), summary = ref(''), reason = ref(''), expectedVersion = ref('')
 const file = ref<File | null>(null), digest = ref(''), hashedBytes = ref(0), hashing = ref(false), uploading = ref(false), uploadUnknown = ref(false)
 const registered = ref<ReleaseUpload | null>(null), maxBytes = ref<number | null>(null), actionReason = ref('')
+const chosenEvidence = ref(''), publishReason = ref(''), publishConclusion = ref('')
+const canPublish = computed(() => session.can('release.publish', softwareId))
+const publishReady = computed(() => selected.value?.state === 'Test' && pkg.value?.state === 'Ready' && pkg.value.healthyReplicaCount === 2 && pkg.value.sizeBytes === pkg.value.expectedSize && pkg.value.sha256 === pkg.value.expectedSha256)
 const locked = computed(() => mutation.blocked.value || uploading.value || uploadUnknown.value)
 const canUpload = computed(() => session.can('release.upload', softwareId)), canDisable = computed(() => session.can('release.disable', softwareId))
 let hashAbort: AbortController | null = null, uploadAbort: AbortController | null = null, poll: ReturnType<typeof setTimeout> | null = null
@@ -34,16 +37,18 @@ async function load(reset = false) {
   try {
     const query = new URLSearchParams({ channel: channel.value, pageSize: '50' })
     const cursor = cursors.value[cursors.value.length - 1]; if (cursor) query.set('cursor', cursor)
-    const result = await request<Page<Release>>(`/api/v1/manage/software/${softwareId}/releases?${query}`)
-    if (!disposed) { items.value = result.items; nextCursor.value = result.nextCursor }
+    const [result, info] = await Promise.all([request<Page<Release>>(`/api/v1/manage/software/${softwareId}/releases?${query}`), request<Software>('/api/v1/manage/software/' + softwareId)])
+    if (!disposed) { items.value = result.items; nextCursor.value = result.nextCursor; software.value = info }
   } catch (e) { items.value = []; nextCursor.value = null; await failed(e) }
   finally { loading.value = false }
 }
 async function detail(id: string) {
   failure.value = ''
   try {
-    selected.value = await request<Release>('/api/v1/manage/releases/' + id)
-    const current = selected.value
+    const current = await request<Release>('/api/v1/manage/releases/' + id)
+    if (current.softwareId !== softwareId) throw new Error('版本不属于当前软件。')
+    if (selected.value?.id !== id) { chosenEvidence.value = ''; publishReason.value = ''; publishConclusion.value = '' }
+    selected.value = current
     items.value = items.value.map(item => item.id === current.id ? current : item)
     pkg.value = await request<Package>('/api/v1/manage/packages/' + selected.value.packageId)
     const proof = await request<Page<TestEvidence>>(`/api/v1/manage/releases/${id}/test-evidence?pageSize=50`)
@@ -106,6 +111,19 @@ async function retry() {
   const result = await mutation.perform<Package>(`/api/v1/manage/packages/${pkg.value.id}/retry`, 'POST', { reason: actionReason.value, expectedRevision: pkg.value.revision }, session.current!.csrfToken)
   if (mutation.completed.value && result) { pkg.value = result; actionReason.value = ''; notice.value = '原版本的副本工作已重新派发。' } else await session.load()
 }
+async function publish() {
+  if (!selected.value || !session.current || uncertain.value && pendingAction.value !== 'publish') return
+  pendingAction.value = 'publish'
+  const result = await mutation.perform<Release>(`/api/v1/manage/releases/${selected.value.id}/publish`, 'POST', { testEvidenceId: chosenEvidence.value, publishReason: publishReason.value, publishConclusion: publishConclusion.value, expectedRevision: selected.value.revision }, session.current.csrfToken)
+  if (mutation.completed.value && result) {
+    selected.value = result; channel.value = 'Formal'; chosenEvidence.value = ''; publishReason.value = ''; publishConclusion.value = ''
+    notice.value = `${result.version} 已转为正式版。`; await load(true); await detail(result.id)
+  } else await session.load()
+}
+async function latestFormal() {
+  if (locked.value || !software.value?.latestAvailableFormalReleaseId) return
+  channel.value = 'Formal'; await load(true); if (software.value.latestAvailableFormalReleaseId) await detail(software.value.latestAvailableFormalReleaseId)
+}
 async function disable() {
   if (!selected.value || !actionReason.value || uncertain.value && pendingAction.value !== 'disable') return
   pendingAction.value = 'disable'
@@ -135,7 +153,7 @@ watch([mutation.blocked, uploading, uploadUnknown], ([write, stream, unknown]) =
 watch(creating, value => { if (!value) hashAbort?.abort() })
 onMounted(async () => {
   window.addEventListener('beforeunload', unload)
-  try { software.value = await request<Software>('/api/v1/manage/software/' + softwareId); maxBytes.value = (await request<{ maxPackageBytes: number }>('/api/v1/manage/capabilities')).maxPackageBytes; await load() }
+  try { maxBytes.value = (await request<{ maxPackageBytes: number }>('/api/v1/manage/capabilities')).maxPackageBytes; await load(); if (typeof route.query.releaseId === 'string') await detail(route.query.releaseId) }
   catch (e) { await failed(e) }
   poll = setTimeout(tick, 5000)
 })
@@ -146,8 +164,9 @@ onUnmounted(() => { disposed = true; globalPending.value = false; hashAbort?.abo
     <div class="page-heading"><div><div class="eyebrow">软件版本</div><h1>{{ software?.name ?? '版本与安装包' }}</h1><p v-if="software" class="muted">{{ software.code }} · {{ categoryName(software.category) }} · 同软件设备共用版本库</p></div><button v-if="canUpload" class="primary" :disabled="locked || !maxBytes" @click="begin">登记版本并上传</button></div>
     <p v-if="failure" class="error" role="alert">{{ failure }}</p><p v-if="notice" class="success" role="status">{{ notice }}</p>
     <div class="tab-row"><button :aria-pressed="channel === 'Test'" :disabled="locked" @click="channel = 'Test'; changeChannel()">测试版本</button><button :aria-pressed="channel === 'Formal'" :disabled="locked" @click="channel = 'Formal'; changeChannel()">正式版本</button></div>
+    <div class="dialog-actions"><button :disabled="locked || loading" @click="load(true)">刷新列表</button><button v-if="software?.latestAvailableFormalReleaseId" :disabled="locked" @click="latestFormal">查看最新可用正式版</button></div>
     <div class="account-layout">
-      <section class="panel"><div v-if="loading" class="empty" role="status">正在读取版本…</div><div v-else-if="!items.length" class="empty">{{ channel === 'Formal' ? '尚无正式版本。测试转正式将在后续批次开放。' : '没有可查看的测试版本。' }}</div>
+      <section class="panel"><div v-if="loading" class="empty" role="status">正在读取版本…</div><div v-else-if="!items.length" class="empty">{{ channel === 'Formal' ? '尚无正式版本。完成测试并转正式后将在此展示。' : '没有可查看的测试版本。' }}</div>
         <div v-else class="table-scroll"><table><thead><tr><th>版本</th><th>状态</th><th>更新内容</th><th>登记时间</th></tr></thead><tbody><tr v-for="item in items" :key="item.id" :class="{ selected: selected?.id === item.id }"><td><button class="text-button" :disabled="locked" @click="detail(item.id)">{{ item.version }}</button></td><td>{{ releaseState(item.state) }}</td><td>{{ item.changeSummary }}</td><td>{{ new Date(item.createdAt).toLocaleString() }}</td></tr></tbody></table></div>
         <footer class="pagination"><span>本页可查看 {{ items.length }} 项</span><div><button :disabled="loading || locked || cursors.length <= 1" @click="previous">上一页</button><button :disabled="loading || locked || !nextCursor" @click="next">下一页</button></div></footer>
       </section>
@@ -157,6 +176,8 @@ onUnmounted(() => { disposed = true; globalPending.value = false; hashAbort?.abo
           <label v-if="canDisable && selected.state !== 'Disabled' || canUpload && pkg.processingStage === 'CopyFailed'">操作原因<input v-model="actionReason" maxlength="256" :disabled="locked" /></label>
           <div class="dialog-actions"><button v-if="canUpload && pkg.processingStage === 'CopyFailed'" :disabled="busy || !actionReason || uncertain && pendingAction !== 'retry'" @click="retry">{{ uncertain ? '核实原操作' : '重试副本工作' }}</button><button v-if="canDisable && selected.state !== 'Disabled'" :disabled="busy || !actionReason || uncertain && pendingAction !== 'disable'" @click="disable">{{ uncertain ? '核实原操作' : '停用版本' }}</button><button v-if="error && !uncertain" @click="refresh">加载最新详情</button></div><p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">结果待核实；原请求及操作键保留在当前页面内存中。</p>
         </template>
+        <section v-if="selected.publishedAt" class="publication-history" aria-labelledby="publication-history-title"><h3 id="publication-history-title">正式发布记录</h3><dl><div><dt>发布工号</dt><dd>{{ selected.publishedEmployeeNo }}</dd></div><div><dt>发布时间</dt><dd>{{ new Date(selected.publishedAt).toLocaleString() }}</dd></div><div><dt>通过原因</dt><dd>{{ selected.publishReason }}</dd></div><div><dt>测试结论</dt><dd class="conclusion">{{ selected.publishConclusion }}</dd></div><div><dt>证据标识</dt><dd>{{ selected.testEvidenceId }}</dd></div></dl></section>
+        <section v-if="selected.state === 'Test' && canPublish || uncertain && pendingAction === 'publish'" class="publication-panel" aria-labelledby="publication-title"><h3 id="publication-title">测试转正式</h3><p class="muted">选择此版本的真实安装证据并填写结论，工号和时间由平台记录。</p><p v-if="!publishReady" class="muted">发布需两个当前健康副本；请等待核对或修复后刷新详情。</p><p v-if="!evidence.length" class="muted">尚无可选择的安装证据，不能发布。</p><form @submit.prevent="publish"><fieldset :disabled="locked"><label>安装证据<select v-model="chosenEvidence" required><option value="" disabled>选择安装上报</option><option v-for="item in evidence" :key="item.id" :value="item.id">{{ item.installedVersion }} · {{ item.instanceId }} · {{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</option></select></label><label>测试通过原因<input v-model="publishReason" required maxlength="256" /></label><label>测试结论<textarea v-model="publishConclusion" required maxlength="2000" rows="3" /></label></fieldset><button class="primary" :disabled="busy || uncertain && pendingAction !== 'publish' || !uncertain && (!canPublish || !publishReady || !chosenEvidence || !publishReason.trim() || !publishConclusion.trim())">{{ uncertain ? '核实原发布操作' : '转为正式版' }}</button></form></section>
         <h3>测试安装证据</h3><p class="muted">下载完成不代表安装成功；证据来自实例引用此版本的有效上报。</p><ul v-if="evidence.length" class="permission-list"><li v-for="item in evidence" :key="item.id">{{ item.installedVersion }} · {{ item.instanceId }}<small>{{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</small></li></ul><p v-else class="muted">尚无关联安装证据。</p><button v-if="evidenceNext" @click="moreEvidence">更多安装证据</button>
         <template v-if="session.can('audit.read', softwareId)"><h3>下载传输记录（当前页）</h3><ul v-if="audits.length" class="permission-list"><li v-for="item in audits" :key="item.requestId">{{ item.employeeNo ?? item.actorKind }} · {{ item.state }}<small>{{ item.bytesSent ?? '尚未取得可信结束记录' }} 字节 · {{ item.startedAt }}</small></li></ul><p v-else class="muted">本页无此版本的下载记录。</p><button v-if="auditNext" @click="moreAudit()">更多下载记录</button></template>
       </template><div v-else class="empty">选择版本，查看更新详情、包处理和关联证据。</div></aside>
@@ -177,5 +198,9 @@ onUnmounted(() => { disposed = true; globalPending.value = false; hashAbort?.abo
 .tab-row { display: flex; gap: .5rem; margin: 1rem 0; }
 .tab-row button[aria-pressed="true"] { background: #edf3ff; color: #255dcc; border-color: #acc4ef; }
 .upload-panel { margin-top: 1.5rem; padding: 1.5rem; }
-.upload-panel fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 1rem; }
+.upload-panel fieldset, .publication-panel fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 1rem; }
+.publication-panel { margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #dde5ef; }
+.publication-panel select { width: 100%; min-width: 0; }
+.publication-panel button { margin-top: 1rem; }
+.conclusion { white-space: pre-wrap; }
 </style>

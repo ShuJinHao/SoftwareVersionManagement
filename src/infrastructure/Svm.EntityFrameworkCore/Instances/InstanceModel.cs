@@ -24,6 +24,7 @@ internal static class InstanceModel
         s.HasIndex(x=>new { x.SoftwareId,x.LastAcceptedAt,x.InstanceId }); s.HasOne<ManagedInstance>().WithMany().HasForeignKey(x=>x.InstanceId).OnDelete(DeleteBehavior.Restrict);
         var e=m.Entity<InstallationEvidence>(); e.ToTable("installation_evidence","ins"); e.Property(x=>x.InstanceId).HasConversion(x=>x.Value,x=>new StrongId<ManagedInstance>(x)); e.HasKey(x=>x.Id); e.Property(x=>x.Id).ValueGeneratedNever(); e.Property(x=>x.InstallationState).HasMaxLength(32); e.Property(x=>x.InstalledVersion).HasMaxLength(128); e.Property(x=>x.ReportedRunningState).HasMaxLength(32); e.Property(x=>x.RequestDigest).HasMaxLength(64);
         e.HasIndex(x=>new { x.InstanceId,x.StreamEpoch,x.ReportSeq }).IsUnique(); e.HasIndex(x=>new { x.InstanceId,x.ReceivedAt,x.Id }); e.HasOne<ManagedInstance>().WithMany().HasForeignKey(x=>x.InstanceId).OnDelete(DeleteBehavior.Restrict);
+        e.HasIndex(x => new { x.Id, x.InstalledReleaseId, x.SoftwareId }).IsUnique();
         var sr=m.Entity<ReportStreamReceipt>(); sr.ToTable("report_stream_receipts","ins"); sr.Property(x=>x.InstanceId).HasConversion(x=>x.Value,x=>new StrongId<ManagedInstance>(x)); sr.HasKey(x=>x.OperationId); sr.Property(x=>x.OperationId).ValueGeneratedNever(); sr.HasOne<ManagedInstance>().WithMany().HasForeignKey(x=>x.InstanceId).OnDelete(DeleteBehavior.Restrict);
     }
 }

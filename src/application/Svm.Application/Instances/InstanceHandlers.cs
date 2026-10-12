@@ -71,5 +71,14 @@ internal sealed class GetInstanceQueryHandler(IInstanceQueries queries) : IReque
 { public async Task<InstanceView> Handle(GetInstanceQuery x,CancellationToken t) => await queries.GetAsync(x.InstanceId,t) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound); }
 internal sealed class GetInstanceHistoryQueryHandler(IInstanceQueries queries) : IRequestHandler<GetInstanceHistoryQuery,InstancePage<InstallationHistoryView>>
 { public Task<InstancePage<InstallationHistoryView>> Handle(GetInstanceHistoryQuery x,CancellationToken t) => queries.HistoryAsync(x.InstanceId,x.PageSize,x.After,t); }
-internal sealed class GetClientContextQueryHandler(IManagedInstances instances,ICallContext calls) : IRequestHandler<GetClientContextQuery,ClientContext>
-{ public Task<ClientContext> Handle(GetClientContextQuery x,CancellationToken t) => instances.ContextAsync(calls.Current!.Actor.InstanceId!.Value,t); }
+internal sealed class GetClientContextQueryHandler(IManagedInstances instances, ICallContext calls, IFormalReleaseAvailability? availability = null)
+    : IRequestHandler<GetClientContextQuery, ClientContext>
+{
+    public async Task<ClientContext> Handle(GetClientContextQuery x, CancellationToken token)
+    {
+        var context = await instances.ContextAsync(calls.Current!.Actor.InstanceId!.Value, token);
+        Guid? latest = null;
+        if (availability is not null && (await availability.LatestAsync([context.SoftwareId], token)).TryGetValue(context.SoftwareId, out var id)) latest = id;
+        return context with { LatestAvailableFormalReleaseId = latest };
+    }
+}

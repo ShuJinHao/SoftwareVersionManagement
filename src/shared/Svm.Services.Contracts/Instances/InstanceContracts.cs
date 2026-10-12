@@ -44,7 +44,8 @@ public sealed record StateReport(long StreamEpoch, long ReportSeq, DateTimeOffse
     IReadOnlyList<string> ReportedIps, DatabaseState DatabaseState);
 public sealed record ReportResult(bool Applied, long CurrentEpoch, long CurrentReportSeq, DateTimeOffset? LastAcceptedAt, Guid? EvidenceId);
 public sealed record ClientContext(Guid InstanceId, Guid SoftwareId, Guid SiteId, string SiteTimeZone, long CurrentEpoch,
-    long LastReportSeq, DateTimeOffset? LastAcceptedAt, int PollRetrySeconds = 60, int MaxRequestBytes = 8192, int MaxPageSize = 200);
+    long LastReportSeq, DateTimeOffset? LastAcceptedAt, int PollRetrySeconds = 60, int MaxRequestBytes = 8192, int MaxPageSize = 200,
+    Guid? LatestAvailableFormalReleaseId = null);
 public sealed record InstanceLocation(Guid SiteId, string SiteName, Guid ProcessId, string ProcessCode, string ProcessName);
 public sealed record InstanceView(Guid Id, Guid SoftwareId, Guid DeviceId, string DeviceNo, string DeviceName, InstanceLocation Location,
     string Lifecycle, StateReport? LastSnapshot, DateTimeOffset? LastAcceptedAt, long? UnreportedSeconds, string Freshness,
@@ -77,6 +78,7 @@ public interface IInstanceAccess
 }
 public interface IManagedInstances
 {
+    Task VerifyInstallationEvidenceAsync(Guid evidenceId, Guid softwareId, Guid releaseId, string version, CancellationToken token);
     Task<InstanceIdentity?> GetIdentityAsync(Guid id, bool protect, CancellationToken token);
     Task CreateAsync(Guid id, Guid softwareId, Guid deviceId, Guid installationKey, CancellationToken token);
     Task<long> InvalidateStreamAsync(Guid instanceId, CancellationToken token);

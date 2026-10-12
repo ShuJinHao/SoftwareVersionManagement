@@ -24,6 +24,12 @@ internal sealed class DisableReleaseCommandValidator : PackageValidator<DisableR
     public DisableReleaseCommandValidator() => RuleFor(x=>x).Must(x=>x.Key!=Guid.Empty && x.ReleaseId!=Guid.Empty && x.ExpectedRevision>0 && Text(x.Reason,256)).WithErrorCode("VALIDATION_FAILED");
 }
 
+internal sealed class PublishReleaseCommandValidator : PackageValidator<PublishReleaseCommand>
+{
+    public PublishReleaseCommandValidator() => RuleFor(x => x).Must(x => x.Key != Guid.Empty && x.ReleaseId != Guid.Empty &&
+        x.ExpectedRevision > 0 && x.TestEvidenceId != Guid.Empty && Text(x.PublishReason, 256) && !string.IsNullOrWhiteSpace(x.PublishConclusion) && x.PublishConclusion.Length <= 2000 &&
+        !x.PublishConclusion.Any(c => char.IsControl(c) && c is not ('\n' or '\r' or '\t'))).WithErrorCode("VALIDATION_FAILED");
+}
 internal sealed class RetryPackageCommandValidator : PackageValidator<RetryPackageCommand>
 {
     public RetryPackageCommandValidator() => RuleFor(x=>x).Must(x=>x.Key!=Guid.Empty && x.PackageId!=Guid.Empty && x.ExpectedRevision>0 && Text(x.Reason,256)).WithErrorCode("VALIDATION_FAILED");

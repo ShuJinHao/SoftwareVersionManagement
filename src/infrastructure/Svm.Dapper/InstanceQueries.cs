@@ -2,10 +2,11 @@ using System.Text.Json;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Instances;
 using Svm.Services.Contracts.Framework;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.Dapper;
 
-internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope scope,TimeProvider? clock=null) : IInstanceQueries
+internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope scope,TimeProvider? clock=null, IFormalReleaseAvailability? availability = null) : IInstanceQueries
 {
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
     internal const string Projection = """
@@ -23,7 +24,9 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
         if(permission is not ("instance.read" or "instance.manage")) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         await scope.EnsureAsync(null,token);
         var row=(await session.QueryAsync<InstanceRow>(Projection+" WHERE i.\"Id\"=@id AND "+Visible.Replace("'instance.read'","@permission"),new { id,subjectId=scope.SubjectId,siteId=scope.Site.SiteId,permission },token)).SingleOrDefault();
-        return row is null ? null : row.View(scope.Site,Now);
+        if (row is null) return null;
+        await SetLatestAsync([row], token);
+        return row.View(scope.Site,Now);
     }
     public async Task<InstancePage<InstanceView>> ListAsync(InstanceListInput x,CancellationToken token)
     {
@@ -42,7 +45,14 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
           """,new { subjectId=scope.SubjectId,siteId=scope.Site.SiteId,softwareId=x.Filter.SoftwareId,after=x.After,processId=x.Filter.ProcessId,
             deviceId=x.Filter.DeviceId,deviceNo=CatalogReadScope.Prefix(x.Filter.DeviceNo),lifecycle=x.Filter.Lifecycle,running=x.Filter.RunningState,
             release=x.Filter.InstalledReleaseId,ip=x.Filter.ReportedIp,freshness=x.Filter.Freshness,boundary=now.AddMinutes(-5),take=x.PageSize+1 },token);
-        var items=rows.Take(x.PageSize).Select(r=>r.View(scope.Site,now)).ToArray(); return new(items,rows.Count>x.PageSize?items[^1].Id:null);
+        var selected = rows.Take(x.PageSize).ToArray(); await SetLatestAsync(selected, token);
+        var items=selected.Select(r=>r.View(scope.Site,now)).ToArray(); return new(items,rows.Count>x.PageSize?items[^1].Id:null);
+    }
+    private async Task SetLatestAsync(IReadOnlyList<InstanceRow> rows, CancellationToken token)
+    {
+        if (availability is null) return;
+        var latest = await availability.LatestAsync(rows.Select(row => row.SoftwareId).Distinct().ToArray(), token);
+        foreach (var row in rows) row.LatestAvailableFormalReleaseId = latest.TryGetValue(row.SoftwareId, out var id) ? id : null;
     }
     public async Task<InstancePage<InstallationHistoryView>> HistoryAsync(Guid id,int size,Guid? after,CancellationToken token)
     {
@@ -102,7 +112,8 @@ internal class InstanceRow
     public string DeviceNo {get;set;}=""; public string DeviceName {get;set;}=""; public Guid ProcessId {get;set;}
     public string ProcessCode {get;set;}=""; public string ProcessName {get;set;}=""; public string Lifecycle {get;set;}="";
     public long Revision {get;set;} public string? SnapshotJson {get;set;} public DateTimeOffset? LastAcceptedAt {get;set;}
+    public Guid? LatestAvailableFormalReleaseId { get; set; }
     internal InstanceView View(SiteView site,DateTimeOffset now) => new(Id,SoftwareId,DeviceId,DeviceNo,DeviceName,new(site.SiteId,site.SiteName,ProcessId,ProcessCode,ProcessName),
         Lifecycle,SnapshotJson is null?null:JsonSerializer.Deserialize<StateReport>(SnapshotJson),LastAcceptedAt,
-        LastAcceptedAt is { } t ? Math.Max(0,(long)Math.Floor((now-t).TotalSeconds)):null,InstanceValidation.Freshness(LastAcceptedAt,now),null,null,null,Revision);
+        LastAcceptedAt is { } t ? Math.Max(0,(long)Math.Floor((now-t).TotalSeconds)):null,InstanceValidation.Freshness(LastAcceptedAt,now),LatestAvailableFormalReleaseId,null,null,Revision);
 }

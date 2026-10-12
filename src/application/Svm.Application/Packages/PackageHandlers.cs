@@ -34,6 +34,21 @@ internal sealed class DisableReleaseCommandHandler(IReleases releases, IPackages
     public Task<OperationResult<ReleaseView>> Handle(DisableReleaseCommand x, CancellationToken token) => completion.ExecuteAsync(
         "rel.release.disable", x.Reason, async () => { var r = await releases.DisableAsync(x.ReleaseId, x.ExpectedRevision, x.Reason, token); await packages.StopAsync(r.PackageId, token); return r; }, x => x.Id, token);
 }
+internal sealed class PublishReleaseCommandHandler(IReleases releases, IPackages packages, IManagedInstances instances, CatalogCompletion completion)
+    : IRequestHandler<PublishReleaseCommand, OperationResult<ReleaseView>>
+{
+    public Task<OperationResult<ReleaseView>> Handle(PublishReleaseCommand x, CancellationToken token) =>
+        completion.ExecuteAsync("rel.release.publish", x.PublishReason, async actor =>
+        {
+            var release = await releases.GetAsync(x.ReleaseId, true, token);
+            if (release.Revision != x.ExpectedRevision) throw new RequestRejectedException(RequestFailure.RevisionConflict);
+            if (release.State != "Test") throw new RequestRejectedException(RequestFailure.InvalidState);
+            await instances.VerifyInstallationEvidenceAsync(x.TestEvidenceId, release.SoftwareId, release.Id, release.Version, token);
+            await packages.VerifyPublishReadyAsync(release.PackageId, release.Id, release.SoftwareId, token);
+            var published = await releases.PublishAsync(x, actor.SubjectId, actor.EmployeeNo, token);
+            return published with { DownloadAvailable = true };
+        }, release => release.Id, token);
+}
 internal sealed class RetryPackageCommandHandler(IPackages packages, ICallContext calls, PackageDispatch dispatch, IIntegrationEventOutbox outbox, CatalogCompletion completion)
     : IRequestHandler<RetryPackageCommand, OperationResult<PackageView>>
 {
