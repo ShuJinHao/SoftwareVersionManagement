@@ -9,7 +9,7 @@ namespace Svm.Services.CrossCutting.Pipeline;
 /// Host-only dispatcher for one background invocation. The new scope obtains its own trusted
 /// context source; no ambient HTTP actor or caller-supplied role is copied into it.
 /// </summary>
-public sealed class ScopedRequestExecutor(IServiceScopeFactory scopeFactory) : IOperationResultRecovery, IIntegrationConsumptionRecovery
+public sealed class ScopedRequestExecutor(IServiceScopeFactory scopeFactory) : IOperationResultRecovery, IIntegrationConsumptionRecovery, IProtocolRecovery
 {
     public async Task<TResponse> SendAsync<TResponse>(IRequest<TResponse> request, CancellationToken cancellationToken)
     {
@@ -25,6 +25,16 @@ public sealed class ScopedRequestExecutor(IServiceScopeFactory scopeFactory) : I
         // Reauthenticate through the new scope's host adapter; do not copy a claimed actor into it.
         return await scope.ServiceProvider.GetRequiredService<IdempotencyCoordinator>()
             .FindExistingAsync(request, policy, data, original, cancellationToken);
+    }
+
+    async Task<ProtocolResult<TResponse>?> IProtocolRecovery.FindAsync<TRequest,TResponse>(TRequest request, RequestPolicy policy, CallActor actor, CancellationToken token)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var call = scope.ServiceProvider.GetRequiredService<ICallContext>().Current ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
+        if (call.Actor.Kind != actor.Kind || call.Actor.ActorId != actor.ActorId || call.Actor.SoftwareId != actor.SoftwareId || call.Actor.InstanceId != actor.InstanceId)
+            throw new RequestRejectedException(RequestFailure.PermissionDenied);
+        await RequestAuthorization.CheckAsync(scope.ServiceProvider.GetRequiredService<IRequestAuthorizer>(), request, policy, call, token);
+        return await scope.ServiceProvider.GetRequiredService<IProtocolRequestAdapter<TRequest,TResponse>>().FindCommittedAsync(request, token);
     }
 
     async Task<OperationResultReference?> IIntegrationConsumptionRecovery.FindAsync(IIntegrationEvent message, CancellationToken cancellationToken)

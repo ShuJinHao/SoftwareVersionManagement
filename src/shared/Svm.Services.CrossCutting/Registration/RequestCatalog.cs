@@ -4,6 +4,7 @@ using MediatR;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Catalog;
+using Svm.Services.Contracts.Instances;
 
 namespace Svm.Services.CrossCutting.Registration;
 
@@ -69,10 +70,14 @@ public sealed class RequestCatalog
         var isCommand = shapes[0].GetGenericTypeDefinition() == typeof(ICommand<>);
         var management = PersonnelManagementCapabilities.Contains(type);
         var catalogWrite = CatalogCapabilities.IsWrite(type);
-        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite) || policy.Transaction != TransactionMode.DatabaseAtomic ||
-                policy.Idempotency != (management || catalogWrite ? IdempotencyMode.OperationResult : IdempotencyMode.None)
+        var instanceWrite = InstanceCapabilities.IsWrite(type);
+        var mode = type == typeof(SubmitStatusReportCommand) ? IdempotencyMode.ReportSequence :
+            type == typeof(RegisterInstanceCommand) || type == typeof(RecoverInstanceCommand) ? IdempotencyMode.EnrollmentProtocol :
+            management || catalogWrite || instanceWrite ? IdempotencyMode.OperationResult : IdempotencyMode.None;
+        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite && !instanceWrite) || policy.Transaction != TransactionMode.DatabaseAtomic ||
+                policy.Idempotency != mode
             : policy.Transaction != TransactionMode.ReadOnly || policy.Idempotency != IdempotencyMode.None)
-            throw new InvalidOperationException("Only the closed personnel and site-catalog writes are activated.");
+            throw new InvalidOperationException("Only the closed personnel, catalog and instance-access writes are activated.");
 
         var response = type.GetInterfaces().Single(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IRequest<>)).GenericTypeArguments[0];
         var handlerContract = typeof(IRequestHandler<,>).MakeGenericType(type, response);

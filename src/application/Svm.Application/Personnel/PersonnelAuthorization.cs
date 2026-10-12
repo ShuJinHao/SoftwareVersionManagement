@@ -1,11 +1,13 @@
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Catalog;
+using Svm.Services.Contracts.Instances;
+using Svm.Application.Instances;
 
 namespace Svm.Application.Personnel;
 
 internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessionProofSource proofSource, IUnitOfWork unitOfWork,
-    IPersonnelAdministration? administration = null, ISiteAssets? assets = null, ISoftwareCatalog? software = null) : IRequestAuthorizer
+    IPersonnelAdministration? administration = null, ISiteAssets? assets = null, ISoftwareCatalog? software = null, InstanceAuthorization? instanceAuthorization = null) : IRequestAuthorizer
 {
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
     {
@@ -13,6 +15,9 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
             request.Context.EntryKind == RequestKind.Internal && request.Context.Actor.WorkOwner == ModuleOwner.Identity)
             return request.Context.Actor.WorkId is { } workId ? AuthorizationDecision.Allow(AuthorizationTarget.Work(ModuleOwner.Identity, workId)) :
                 AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        if (InstanceCapabilities.IsWrite(request.Request.GetType()) || InstanceCapabilities.IsQuery(request.Request.GetType()))
+            if (request.Context.Actor.Kind is ActorKind.Instance or ActorKind.EnrollmentGrant or ActorKind.RecoveryGrant)
+                return instanceAuthorization is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await instanceAuthorization.MachineAsync(request, cancellationToken);
         if (request.Context.Actor.Kind == ActorKind.Anonymous)
             return request.Request is AnonymousSessionQuery or LoginCommand ? AuthorizationDecision.Allow(AuthorizationTarget.Global()) :
                 AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
@@ -28,6 +33,8 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
         if (request.Request is CurrentSessionQuery or ChangePasswordCommand or LogoutCommand)
             return AuthorizationDecision.Allow(AuthorizationTarget.Global());
         if (person.MustChangePassword) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        if (InstanceCapabilities.IsWrite(request.Request.GetType()) || InstanceCapabilities.IsQuery(request.Request.GetType()))
+            return instanceAuthorization is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await instanceAuthorization.HumanAsync(request, person, cancellationToken);
         if (CatalogCapabilities.IsWrite(request.Request.GetType()) || CatalogCapabilities.IsQuery(request.Request.GetType()))
         {
             if (assets is null || software is null) return AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid);

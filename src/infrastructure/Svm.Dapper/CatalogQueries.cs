@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
+using Svm.Services.Contracts.Instances;
 
 namespace Svm.Dapper;
 
@@ -10,6 +11,7 @@ public static class CatalogQueryRegistration
     public static IServiceCollection AddSvmCatalogQueries(this IServiceCollection services)
     {
         services.AddScoped<CatalogReadScope>();
+        services.AddScoped<IInstanceQueries, InstanceQueries>();
         services.AddScoped<ISoftwareCatalogQueries, SoftwareCatalogQueries>();
         services.AddScoped<ISiteAssetQueries, SiteAssetQueries>(); return services;
     }
@@ -69,7 +71,7 @@ internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogRe
     private object Parameters(CatalogListInput x) => new { subjectId = scope.SubjectId, code = CatalogReadScope.Prefix(x.Filter.Code), name = CatalogReadScope.Contains(x.Filter.Name),
         category = x.Filter.Category, afterKey = x.After?.SortKey, afterId = x.After?.Id, take = x.PageSize + 1 };
 }
-internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope) : ISiteAssetQueries
+internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock=null) : ISiteAssetQueries
 {
     private const string ProcessProjection = "SELECT p.\"Id\",p.\"SiteId\",p.\"Code\",p.\"Name\",p.\"Revision\" FROM ins.processes p";
     private const string DeviceProjection = """
@@ -132,8 +134,32 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
     public async Task<CatalogPage<DeviceSoftwareInventoryItem>> InventoryAsync(Guid deviceId, CatalogListInput input, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
-        var page = CatalogReadScope.Page(await BoundAsync(deviceId, input, true, token), input.PageSize, x => new(x.Code, x.Id));
-        return new(page.Items.Select(x => new DeviceSoftwareInventoryItem(new(x.SoftwareId, x.Code, x.Name, x.Category, x.Description, null, x.SoftwareRevision), Binding(x))).ToArray(), page.Next);
+        var rows=await session.QueryAsync<InventoryRow>("""
+            SELECT COALESCE(i."Id",b."Id") AS "RowId",b."Id" AS "BindingId",b."DeviceId",b."SoftwareId",b."Revision" AS "BindingRevision",b."IsActive",
+              s."Code",s."Name",s."Category",s."Description",s."Revision" AS "SoftwareRevision",i."Id",i."Lifecycle",i."Revision",
+              d."DeviceNo",d."Name" AS "DeviceName",pr."Id" AS "ProcessId",pr."Code" AS "ProcessCode",pr."Name" AS "ProcessName",
+              ss."SnapshotJson"::text AS "SnapshotJson",ss."LastAcceptedAt"
+            FROM ins.device_software_bindings b JOIN ins.devices d ON d."Id"=b."DeviceId" JOIN ins.processes pr ON pr."Id"=d."ProcessId"
+            JOIN rel.software s ON s."Id"=b."SoftwareId" LEFT JOIN ins.instances i ON i."DeviceId"=b."DeviceId" AND i."SoftwareId"=b."SoftwareId"
+            LEFT JOIN ins.instance_snapshots ss ON ss."InstanceId"=i."Id"
+            WHERE b."DeviceId"=@deviceId AND b."IsActive" AND pr."SiteId"=@siteId
+            AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId" WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."Id"
+              AND p."Operation"='software.read' AND u."IsEnabled" AND NOT u."MustChangePassword")
+            AND EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."Id" AND p."Operation"='instance.read')
+            AND (CAST(@softwareId AS uuid) IS NULL OR s."Id"=@softwareId) AND (CAST(@category AS text) IS NULL OR s."Category"=@category)
+            AND (CAST(@afterId AS uuid) IS NULL OR (s."Code" COLLATE "C",COALESCE(i."Id",b."Id"))>(CAST(@afterKey AS text) COLLATE "C",CAST(@afterId AS uuid)))
+            ORDER BY s."Code" COLLATE "C",COALESCE(i."Id",b."Id") LIMIT @take
+            """,new { deviceId,subjectId=scope.SubjectId,siteId=scope.Site.SiteId,softwareId=input.Filter.SoftwareId,category=input.Filter.Category,
+                afterKey=input.After?.SortKey,afterId=input.After?.Id,take=input.PageSize+1 },token);
+        var items=rows.Take(input.PageSize).ToArray();
+        return new(items.Select(x=>new DeviceSoftwareInventoryItem(new(x.SoftwareId,x.Code,x.Name,x.Category,x.Description,null,x.SoftwareRevision),
+            new(x.BindingId,x.DeviceId,x.SoftwareId,x.BindingRevision,x.IsActive),x.Id==Guid.Empty?null:x.View(scope.Site,(clock??TimeProvider.System).GetUtcNow()))).ToArray(),
+            rows.Count>input.PageSize?new(items[^1].Code,items[^1].RowId):null);
+    }
+    private sealed class InventoryRow : InstanceRow
+    {
+        public Guid RowId {get;set;} public Guid BindingId {get;set;} public long BindingRevision {get;set;} public bool IsActive {get;set;}
+        public string Code {get;set;}=""; public string Name {get;set;}=""; public string Category {get;set;}=""; public string? Description {get;set;} public long SoftwareRevision {get;set;}
     }
     private Task<IReadOnlyList<BoundRow>> BoundAsync(Guid deviceId, CatalogListInput input, bool inventory, CancellationToken token) =>
         session.QueryAsync<BoundRow>(BoundProjection + " WHERE " + BoundFilter + (inventory ? " AND EXISTS(SELECT 1 FROM iam.permissions ip WHERE ip.\"SubjectId\"=@subjectId AND ip.\"SoftwareId\"=s.\"Id\" AND ip.\"Operation\"='instance.read')" : "") + " ORDER BY s.\"Code\" COLLATE \"C\",b.\"Id\" LIMIT @take",

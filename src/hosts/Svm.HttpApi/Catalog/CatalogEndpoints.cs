@@ -49,7 +49,7 @@ internal static class CatalogEndpoints
         {
             var input = await cursor.ReadAsync(http, "inventory/" + deviceId, ["category", "softwareId"], http.RequestAborted);
             var page = await sender.Send(new GetDeviceInventoryQuery(deviceId, input.Input), http.RequestAborted);
-            return Results.Json(new { items = page.Items.Select(x => new { software = x.Software, binding = Binding(x.Binding), instance = (object?)null }),
+            return Results.Json(new { items = page.Items.Select(x => new { software = x.Software, binding = Binding(x.Binding), instance = x.Instance }),
                 nextCursor = cursor.Encode(input, page.Next), serverTime = DateTimeOffset.UtcNow });
         });
         group.MapPost("/software", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>

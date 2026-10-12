@@ -17,6 +17,8 @@ using Svm.Services.Contracts.Catalog;
 using Svm.HttpApi.Catalog;
 using Svm.ReleaseService;
 using Svm.InstanceService;
+using Svm.HttpApi.Instances;
+using Svm.Services.Contracts.Instances;
 
 namespace Svm.HttpApi;
 
@@ -32,7 +34,7 @@ public partial class Program
             options.ValidateOnBuild = true;
         });
 
-        builder.Services.AddSvmSiteCatalogApplication();
+        builder.Services.AddSvmInstanceApplication();
         var persistence = PersistenceConfiguration.LoadFromEnvironment();
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
         builder.Services.AddSvmPostgres(persistence.WriterConnectionString);
@@ -41,6 +43,10 @@ public partial class Program
         builder.Services.AddSvmCatalogQueries().AddSvmSoftwareCatalog().AddSvmSiteAssets();
         builder.Services.AddSingleton(SiteConfiguration.LoadFromEnvironment());
         builder.Services.AddScoped<CatalogCursor>();
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddScoped<InstanceCursor>();
+        builder.Services.AddSingleton(InstanceAccessConfiguration.LoadFromEnvironment());
+        builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances();
         builder.Services.AddSingleton(personnel.Management);
         builder.Services.AddScoped<UserCursor>();
         if (MessagingConfiguration.LoadFromEnvironment() is { } messaging)
@@ -48,6 +54,7 @@ public partial class Program
         builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<HttpPersonnelContext>();
+        builder.Services.AddScoped<IAccessProofSource, HttpAccessProofSource>();
         builder.Services.AddScoped<ISessionProofSource>(p => p.GetRequiredService<HttpPersonnelContext>());
         builder.Services.AddScoped<ITrustedCallContextSource>(p => p.GetRequiredService<HttpPersonnelContext>());
         builder.Services.AddScoped<PersonnelCookieEvents>();
@@ -75,16 +82,11 @@ public partial class Program
 
         var app = builder.Build();
         app.Use(SessionErrors.Handle);
-        app.Use(async (http, next) =>
-        {
-            if (http.Request.Path.StartsWithSegments("/api") && http.Request.Headers.ContainsKey("Authorization"))
-                throw new RequestRejectedException(RequestFailure.CredentialInvalid);
-            await next();
-        });
+        app.Use(HttpAccessProofSource.Authenticate);
         app.UseAuthentication();
         app.Use(async (http, next) =>
         {
-            if (http.Request.Path.StartsWithSegments("/api") && http.Request.Cookies.ContainsKey(SessionEndpoints.CookieName) &&
+            if (!HttpAccessProofSource.IsMachine(http) && http.Request.Path.StartsWithSegments("/api") && http.Request.Cookies.ContainsKey(SessionEndpoints.CookieName) &&
                 http.User.Identity?.IsAuthenticated != true)
                 throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
             await next();
@@ -94,6 +96,7 @@ public partial class Program
         app.MapPersonnelSessions();
         app.MapPersonnelManagement();
         app.MapSiteCatalog();
+        app.MapInstanceAccess();
         app.Map("/api/{**path}", (HttpContext http) => Results.Json(new { code = "RESOURCE_NOT_FOUND", traceId = http.TraceIdentifier, retryable = false }, statusCode: 404));
         app.MapFallbackToFile("{*path:nonfile}", "index.html");
         app.Run();

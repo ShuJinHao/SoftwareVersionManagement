@@ -6,15 +6,16 @@
 
 ## 当前状态
 
-项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权和设备映射 API 及同源网页，以及进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础。设备软件显示“尚未登记”，实例接入、安装/运行事实和版本业务仍待实现。
+项目处于基础框架和管理功能开发阶段，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权、设备映射，以及实例登记/恢复、独立凭据和状态上报 API 及同源网页；进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础保留。设备软件按真实接入事实区分“尚未登记”“尚未上报”和报告新鲜度，展示实际版本、IP、运行及接入状态；版本库、安装包和任务尚未实现。
 
 | 已有实现 | 后续实现 |
 |---|---|
 | 24 个 C# 项目、82 条普通项目引用、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
-| DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 系统凭据、受管实例登记及状态上报 |
+| DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 管理系统凭据与正式工作身份 |
 | PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 版本、安装包、批量任务和部分回退 |
-| 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部系统与实例的实际凭据接入 |
-| 人员管理、四项厂级及软件范围授权、软件目录、工序/设备/映射维护与现场导航 | 实例登记/上报、安装履历及接入授权 |
+| 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部管理系统的凭据接入 |
+| 人员管理、四项厂级及软件范围授权、软件目录、工序/设备/映射维护与现场导航 | 软件版本、测试转正式与投放 |
+| 受限登记许可、单次恢复、独立实例凭据吊销、报告流/快照、安装履历及接入管理网页 | 平台版本关联及测试证据、任务与厂家现场验收 |
 | 所属模块的类型化领域事件处理器、Scoped 串行派发、提交成功后的内部确认 | 实际业务事件及领域事实到版本化集成消息的转换 |
 | 持久化幂等协调器、六模块操作结果存储、人员管理 HTTP 幂等及提交结果核实 | 其他业务 HTTP 幂等接入及完整事务/消息验收 |
 | 三类固定 V1 消息、MassTransit EF Bus Outbox、Worker 投递及 RabbitMQ 断线/重启恢复 | 实际业务生产者、消费者与持续业务去重 |
@@ -25,7 +26,11 @@
 
 工号唯一且不可修改，无删除历史主体接口；新建/重置要求下次改密，停用/重置同事务撤销旧会话。IAM 事务锁与主体保护保证并发操作后至少保留一名启用且持有厂级 `identity.manage` 的人员。管理员可编辑四项厂级权限及现有目录中的软件范围操作；新增软件授权必须引用真实软件。软件创建者只同事务取得 `software.read`、`instance.read`、`instance.manage`。其他业务 Command 继续禁用；发送端尚无实际业务生产者，Worker 未注册业务消费者。
 
-现场接口为 `/api/v1/manage/site`、`processes`、`devices`、`software` 及设备下的 `software-bindings`、`software-inventory`；另有 `permission-options` 为人员管理员提供有界授权候选。台账查看/维护分别要求 `asset.read`/`asset.manage`；映射维护另需对应软件 `instance.manage`，资料修改需 `release.upload`。软件清单按 software.read 过滤，设备软件汇总另需 instance.read；数量只描述过滤后的本页对象。代码、设备编号和软件分类不可修改，映射逻辑撤销保留标识，重建继续 revision；原键重放仅核实，不再次改变关联。实例引用保护端口已建立，真实登记并发仍待验证。
+现场接口为 `/api/v1/manage/site`、`processes`、`devices`、`software` 及设备下的 `software-bindings`、`software-inventory`；另有 `permission-options` 为人员管理员提供有界授权候选。台账查看/维护分别要求 `asset.read`/`asset.manage`；映射维护另需对应软件 `instance.manage`，资料修改需 `release.upload`。软件清单按 software.read 过滤，设备软件汇总另需 instance.read；数量只描述过滤后的本页对象。代码、设备编号和软件分类不可修改，映射逻辑撤销保留标识，重建继续 revision；原键重放仅核实，不再次改变关联。真实登记与映射引用确认同事务，已引用映射不能撤销；登记与撤销并发由数据库保护裁决。
+
+接入管理路径为 `/api/v1/manage/enrollment-grants`、`instances`、实例下的 `credentials`、`recovery-grants`、`version-history`、`lifecycle`，以及凭据/许可的撤销路径；签发、查询和撤销凭据或许可需软件 enrollment.manage，仅人员，创建软件不会自动取得该权限。厂家使用 `/api/v1/enrollment/instances`、`recoveries` 登记及恢复，独立实例 Bearer 调用 `/api/v1/client/context`、`report-streams`、`status-reports`；正文不能改绑设备或冒充实例。恢复保留身份和安装履历，同事务吊销旧凭据、关闭旧流；接入暂停只拒绝 API，不控制现场软件。
+
+登记许可失效后禁止新增登记；原键、原请求与仍有效的原实例秘密可核实原成功结果，不重新创建或占名额。报告按实例/代次/序号去重，当前相同内容重放不刷新接收时间，同序号不同内容返回 REPORT_CONFLICT，旧序号或旧流 applied=false。快照每实例一行，首次安装事实和安装变化另存履历，不为每分钟心跳追加永久通用幂等记录。严格超过五分钟显示状态未知并保留最后事实，接入方至少每分钟调用一次。现场版本允许未关联平台记录，本批 installedReleaseId 非空返回 RESOURCE_NOT_FOUND；可用版本、任务字段为空。
 
 网页与 API 同源，通过 HTTPS 和现有 Cookie/CSRF 使用真实数据。管理写请求携带 `Idempotency-Key`，修改和撤销已有资源另带 `expectedRevision`；当前授权先于重放，合法重放先于旧修订比较。响应不明时页面仅在内存保留原请求及操作键，由人员手动核实，不自动换键或重发；核实时的授权拒绝不能证明原请求已回滚，仍保留原键。密码不写浏览器持久存储。分页默认 50、最大 200；人员按工号/ID，台账及软件按代码或设备编号/ID 固定排序。现场游标绑定主体、部署、筛选、页长和权限修订，默认有效 15 分钟，撤权后旧游标失效。
 
@@ -44,7 +49,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 | `src/application` | Application 应用用例与跨模块协调 |
 | `src/infrastructure` | EF 持久化与消费事务桥接、Dapper 只读查询、Security 安全技术实现、EventBus Outbox/RabbitMQ 发送和接收适配 |
 | `src/hosts` | HttpApi、Worker、Migration 组合根及 ServiceDefaults 公共主机配置 |
-| `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护及软件目录网页 |
+| `src/ui/svm-web` | Vue 会话、人员授权、现场导航/维护、软件目录、登记许可与实例详情/履历网页 |
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
 | `build`、`eng` | 引用白名单、依赖/工具链清单和本机开发脚本 |
 | `docs` | 七份设计与验收文档 |
@@ -65,7 +70,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 6. [架构测试与验收要求](docs/架构测试与验收要求.md)
 7. [软件框架设计](docs/软件框架设计.md)
 
-字段、路径和状态契约以详细设计为准；厂家文档示例仍属设计说明。Cloud 只提供固定公开提交的架构与工程机制参考，平台不对接其业务、主数据或身份。聊天示例不作为实际厂区/设备数据，文档中的虚构值不得用于播种或默认配置。
+字段、路径和状态契约以详细设计为准；厂家文档登记/恢复及上报已按真实接口验证，版本包任务仍属设计说明。Cloud 只提供固定公开提交的架构与工程机制参考，平台不对接其业务、主数据或身份。聊天示例不作为实际厂区/设备数据，文档中的虚构值不得用于播种或默认配置。
 
 ## 本机准备
 
@@ -104,11 +109,11 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-OperationResults、BusOutbox、PersonnelAdministrationPermissions 及本批新增 `20261008000100_SiteCatalog` 仅在一次性测试库执行。新迁移建立厂区标识、软件、工序、设备和映射五张表，不生成台账或默认授权；既有五份迁移不改，模型快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
+OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog 及本批新增 `20261009000100_InstanceAccess` 仅在一次性测试库执行。新迁移建立 IAM 接入主体、凭据、登记/恢复许可、登记结果和 INS 实例、快照、安装履历、流结果九张表；不生成默认实例、许可或授权，既有六份迁移不改，快照及只读安全列权限同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
 
 ```sh
-mkdir -p artifacts
-eng/postgres migrate script > artifacts/site-catalog-upgrade.sql
+mkdir -p artifacts/instance-access
+eng/postgres migrate script > artifacts/instance-access/instance-access-upgrade.sql
 ```
 
 首次管理员默认为 `LOCAL-ADMIN`；显示名和随机临时密码位于已忽略的 `.cache/personnel-local/seed.json`，可在首次播种前私下调整。首次登录须改密。禁止将该文件、数据库连接、会话材料或证书私钥加入版本库。
@@ -123,13 +128,19 @@ eng/postgres migrate script > artifacts/site-catalog-upgrade.sql
 
 JSON 字段为 `siteId`、`siteName`、`siteTimeZone`，可选 `defaultPageSize:50`、`maximumPageSize:200`、`cursorMinutes:15`。缺少配置时现场接口返回 `503 CONFIGURATION_INVALID`；显式配置格式或限额错误使启动失败。首个现场/软件写事务把稳定厂区标识绑定数据库，换成其他标识不能读取或写入旧台账。人员功能沿用既有配置与运行方式。
 
+### 实例接入配置
+
+在同一显式厂区配置下，`SVM_INSTANCE_ACCESS_CONFIG_FILE` 指向私有 JSON，必填 `enrollmentMaxLifetimeSeconds`、`enrollmentMaxCount`、`recoveryMaxLifetimeSeconds`，分别限制登记许可有效期/名额及恢复许可有效期。有效期上限必须为正整数秒，数量上限为 1～100000；取值由本厂明确提供，无生产默认值。每次签发仍填写具体未来到期时间、已有映射设备范围和原因，恢复固定到单实例、名额为 1。缺少配置时仅新签发返回 `503 CONFIGURATION_INVALID`；显式无效配置拒绝启动，已有实例和人员入口保留。文件应只对运行账号可读，不提交仓库。
+
+从现场设备软件卡片进入“登记许可”签发受限许可，安全交付许可 ID、秘密和设备关联；厂家自行生成安装标识和至少 256 位 base64url 实例秘密。网页秘密仅在当前表单内存保留，关闭后清除；查询接口不返回秘密。实例页面按软件查看、按设备编号/IP/状态筛选，详情分开显示安装履历、凭据和 API 接入启停。暂未提供恢复许可列表接口，本次恢复许可签发结果支持直接撤销，操作人员保管其标识及修订。
+
 ### RabbitMQ 与专用验证环境
 
 HttpApi/Worker 仅在显式设置 `SVM_MESSAGING_CONFIG_FILE` 时启用消息注册；文件不存在、结构或参数无效时明确失败。未设置时沿用现有运行方式。私有 JSON 文件使用 0600 权限，字段及限制见[框架设计第 8.1 节](docs/软件框架设计.md#81-组件落点和原子提交)，不把凭据写入命令行或仓库。Broker 不可用不阻塞数据库发送意图的登记；启用发送端前须显式完成目标数据库迁移。
 
 消费目录通过 `AddSvmConsumption` 与 `AddSvmMessaging` 使用相同的显式绑定，构建前调用 `ValidateSvmFoundation`。目录限定三类 V1 消息、模块、队列和唯一 Scoped Application 处理器；正式 Worker 当前目录为空。消费并发默认 4、prefetch 16，Inbox 窗口默认 30 分钟，参数有上限。只对确知未提交的瞬时故障短重试 3 次，间隔 1/3/5 秒且每次新 Scope；其余失败进入错误队列，禁止自动回灌。
 
-Migration 私有配置新增 `enableInboxWrites`，默认 `false` 保持发送端权限；显式 `true` 只补充 Inbox 表读写及其 ID 序列权限，不新增结构迁移。本批只在一次性测试库启用，本机生成的 `artifacts/consumer-outbox-review.sql` 包含既有四份迁移及消费权限，供另行审阅，未在开发库执行。正式消费还须实现可信工作授权适配及所属模块持续去重事实；启用 Inbox 清理不能删除这些业务事实。
+Migration 私有配置新增 `enableInboxWrites`，默认 `false` 保持发送端权限；显式 `true` 只补充 Inbox 表读写及其 ID 序列权限，不新增结构迁移。消费基础批次只在一次性测试库启用，当时生成的 `artifacts/consumer-outbox-review.sql` 包含既有四份迁移及消费权限，供另行审阅，未在开发库执行。正式消费还须实现可信工作授权适配及所属模块持续去重事实；启用 Inbox 清理不能删除这些业务事实。
 
 本项目验证工具固定 RabbitMQ `4.3.6` 的 linux/arm64 镜像摘要与本机 `desktop-linux` Docker context，只绑定回环地址，管理带本仓归属标签的容器和卷。首次分配的端口在容器停止/启动期间保持；随机测试 vhost 默认 quorum，临时总线队列显式 classic。测试账号只具有所属 vhost 权限，无管理标签。工具不会配置生产 broker。
 
@@ -167,7 +178,7 @@ SVM_TEST_RABBITMQ_CONFIG_FILE="$PWD/.cache/rabbitmq-local/test-admin.json" \
   eng/test framework --filter 'FullyQualifiedName~UnknownContractIsQuarantinedOnceAndTheNextValidMessageStillCommits'
 ```
 
-真实浏览器用例为 `PersonnelBrowserTests`、`SiteCatalogBrowserTests`，使用一次性 PostgreSQL、显式虚构厂区、临时 HTTPS 主机及匹配锁定 Playwright 的 Chromium。浏览器尚未准备时可显式执行 `(cd src/ui/svm-web && PLAYWRIGHT_BROWSERS_PATH="$PWD/../../../.cache/playwright-browsers" ../../../eng/npm exec -- playwright install --only-shell chromium)`。截图写入忽略的 `artifacts/personnel/browser-*/`、`artifacts/site-catalog/browser-*/`，不保存密码表单或请求追踪。
+真实浏览器用例为 `PersonnelBrowserTests`、`SiteCatalogBrowserTests`、`InstanceBrowserTests`，使用一次性 PostgreSQL、显式虚构厂区、临时 HTTPS 主机及匹配锁定 Playwright 的 Chromium；接入用例另显式配置签发上限。浏览器尚未准备时可显式执行 `(cd src/ui/svm-web && PLAYWRIGHT_BROWSERS_PATH="$PWD/../../../.cache/playwright-browsers" ../../../eng/npm exec -- playwright install --only-shell chromium)`。截图写入忽略的 `artifacts/personnel/browser-*/`、`artifacts/site-catalog/browser-*/`、`artifacts/instance-access/browser-*/`，不保存密码/秘密表单或请求追踪。
 
 恢复用例可能停止/重启本工具拥有的专用 broker、丢弃发送确认或终止本次测试子进程；按所选用例准备并串行使用这些资源。`ConsumptionHarness` 分类只由私有子进程验证工具调用；生产 Worker 没有测试开关。每个用例清理其随机数据库、角色、vhost、账号及私有文件，结束后核对残留；配置只指向本项目测试环境。已有结果和未覆盖项见框架设计第 11 节。
 

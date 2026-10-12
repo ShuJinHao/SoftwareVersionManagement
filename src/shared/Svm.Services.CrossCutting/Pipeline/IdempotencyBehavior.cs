@@ -5,13 +5,16 @@ using Svm.Services.CrossCutting.Registration;
 
 namespace Svm.Services.CrossCutting.Pipeline;
 
-internal sealed class IdempotencyBehavior<TRequest, TResponse>(RequestCatalog catalog, IdempotencyCoordinator coordinator,
-    IIdempotencyRequestAdapter<TRequest, TResponse>? adapter = null) : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
+internal sealed class IdempotencyBehavior<TRequest, TResponse>(RequestCatalog catalog, IdempotencyCoordinator coordinator, ProtocolCoordinator protocols,
+    IIdempotencyRequestAdapter<TRequest, TResponse>? adapter = null, IProtocolRequestAdapter<TRequest, TResponse>? protocolAdapter = null) : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
 {
     public async Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
     {
         var policy = catalog.GetPolicy(request.GetType());
         if (policy.Idempotency == IdempotencyMode.None) return await next();
+        if (policy.Idempotency is IdempotencyMode.EnrollmentProtocol or IdempotencyMode.ReportSequence)
+            return protocolAdapter is null ? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid) :
+                await protocols.ExecuteAsync(request, policy, protocolAdapter, () => next(), cancellationToken);
         if (policy.Idempotency != IdempotencyMode.OperationResult || adapter is null)
             throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         OperationResultReference? executedReference = null;

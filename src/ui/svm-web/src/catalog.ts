@@ -3,7 +3,7 @@ export interface Process { id: string; siteId: string; code: string; name: strin
 export interface Device { id: string; deviceNo: string; name: string; processId: string; processCode: string; processName: string; siteId: string; siteName: string; revision: number }
 export interface Software { id: string; code: string; name: string; category: 'UpperComputer' | 'Vision'; description: string | null; latestAvailableFormalReleaseId: null; revision: number }
 export interface Binding { deviceId: string; softwareId: string; revision: number }
-export interface Inventory { software: Software; binding: Binding; instance: null }
+export interface Inventory { software: Software; binding: Binding; instance: import('./instances').Instance | null }
 export interface Page<T> { items: T[]; nextCursor: string | null; serverTime: string }
 export interface PermissionOptions extends Page<Pick<Software, 'id' | 'code' | 'name' | 'category'>> { softwareOperations: string[] }
 export const categoryName = (value: string) => value === 'UpperComputer' ? '上位机' : '视觉'

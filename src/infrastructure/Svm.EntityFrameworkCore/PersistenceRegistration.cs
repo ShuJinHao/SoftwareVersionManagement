@@ -10,6 +10,7 @@ using Svm.EntityFrameworkCore.Operations;
 using Svm.Core.Releases;
 using Svm.Core.Instances;
 using Svm.EntityFrameworkCore.Catalog;
+using Svm.EntityFrameworkCore.Instances;
 
 namespace Svm.EntityFrameworkCore;
 
@@ -29,6 +30,8 @@ public static class PersistenceRegistration
         services.AddScoped<ISoftwareCatalogRepository, SoftwareCatalogRepository>();
         services.AddScoped<ISiteAssetRepository, SiteAssetRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
+        services.AddScoped<IInstanceAccessRepository, InstanceAccessRepository>();
+        services.AddScoped<IManagedInstanceRepository, ManagedInstanceRepository>();
         return services;
     }
 }
