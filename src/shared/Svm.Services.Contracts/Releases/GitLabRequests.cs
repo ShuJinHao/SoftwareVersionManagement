@@ -25,7 +25,7 @@ public sealed record ClaimGitLabWorkCommand(Guid WorkId, Guid LeaseToken) : ICom
 
 [RequestPolicy("rel.ApplyGitLabScanCommand", ModuleOwner.Releases, RequestKind.Internal, RequestScope.InternalWork,
     TransactionMode.DatabaseAtomic, IdempotencyMode.None, ValidationMode.Required, ActorKind.Service, Permission = "release.import")]
-public sealed record ApplyGitLabScanCommand(GitLabLease Lease, IReadOnlyList<GitLabReleaseFacts> Releases, IReadOnlyList<string> Tags, int? NextPage) : ICommand<bool>;
+public sealed record ApplyGitLabScanCommand(GitLabLease Lease, IReadOnlyList<GitLabReleaseFacts> Releases, IReadOnlyList<string> Tags, IReadOnlyList<string> PendingTags, int? NextPage) : ICommand<bool>;
 
 [RequestPolicy("rel.BeginGitLabImportCommand", ModuleOwner.Packages, RequestKind.Internal, RequestScope.InternalWork,
     TransactionMode.DatabaseAtomic, IdempotencyMode.None, ValidationMode.Required, ActorKind.Service, Permission = "release.import")]

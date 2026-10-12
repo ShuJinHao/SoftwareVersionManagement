@@ -64,7 +64,7 @@ public interface IReleaseImports
     Task<IReadOnlyList<Guid>> PendingAsync(Guid softwareId, CancellationToken token);
     Task<GitLabWork?> ClaimAsync(Guid workId, Guid leaseToken, CancellationToken token);
     Task<GitLabWork> ProtectAsync(GitLabLease lease, CancellationToken token);
-    Task ScanAsync(GitLabLease lease, IReadOnlyList<GitLabReleaseFacts> releases, IReadOnlyList<string> tags, int? nextPage, CancellationToken token);
+    Task ScanAsync(GitLabLease lease, IReadOnlyList<GitLabReleaseFacts> releases, IReadOnlyList<string> tags, IReadOnlyList<string> pendingTags, int? nextPage, CancellationToken token);
     Task<ReleaseView> RegisterAsync(GitLabLease lease, GitLabReleaseFacts facts, Guid packageId, CancellationToken token);
     Task SetReceiveAsync(GitLabLease lease, Guid receiveToken, CancellationToken token);
     Task ReceivedAsync(GitLabLease lease, CancellationToken token);

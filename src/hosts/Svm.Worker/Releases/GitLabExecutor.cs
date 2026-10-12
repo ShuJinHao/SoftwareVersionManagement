@@ -53,14 +53,19 @@ internal sealed class GitLabExecutor(IServiceScopeFactory scopes, ScopedRequestE
             if (claimed.Kind == "Scan")
             {
                 var page = await client.ListAsync(binding, claimed.Page, budget.Token); var releases = new List<GitLabReleaseFacts>();
+                var pendingTags = new List<string>();
                 foreach (var tag in claimed.InitialScan ? page.Tags : [])
                 {
                     await Send(binding, id, new RenewGitLabWorkCommand(lease), token);
-                    try { if (await client.VerifyAsync(binding, tag, budget.Token) is { } fact) releases.Add(fact); }
+                    try
+                    {
+                        if (await client.VerifyAsync(binding, tag, budget.Token) is { } fact) releases.Add(fact);
+                        else pendingTags.Add(tag);
+                    }
                     catch (RequestRejectedException e) when (e.Failure is RequestFailure.ValidationFailed or RequestFailure.ResourceNotFound)
                     { logger.LogWarning("GitLab binding {BindingId} contains an ineligible release {Code}", binding.Id, e.Code); }
                 }
-                await Send(binding, id, new ApplyGitLabScanCommand(lease, releases, page.Tags, page.NextPage), token); return;
+                await Send(binding, id, new ApplyGitLabScanCommand(lease, releases, page.Tags, pendingTags, page.NextPage), token); return;
             }
             var verified = await client.VerifyAsync(binding, claimed.Tag!, budget.Token);
             if (verified is null) { await Send(binding, id, new DelayGitLabWorkCommand(lease, "PIPELINE_PENDING"), token); return; }

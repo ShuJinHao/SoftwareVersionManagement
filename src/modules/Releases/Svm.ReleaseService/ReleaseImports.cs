@@ -51,7 +51,7 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
         if (!work.Owns(lease.Token, lease.Generation, clock.GetUtcNow())) throw new RequestRejectedException(RequestFailure.InvalidState);
         work.Renew(clock.GetUtcNow().AddSeconds(options.LeaseSeconds)); return Work(work);
     }
-    public async Task ScanAsync(GitLabLease lease, IReadOnlyList<GitLabReleaseFacts> facts, IReadOnlyList<string> tags, int? next, CancellationToken token)
+    public async Task ScanAsync(GitLabLease lease, IReadOnlyList<GitLabReleaseFacts> facts, IReadOnlyList<string> tags, IReadOnlyList<string> pendingTags, int? next, CancellationToken token)
     {
         await ProtectAsync(lease, token); var work = await Existing(lease.WorkId, true, token);
         if (work.Kind != "Scan" || next is { } page && (page != work.Page + 1 || page > options.MaxPages)) throw new RequestRejectedException(RequestFailure.InvalidState);
@@ -65,6 +65,8 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
         foreach (var tag in tags)
         {
             if (!work.InitialScan) await DiscoverTag(binding, tag, token);
+            // A pipeline still in progress must remain discoverable after bootstrap initializes the binding.
+            else if (pendingTags.Contains(tag, StringComparer.Ordinal)) continue;
             else if (await repository.FindAsync(binding.Id, tag, false, token) is null)
             {
                 var observed = new ReleaseSyncWork(Guid.NewGuid(), binding.Id, binding.SoftwareId, tag, false, clock.GetUtcNow());

@@ -24,7 +24,14 @@ internal sealed class ClaimGitLabWorkCommandValidator : GitLabValidator<ClaimGit
 { public ClaimGitLabWorkCommandValidator() => RuleFor(x => x).Must(x => x.WorkId != Guid.Empty && x.LeaseToken != Guid.Empty).WithErrorCode("VALIDATION_FAILED"); }
 
 internal sealed class ApplyGitLabScanCommandValidator : GitLabValidator<ApplyGitLabScanCommand>
-{ public ApplyGitLabScanCommandValidator() => RuleFor(x => x).Must(x => Lease(x.Lease) && x.Releases is { Count: <= 100 } && x.Releases.All(Fact) && x.Tags is { Count: <= 100 } && x.Tags.All(t => GitLabVersions.TryParse(t, out _)) && (x.NextPage is null || x.NextPage is >= 2 and <= 10000)).WithErrorCode("VALIDATION_FAILED"); }
+{
+    public ApplyGitLabScanCommandValidator() => RuleFor(x => x).Must(x =>
+        Lease(x.Lease) && x.Releases is { Count: <= 100 } && x.Releases.All(Fact) &&
+        x.Tags is { Count: <= 100 } && x.Tags.All(t => GitLabVersions.TryParse(t, out _)) &&
+        x.PendingTags is { Count: <= 100 } && x.PendingTags.Distinct(StringComparer.Ordinal).Count() == x.PendingTags.Count &&
+        x.PendingTags.All(tag => x.Tags.Contains(tag, StringComparer.Ordinal) && !x.Releases.Any(r => r.Manifest.Tag == tag)) &&
+        (x.NextPage is null || x.NextPage is >= 2 and <= 10000)).WithErrorCode("VALIDATION_FAILED");
+}
 
 internal sealed class BeginGitLabImportCommandValidator : GitLabValidator<BeginGitLabImportCommand>
 { public BeginGitLabImportCommandValidator() => RuleFor(x => x).Must(x => Lease(x.Lease) && Fact(x.Facts) && x.ReceiveToken != Guid.Empty && x.NodeId is { Length: > 0 and <= 64 }).WithErrorCode("VALIDATION_FAILED"); }
