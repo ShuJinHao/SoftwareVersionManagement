@@ -152,11 +152,14 @@ internal sealed class LocalApi : IAsyncDisposable
     private readonly ConcurrentQueue<string> _logs = new();
     private readonly TaskCompletionSource<string> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private bool _disposed;
+    private readonly List<string> _packageConfigurations = [];
+    private int _publicPort;
     internal string Url { get; private set; } = "";
     private LocalApi(Process process, string configuration, string thumbprint, string? siteConfiguration, string? instanceConfiguration)
     { _process = process; _configuration = configuration; _thumbprint = thumbprint; _siteConfiguration = siteConfiguration; _instanceConfiguration = instanceConfiguration; }
     internal static async Task<LocalApi> StartAsync(PersistenceDatabase database, string? writer = null, SiteCatalogOptions? site = null,
-        Svm.Services.Contracts.Instances.InstanceAccessOptions? instanceAccess = null)
+        Svm.Services.Contracts.Instances.InstanceAccessOptions? instanceAccess = null,
+        Svm.FileStorage.PackageFileOptions? packages = null, Svm.EventBus.MessagingOptions? messaging = null, int publicPort = 0)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "build/postgres.local.json"))) root = root.Parent;
@@ -166,15 +169,17 @@ internal sealed class LocalApi : IAsyncDisposable
             UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite }))
             await JsonSerializer.SerializeAsync(file, new { writerConnectionString = writer ?? database.WriterConnection, readerConnectionString = database.ReaderConnection });
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
-        var certPath = Path.Combine(Path.GetDirectoryName(personnel.CertificatePath)!, "https.pfx");
-        using var cert = new X509Certificate2(certPath, personnel.CertificatePassword);
+        var certPath = packages?.ServerCertificatePath ?? Path.Combine(Path.GetDirectoryName(personnel.CertificatePath)!, "https.pfx");
+        var certPassword = packages?.ServerCertificatePassword ?? personnel.CertificatePassword;
+        using var cert = new X509Certificate2(certPath, certPassword);
         var info = new ProcessStartInfo(Path.Combine(root.FullName, "eng/dotnet"))
         { WorkingDirectory = root.FullName, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add(Path.Combine(root.FullName, "src/hosts/Svm.HttpApi/bin/Debug/net8.0/Svm.HttpApi.dll"));
         info.Environment["SVM_PERSISTENCE_CONFIG_FILE"] = config;
-        info.Environment["ASPNETCORE_URLS"] = "https://127.0.0.1:0";
+        info.Environment["ASPNETCORE_URLS"] = packages is null ? "https://127.0.0.1:0" : $"https://0.0.0.0:{publicPort}";
         info.Environment["Kestrel__Certificates__Default__Path"] = certPath;
-        info.Environment["Kestrel__Certificates__Default__Password"] = personnel.CertificatePassword;
+        info.Environment["Kestrel__Certificates__Default__Password"] = certPassword;
+        info.Environment.Remove("SVM_PACKAGE_CONFIG_FILE"); info.Environment.Remove("SVM_MESSAGING_CONFIG_FILE");
         info.Environment["Logging__LogLevel__Default"] = "Information";
         info.Environment.Remove("SVM_SITE_CONFIG_FILE");
         info.Environment.Remove("SVM_INSTANCE_ACCESS_CONFIG_FILE");
@@ -197,6 +202,15 @@ internal sealed class LocalApi : IAsyncDisposable
             info.Environment["SVM_INSTANCE_ACCESS_CONFIG_FILE"] = instanceConfig;
         }
         var api = new LocalApi(new Process { StartInfo = info, EnableRaisingEvents = true }, config, cert.Thumbprint, siteConfig, instanceConfig);
+        api._publicPort = publicPort;
+        if (packages is not null)
+        {
+            var path = await OutboxFixture.PrivateJsonAsync(packages); api._packageConfigurations.Add(path); info.Environment["SVM_PACKAGE_CONFIG_FILE"] = path;
+        }
+        if (messaging is not null)
+        {
+            var path = await OutboxFixture.PrivateJsonAsync(messaging); api._packageConfigurations.Add(path); info.Environment["SVM_MESSAGING_CONFIG_FILE"] = path;
+        }
         api._process.OutputDataReceived += (_, e) => api.Capture(e.Data);
         api._process.ErrorDataReceived += (_, e) => api.Capture(e.Data);
         api._process.Exited += (_, _) => api._ready.TrySetException(new InvalidOperationException("Local API exited before readiness; diagnostics retained in test memory."));
@@ -207,7 +221,15 @@ internal sealed class LocalApi : IAsyncDisposable
             api.Url = await api._ready.Task.WaitAsync(TimeSpan.FromSeconds(25));
             return api;
         }
-        catch { await api.DisposeAsync(); throw; }
+        catch (Exception error)
+        {
+            var diagnostic = string.Join('\n', api._logs);
+            foreach (var secret in new[] { certPassword, messaging?.Password, new NpgsqlConnectionStringBuilder(writer ?? database.WriterConnection).Password })
+                if (!string.IsNullOrEmpty(secret)) diagnostic = diagnostic.Replace(secret, "[redacted]", StringComparison.Ordinal);
+            await api.DisposeAsync();
+            if (packages is not null) throw new InvalidOperationException("Package API startup failed: " + diagnostic, error);
+            throw;
+        }
     }
     private void Capture(string? line)
     {
@@ -215,7 +237,11 @@ internal sealed class LocalApi : IAsyncDisposable
         _logs.Enqueue(line);
         const string marker = "Now listening on: ";
         var index = line.IndexOf(marker, StringComparison.Ordinal);
-        if (index >= 0) _ready.TrySetResult(line[(index + marker.Length)..].Trim());
+        if (index >= 0)
+        {
+            var url = line[(index + marker.Length)..].Trim();
+            if (_publicPort == 0 || new Uri(url).Port == _publicPort) _ready.TrySetResult(url.Replace("0.0.0.0", "127.0.0.1", StringComparison.Ordinal));
+        }
     }
     internal HttpClient Client(CookieContainer cookies) => new(new HttpClientHandler
     {
@@ -230,6 +256,7 @@ internal sealed class LocalApi : IAsyncDisposable
         if (!_process.HasExited) _process.Kill(entireProcessTree: true);
         await _process.WaitForExitAsync();
         _process.Dispose(); File.Delete(_configuration);
+        foreach (var path in _packageConfigurations) File.Delete(path);
         if (_siteConfiguration is not null) File.Delete(_siteConfiguration);
         if (_instanceConfiguration is not null) File.Delete(_instanceConfiguration);
     }

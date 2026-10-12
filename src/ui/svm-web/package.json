@@ -21,6 +21,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "echarts": "6.1.0",
+    "hash-wasm": "4.12.0",
     "pinia": "3.0.4",
     "reka-ui": "2.9.7",
     "tailwind-merge": "3.6.0",

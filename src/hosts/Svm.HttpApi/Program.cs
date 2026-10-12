@@ -19,6 +19,10 @@ using Svm.ReleaseService;
 using Svm.InstanceService;
 using Svm.HttpApi.Instances;
 using Svm.Services.Contracts.Instances;
+using Svm.FileStorage;
+using Svm.PackageService;
+using Svm.HttpApi.Packages;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.HttpApi;
 
@@ -34,14 +38,20 @@ public partial class Program
             options.ValidateOnBuild = true;
         });
 
-        builder.Services.AddSvmInstanceApplication();
+        var packageFiles = PackageFileOptions.LoadFromEnvironment();
+        var messaging = MessagingConfiguration.LoadFromEnvironment();
+        if (packageFiles is not null && messaging is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        if (packageFiles is null) builder.Services.AddSvmInstanceApplication();
+        else builder.Services.AddSvmPackageApplication();
         var persistence = PersistenceConfiguration.LoadFromEnvironment();
         var personnel = PersonnelConfiguration.LoadFromEnvironment();
         builder.Services.AddSvmPostgres(persistence.WriterConnectionString);
         builder.Services.AddSvmReadPersistence(persistence.ReaderConnectionString);
         builder.Services.AddSvmUserQueries();
         builder.Services.AddSvmCatalogQueries().AddSvmSoftwareCatalog().AddSvmSiteAssets();
-        builder.Services.AddSingleton(SiteConfiguration.LoadFromEnvironment());
+        var site = SiteConfiguration.LoadFromEnvironment();
+        if (packageFiles is not null && site.Require().SiteId != messaging!.SiteId) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        builder.Services.AddSingleton(site);
         builder.Services.AddScoped<CatalogCursor>();
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<InstanceCursor>();
@@ -49,8 +59,13 @@ public partial class Program
         builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances();
         builder.Services.AddSingleton(personnel.Management);
         builder.Services.AddScoped<UserCursor>();
-        if (MessagingConfiguration.LoadFromEnvironment() is { } messaging)
-            builder.Services.AddSvmMessaging(messaging, delivery: false);
+        if (messaging is not null) builder.Services.AddSvmMessaging(messaging, delivery: false);
+        builder.Services.AddScoped<PackageCursor>();
+        builder.Services.AddScoped<HttpPackageIdentity>();
+        builder.Services.AddScoped<IPackageServiceIdentity>(p => p.GetRequiredService<HttpPackageIdentity>());
+        builder.Services.AddScoped<IPackageDownloadProof>(p => p.GetRequiredService<HttpPackageIdentity>());
+        if (packageFiles is not null)
+            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleases().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization();
         builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<HttpPersonnelContext>();
@@ -77,11 +92,28 @@ public partial class Program
             options.SlidingExpiration = false; options.ExpireTimeSpan = TimeSpan.FromHours(personnel.Policy.SessionHours);
             options.EventsType = typeof(PersonnelCookieEvents);
         });
-        builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 8192);
+        using var internalCertificate = packageFiles is null ? null : PackageFileOptions.LoadCertificate(packageFiles.ServerCertificatePath, packageFiles.ServerCertificatePassword);
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            options.Limits.MaxRequestBodySize = 8192;
+            if (packageFiles is not null)
+            {
+                HttpPackageIdentity.Listen(options, packageFiles, internalCertificate!);
+                if (builder.Configuration["urls"] is { } urls)
+                    foreach (var value in urls.Split(';'))
+                    {
+                        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
+                            !System.Net.IPAddress.TryParse(uri.Host, out var address) || uri.Port == packageFiles.InternalListenPort)
+                            throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+                        options.Listen(address, uri.Port, listener => listener.UseHttps());
+                    }
+            }
+        });
         builder.Services.ValidateSvmFoundation();
 
         var app = builder.Build();
         app.Use(SessionErrors.Handle);
+        app.Use(HttpPackageIdentity.VerifyPeer);
         app.Use(HttpAccessProofSource.Authenticate);
         app.UseAuthentication();
         app.Use(async (http, next) =>
@@ -97,6 +129,8 @@ public partial class Program
         app.MapPersonnelManagement();
         app.MapSiteCatalog();
         app.MapInstanceAccess();
+        app.MapPackages(packageFiles is not null);
+        app.MapPackageInternal(packageFiles is not null);
         app.Map("/api/{**path}", (HttpContext http) => Results.Json(new { code = "RESOURCE_NOT_FOUND", traceId = http.TraceIdentifier, retryable = false }, statusCode: 404));
         app.MapFallbackToFile("{*path:nonfile}", "index.html");
         app.Run();

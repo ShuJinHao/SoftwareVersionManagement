@@ -5,7 +5,7 @@ public enum RequestFailure
     AuthenticationRequired = 1, CredentialInvalid, PermissionDenied, HumanRequired,
     ResourceNotFound, InstanceSuspended, ValidationFailed, ConfigurationInvalid, DependencyUnavailable,
     GrantExpired, GrantExhausted, GrantRevoked, RateLimited, InvalidRequest, UnknownField, IdempotencyConflict,
-    RevisionRequired, RevisionConflict, InvalidState, PayloadTooLarge, RegistrationConflict, ReportConflict
+    RevisionRequired, RevisionConflict, InvalidState, PayloadTooLarge, RegistrationConflict, ReportConflict, VersionConflict, UploadInProgress, ChecksumMismatch, NoHealthyReplica
 }
 
 public sealed record ValidationIssue(string Field, string Code, string Message);
@@ -31,9 +31,9 @@ public sealed class RequestRejectedException : Exception
         RequestFailure.AuthenticationRequired or RequestFailure.CredentialInvalid => 401,
         RequestFailure.PermissionDenied or RequestFailure.HumanRequired or RequestFailure.InstanceSuspended => 403,
         RequestFailure.ResourceNotFound => 404,
-        RequestFailure.IdempotencyConflict or RequestFailure.RevisionConflict or RequestFailure.InvalidState or RequestFailure.RegistrationConflict or RequestFailure.ReportConflict => 409,
-        RequestFailure.ValidationFailed or RequestFailure.GrantExpired or RequestFailure.GrantExhausted or RequestFailure.GrantRevoked => 422,
-        RequestFailure.ConfigurationInvalid or RequestFailure.DependencyUnavailable => 503,
+        RequestFailure.IdempotencyConflict or RequestFailure.RevisionConflict or RequestFailure.InvalidState or RequestFailure.RegistrationConflict or RequestFailure.ReportConflict or RequestFailure.VersionConflict or RequestFailure.UploadInProgress => 409,
+        RequestFailure.ValidationFailed or RequestFailure.GrantExpired or RequestFailure.GrantExhausted or RequestFailure.GrantRevoked or RequestFailure.ChecksumMismatch => 422,
+        RequestFailure.ConfigurationInvalid or RequestFailure.DependencyUnavailable or RequestFailure.NoHealthyReplica => 503,
         _ => throw new ArgumentOutOfRangeException(nameof(Failure))
     };
 
@@ -47,6 +47,10 @@ public sealed class RequestRejectedException : Exception
         RequestFailure.InvalidState => "INVALID_STATE",
         RequestFailure.RegistrationConflict => "REGISTRATION_CONFLICT",
         RequestFailure.ReportConflict => "REPORT_CONFLICT",
+        RequestFailure.VersionConflict => "VERSION_CONFLICT",
+        RequestFailure.UploadInProgress => "UPLOAD_IN_PROGRESS",
+        RequestFailure.ChecksumMismatch => "CHECKSUM_MISMATCH",
+        RequestFailure.NoHealthyReplica => "NO_HEALTHY_REPLICA",
         RequestFailure.PayloadTooLarge => "PAYLOAD_TOO_LARGE",
         RequestFailure.RateLimited => "RATE_LIMITED",
         RequestFailure.AuthenticationRequired => "AUTHENTICATION_REQUIRED",

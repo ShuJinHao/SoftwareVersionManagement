@@ -5,6 +5,7 @@ using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
 using Svm.HttpApi.Instances;
+using Svm.HttpApi.Packages;
 
 namespace Svm.HttpApi.Personnel;
 
@@ -19,6 +20,7 @@ internal sealed class HttpPersonnelContext(IHttpContextAccessor accessor) : ITru
     {
         var http = accessor.HttpContext;
         if (http is null) return null;
+        if (http.GetEndpoint()?.Metadata.GetMetadata<PersonnelEndpointKind>()?.Kind == RequestKind.Internal) return HttpPackageIdentity.Context(http);
         if (http.Items[HttpAccessProofSource.IdentityItem] is AccessIdentity identity)
             return new(new CallActor(identity.Kind, identity.SubjectId, identity.SoftwareId, identity.InstanceId),
                 http.GetEndpoint()!.Metadata.GetMetadata<PersonnelEndpointKind>()!.Kind, http.TraceIdentifier);
@@ -35,7 +37,7 @@ internal sealed class PersonnelCookieEvents(IPersonnelService personnel) : Cooki
 {
     public override async Task ValidatePrincipal(CookieValidatePrincipalContext context)
     {
-        if (HttpAccessProofSource.IsMachine(context.HttpContext) || !context.HttpContext.Request.Path.StartsWithSegments("/api"))
+        if (HttpAccessProofSource.IsMachine(context.HttpContext) || !context.HttpContext.Request.Path.StartsWithSegments("/api") && !((context.HttpContext.Request.Path == "/internal/v1/download-authorizations" || context.HttpContext.Request.Path.StartsWithSegments("/internal/v1/uploads")) && context.HttpContext.Items[HttpPackageIdentity.PeerItem] is not null))
         {
             context.RejectPrincipal();
             return;

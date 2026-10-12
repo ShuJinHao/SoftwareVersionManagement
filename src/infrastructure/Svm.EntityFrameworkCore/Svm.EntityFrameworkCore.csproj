@@ -7,6 +7,7 @@
     <ProjectReference Include="../../modules/Releases/Svm.Core.Releases/Svm.Core.Releases.csproj" />
     <ProjectReference Include="../../modules/Instances/Svm.Core.Instances/Svm.Core.Instances.csproj" />
     <ProjectReference Include="../../modules/Audit/Svm.Core.Audit/Svm.Core.Audit.csproj" />
+    <ProjectReference Include="../../modules/Packages/Svm.Core.Packages/Svm.Core.Packages.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

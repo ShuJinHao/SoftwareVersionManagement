@@ -30,7 +30,7 @@ public sealed class CompositionAnalyzer : DiagnosticAnalyzer
 
     private static bool IsFrameworkExecutor(ISymbol symbol) =>
         symbol.ContainingAssembly?.Name == "Svm.Services.CrossCutting" &&
-        symbol.ContainingType?.ToDisplayString() == "Svm.Services.CrossCutting.Pipeline.ScopedRequestExecutor";
+        symbol.ContainingType?.ToDisplayString() is "Svm.Services.CrossCutting.Pipeline.ScopedRequestExecutor" or "Svm.Services.CrossCutting.Pipeline.CommandScopeExecutor";
 
     private static bool IsBusiness(string? name) => name == "Svm.SharedKernel" || name == "Svm.Application" ||
         (name?.StartsWith("Svm.Core.", StringComparison.Ordinal) ?? false) ||

@@ -90,7 +90,7 @@ internal static class UserEndpoints
         catch (JsonException) { doc?.Dispose(); throw new RequestRejectedException(RequestFailure.InvalidRequest); }
         catch { doc?.Dispose(); throw; }
     }
-    private static void Fields(JsonElement body, string[] fields)
+    internal static void Fields(JsonElement body, string[] fields)
     {
         if (body.ValueKind != JsonValueKind.Object) throw new RequestRejectedException(RequestFailure.InvalidRequest);
         var properties = body.EnumerateObject().ToArray();

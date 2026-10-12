@@ -1,0 +1,38 @@
+// Explicit, fixed-node Nginx generation. No secrets in URLs, logs or rendered diagnostics.
+import { readFileSync, writeFileSync, chmodSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
+const uuid = x => typeof x === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x)
+const port = x => Number.isInteger(x) && x >= 1024 && x <= 65535
+const path = x => typeof x === 'string' && isAbsolute(x) && !/["'\r\n;$\\{}]/.test(x)
+const node = x => typeof x === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(x)
+const upstream = n => n.nodeId.replaceAll('-', '_')
+export function renderNginx(c) {
+  if (!c || !Array.isArray(c.nodes) || c.nodes.length !== 2 || c.nodes[0].nodeId === c.nodes[1].nodeId ||
+      !Array.isArray(c.gatewayFingerprints) || c.gatewayFingerprints.length !== 2 || c.gatewayFingerprints.some(x => !/^(?:[0-9A-F]{2}:){19}[0-9A-F]{2}$/.test(x)) ||
+      !/^[a-z][a-z0-9_-]{0,31}$/.test(c.workerUser) || !path(c.certificateDirectory) || !c.nodes.every(n => node(n.nodeId) && uuid(n.generation) &&
+        port(n.publicPort) && port(n.privatePort) && port(n.apiPublicPort) && port(n.apiInternalPort) && path(n.rootPath) && path(n.logDirectory) &&
+        Number.isSafeInteger(n.maxPackageBytes) && n.maxPackageBytes > 0 && Number.isInteger(n.uploadIdleSeconds) && n.uploadIdleSeconds >= 5)) throw new Error('Invalid explicit package gateway configuration')
+  const ids = c.nodes.flatMap(n => [n.publicPort, n.privatePort]); if (new Set(ids).size !== ids.length) throw new Error('Duplicate gateway port')
+  const certs = c.certificateDirectory
+  let text = `user ${c.workerUser};\nworker_processes 2;\npid /tmp/svm-nginx.pid;\nerror_log /dev/stderr warn;\nevents { worker_connections 1024; }\nhttp {\n  map_hash_bucket_size 128;\n  include /etc/nginx/mime.types;\n  default_type application/octet-stream;\n  sendfile on;\n  etag on;\n  autoindex off;\n  map $host $svm_package { default ""; }\n  map $host $svm_request { default ""; }\n  map $host $svm_method { default ""; }\n  map "$request_completion:$status" $svm_outcome { default Interrupted; "OK:200" Closed; "OK:206" Closed; }\n  map $svm_download_authorized $svm_loggable { default 0; 1 1; }\n  map $ssl_client_fingerprint $svm_peer_allowed { default 0;\n${c.gatewayFingerprints.map(x => `    "${x.replaceAll(':', '').toLowerCase()}" 1;`).join('\n')}\n  }\n  log_format svm_download escape=json '{"requestId":"$svm_request","nodeId":"$svm_node","workerGeneration":"$svm_generation","endedAt":"$msec","bytesSent":"$body_bytes_sent","outcome":"$svm_outcome","authorized":"$svm_download_authorized"}';\n`
+  for (const n of c.nodes) text += `  upstream api_public_${upstream(n)} { server host.docker.internal:${n.apiPublicPort}; }\n  upstream api_private_${upstream(n)} { server host.docker.internal:${n.apiInternalPort}; }\n  upstream bytes_${upstream(n)} { server 127.0.0.1:${n.privatePort}; }\n`
+  for (const n of c.nodes) {
+    const other = c.nodes.find(x => x.nodeId !== n.nodeId), name = upstream(n)
+    const tls = `    ssl_certificate "${certs}/server-${n.nodeId}.pem";\n    ssl_certificate_key "${certs}/server-${n.nodeId}.key";\n    ssl_protocols TLSv1.2 TLSv1.3;\n`
+    const proxyTls = `      proxy_ssl_trusted_certificate "${certs}/root.pem";\n      proxy_ssl_verify on;\n      proxy_ssl_server_name on;\n      proxy_ssl_name localhost;\n`
+    const gatewayTls = proxyTls + `      proxy_ssl_certificate "${certs}/gateway-${n.nodeId}.pem";\n      proxy_ssl_certificate_key "${certs}/gateway-${n.nodeId}.key";\n`
+    const auth = (local = false) => `    location = /__svm_authorize {\n      internal;\n      proxy_pass https://api_private_${name}/internal/v1/download-authorizations;\n${gatewayTls}      proxy_pass_request_body off;\n      proxy_set_header Content-Length "";\n      proxy_set_header Host localhost;\n      proxy_set_header Cookie $http_cookie;\n      proxy_set_header Authorization $http_authorization;\n      proxy_set_header X-Svm-Package-Id $svm_package;\n      proxy_set_header X-Svm-Request-Id $svm_request;\n      proxy_set_header X-Svm-Node-Id ${n.nodeId};\n      proxy_set_header X-Svm-Worker-Generation ${n.generation};\n      proxy_set_header X-Svm-Original-Method ${local ? 'HEAD' : '$svm_method'};\n      proxy_set_header X-Svm-Local-Only ${local ? '1' : '""'};\n      proxy_connect_timeout 5s;\n      proxy_read_timeout 30s;\n    }\n`
+    text += `  server {\n    listen ${n.publicPort} ssl;\n${tls}    access_log off;\n    set $svm_node ${n.nodeId};\n    set $svm_generation ${n.generation};\n    location ~ "^/api/v1/packages/(?<package_id>[0-9a-fA-F-]{36})/content$" {\n      limit_except GET HEAD { deny all; }\n      set $svm_package $package_id;\n      set $svm_request $request_id;\n      set $svm_method $request_method;\n      auth_request /__svm_authorize;\n      auth_request_set $svm_route $upstream_http_x_svm_replica_uri;\n      auth_request_set $svm_download_authorized $upstream_http_x_svm_download_authorized;\n      try_files /__svm_no_file $svm_route;\n    }\n    location ~ "^/__svm_replicas/${n.nodeId}/(?<local_file>[0-9a-fA-F-]{36})\\.bin$" {\n      internal;\n      alias "${n.rootPath}/replicas/$local_file.bin";\n      access_log "${n.logDirectory}/${n.generation}.jsonl" svm_download if=$svm_loggable;\n      add_header Cache-Control "private, no-store" always;\n      add_header X-Content-Type-Options nosniff always;\n    }\n    location ~ "^/__svm_replicas/${other.nodeId}/(?<remote_file>[0-9a-fA-F-]{36})\\.bin$" {\n      internal;\n      proxy_pass https://bytes_${upstream(other)}/internal-packages/$remote_file.bin;\n${gatewayTls}      proxy_set_header Cookie $http_cookie;\n      proxy_set_header Authorization $http_authorization;\n      proxy_set_header Range $http_range;\n      proxy_set_header If-Range $http_if_range;\n      proxy_force_ranges on;\n      proxy_buffering off;\n      access_log "${n.logDirectory}/${n.generation}.jsonl" svm_download if=$svm_loggable;\n      add_header Cache-Control "private, no-store" always;\n    }\n${auth(false)}    location /__svm_replicas/ { return 404; }\n    location /internal/ { return 404; }\n    location / {\n      proxy_pass https://api_public_${name};\n${proxyTls}      proxy_set_header Host $http_host;\n      client_max_body_size ${n.maxPackageBytes};\n      client_body_timeout ${n.uploadIdleSeconds}s;\n      proxy_request_buffering off;\n      proxy_read_timeout ${n.uploadIdleSeconds + 30}s;\n    }\n  }\n`
+    // The remote hop rechecks the original principal as HEAD and creates no second download session.
+    text += `  server {\n    listen ${n.privatePort} ssl;\n${tls}    ssl_client_certificate "${certs}/root.pem";\n    ssl_verify_client on;\n    if ($svm_peer_allowed = 0) { return 403; }\n    access_log off;\n${auth(true)}    location ~ "^/internal-packages/(?<package_file>[0-9a-fA-F-]{36})\\.bin$" {\n      limit_except GET HEAD { deny all; }\n      set $svm_package $package_file;\n      set $svm_request $request_id;\n      auth_request /__svm_authorize;\n      alias "${n.rootPath}/replicas/$package_file.bin";\n      add_header Cache-Control "private, no-store" always;\n    }\n    location / { return 404; }\n  }\n`
+
+  }
+  return text + '}\n'
+}
+if (process.argv[1]?.endsWith('/nginx.mjs')) {
+  try {
+    if (process.argv.length !== 4 || !path(process.argv[2]) || !path(process.argv[3])) throw new Error()
+    writeFileSync(process.argv[3], renderNginx(JSON.parse(readFileSync(process.argv[2], 'utf8'))), { mode: 0o600 }); chmodSync(process.argv[3], 0o600)
+    console.log('Rendered fixed-node package gateway configuration; private paths and certificates omitted.')
+  } catch { console.error('Package gateway configuration failed; raw data suppressed.'); process.exitCode = 1 }
+}

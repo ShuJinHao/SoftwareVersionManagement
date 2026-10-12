@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup />
+  <ItemGroup>
+    <ProjectReference Include="../../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />
+    <ProjectReference Include="../../../shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
+    <ProjectReference Include="../Svm.Core.Packages/Svm.Core.Packages.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </ItemGroup>
+</Project>

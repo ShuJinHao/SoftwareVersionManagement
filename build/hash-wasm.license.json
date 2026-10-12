@@ -1,0 +1,19 @@
+{
+  "name": "hash-wasm",
+  "version": "4.12.0",
+  "archiveUrl": "https://registry.npmjs.org/hash-wasm/-/hash-wasm-4.12.0.tgz",
+  "integrity": "sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==",
+  "archiveSha256": "1db32a125fb46177932ec8ac438d3cd8214ebdfaccb5d6611b657d88eb586f92",
+  "sha256SourceUrl": "https://raw.githubusercontent.com/Daninet/hash-wasm/v4.12.0/src/sha256.c",
+  "sha256SourceSha256": "50e43ac5681fc2d95d54194e8f42859c5877d9919ae38d723d535eb462b2c855",
+  "licenseFiles": [
+    {
+      "path": "docs/licenses/hash-wasm-4.12.0-MIT.txt",
+      "sha256": "c14dea172f72f2714284a0ac2ab1b00b5352a01409d58255a46227ffc541debd"
+    },
+    {
+      "path": "docs/licenses/hash-wasm-4.12.0-SHA256.txt",
+      "sha256": "d4962e624b4131a6885887df9e8fa704eaedef137e99c670ca833b6ce01ab355"
+    }
+  ]
+}

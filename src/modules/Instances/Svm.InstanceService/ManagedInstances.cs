@@ -41,7 +41,6 @@ internal sealed class ManagedInstances(IManagedInstanceRepository repository, IU
         new((await repository.StreamReceiptAsync(operationId,token) ?? throw Missing()).Epoch);
     public async Task<ReportResult?> FindReportAsync(Guid id,StateReport report,CancellationToken token)
     {
-        if(report.InstalledReleaseId is not null) throw Missing();
         var s=await repository.SnapshotAsync(id,unitOfWork.CurrentOperationId is not null,token);
         return Existing(s,report);
     }
@@ -50,7 +49,6 @@ internal sealed class ManagedInstances(IManagedInstanceRepository repository, IU
         RequireWrite(); var s=await repository.SnapshotAsync(id,true,token);
         if(Existing(s,report) is { } existing) return existing;
         if(report.StreamEpoch!=s.StreamEpoch || !s.StreamOpen) return Result(s,false);
-        if(report.InstalledReleaseId is not null) throw Missing(); // REL release records are not activated in this batch.
         var now=clock.GetUtcNow(); var digest=Digest(report); var installationDigest=Hash(JsonSerializer.Serialize(new { report.InstallationState,report.InstalledReleaseId,report.InstalledVersion,InstalledAt=report.InstalledAt?.ToUniversalTime() }));
         Guid? evidenceId=null;
         if(s.LastAcceptedAt is null || s.InstallationDigest!=installationDigest)

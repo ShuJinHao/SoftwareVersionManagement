@@ -1,6 +1,7 @@
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
+using Svm.Services.Contracts.Packages;
 
 namespace Svm.Application.Instances;
 
@@ -91,8 +92,8 @@ internal sealed class RecoverInstanceCommandAdapter(IInstanceAccess access) : IP
     public async Task<ProtocolResult<OperationResult<RegistrationResult>>?> FindCommittedAsync(RecoverInstanceCommand x,CancellationToken t)
     { var v=await access.FindRecoveryAsync(x,t); return v is null ? null : new(OperationResult<RegistrationResult>.Completed(v.InstanceId,v,v.InstanceId)); }
 }
-internal sealed class SubmitStatusReportCommandAdapter(IManagedInstances instances,ICallContext calls) : IProtocolRequestAdapter<SubmitStatusReportCommand,OperationResult<ReportResult>>
+internal sealed class SubmitStatusReportCommandAdapter(IManagedInstances instances,ICallContext calls, IReleases? releases = null) : IProtocolRequestAdapter<SubmitStatusReportCommand,OperationResult<ReportResult>>
 {
     public async Task<ProtocolResult<OperationResult<ReportResult>>?> FindCommittedAsync(SubmitStatusReportCommand x,CancellationToken t)
-    { var id=calls.Current!.Actor.InstanceId!.Value; var v=await instances.FindReportAsync(id,x.Report,t); return v is null ? null : new(OperationResult<ReportResult>.Completed(id,v,id)); }
+    { if(x.Report.InstalledReleaseId is { } releaseId) { if(releases is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound); await releases.VerifyInstallationAsync(calls.Current!.Actor.SoftwareId!.Value,releaseId,x.Report.InstalledVersion,t); } var id=calls.Current!.Actor.InstanceId!.Value; var v=await instances.FindReportAsync(id,x.Report,t); return v is null ? null : new(OperationResult<ReportResult>.Completed(id,v,id)); }
 }
