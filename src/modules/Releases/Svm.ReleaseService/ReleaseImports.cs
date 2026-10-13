@@ -11,11 +11,12 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     public async Task<bool> IsBoundAsync(Guid id, CancellationToken token) => options.Bindings.Any(b => b.SoftwareId == id) || await repository.BindingAsync(id, false, token) is not null;
     public async Task<bool> AuthorizesPackageAsync(Guid releaseId, Guid subject, Guid softwareId, CancellationToken token)
     {
-        var binding = options.Bindings.SingleOrDefault(b => b.SoftwareId == softwareId && b.SubjectId == subject && b.Enabled);
-        if (binding is null) return false;
         var stored = await repository.BindingAsync(softwareId, false, token);
+        if (stored is null || stored.SubjectId != subject) return false;
         var release = await releases.GetAsync(releaseId, false, token);
-        return stored is not null && Matches(stored, binding) && release?.SourceBindingId == binding.Id && release.SourceKind == "GitLab" && release.CreatedBy == subject;
+        // Synchronization settings gate new imports; dispatched work retains its immutable persisted authority.
+        return release is not null && release.SoftwareId == softwareId && release.SourceBindingId == stored.Id &&
+            release.SourceKind == "GitLab" && release.CreatedBy == subject;
     }
     public async Task<ReleaseSourceView> SourceAsync(Guid id, CancellationToken token)
     {
@@ -123,10 +124,14 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     {
         RequireWrite(); var release = await releases.GetAsync(id, true, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         if (release.SourceKind != "GitLab" || release.PackageId != packageId || release.State == "Disabled") throw new RequestRejectedException(RequestFailure.InvalidState);
+        if (await software.GetAsync(release.SoftwareId, true, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        var binding = await repository.BindingAsync(release.SoftwareId, true, token);
+        if (binding is null || binding.Id != release.SourceBindingId || binding.SubjectId != release.CreatedBy)
+            throw new RequestRejectedException(RequestFailure.InvalidState);
         if (release.State == "Staging") release.OpenImportedFormal(clock.GetUtcNow());
         var work = await repository.FindAsync(release.SourceBindingId!.Value, release.SourceTag, false, token);
         work?.Complete(clock.GetUtcNow());
-        (await Binding(release.SoftwareId, token)).Scanned(clock.GetUtcNow(), false);
+        binding.Scanned(clock.GetUtcNow(), false);
     }
     private async Task<ReleaseSourceBinding> Binding(Guid id, CancellationToken token)
     {

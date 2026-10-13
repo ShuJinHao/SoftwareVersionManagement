@@ -51,7 +51,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 首轮持久分页，只导入最高合格正式版；其余历史按 Tag 手动导入。流水线待完成的 Tag 保留后续自动核验机会，不归入 Historical；全部待完成时继续首轮核验。以后发现新 Tag 时保留低版本维护补丁；重复同步不重复创建，同 Tag 内容变更或软件数字版本冲突拒绝覆盖。GitLab 删除不删除本地历史；本地停用仍受原权限控制。绑定软件的默认入口为正式版本和同步工作，禁止新建人工版本或人工转正式，既有人工历史可查询。未绑定软件沿用下文人工流程。
 
-新增只读 release-source、release-sync-work（software.read）及 release-sync（release.upload，人员 Cookie/CSRF/幂等，202）；详细契约见设计 8.3.1。来源核验、网络及文件在事务外，阶段事实/审计/Outbox 短事务提交，提交未知只在新 Scope 核实。正式版副本修复只更新包事实，不重新开放 Test。
+新增只读 release-source、release-sync-work（software.read）及 release-sync（release.upload，人员 Cookie/CSRF/幂等，202）；详细契约见设计 8.3.1。来源核验、网络及文件在事务外，阶段事实/审计/Outbox 短事务提交，提交未知只在新 Scope 核实。正式版副本修复只更新包事实，不重新开放 Test。关闭同步或移除 GitLab 配置只阻止新扫描/导入，已派发的包工作按持久化绑定、原主体及版本来源继续核验和完成；版本停用仍阻止执行。
 
 新增 `20261013000100_GitLabReleaseImport`、冻结模型及快照；审阅 SQL 在 `artifacts/gitlab-import/gitlab-import-upgrade.sql`，只在一次性测试库执行。十份旧迁移、29 工程/99 条引用和依赖锁不变，开发库不升级。实际 GitLab 尚未搭建，当前使用 HTTPS 协议夹具验证；企业证书、令牌权限、实际流水线和厂家现场验收仍待完成。
 
