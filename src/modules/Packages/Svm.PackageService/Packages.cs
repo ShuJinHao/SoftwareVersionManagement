@@ -68,6 +68,12 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
         return new(attempt.UploadId, p.Id.Value, p.SoftwareId, p.ReleaseId, id, attempt.Generation, attempt.NodeId,
             p.ExpectedSize, p.ExpectedSha256, w.ReceiveToken != id || w.Stage != "Receiving");
     }
+    public async Task<UploadReceipt> BeginImportedAsync(Guid id, Guid receiveToken, string node, CancellationToken token)
+    {
+        RequireWrite(); var w = await ExistingWork(id, true, token); var p = await Existing(w.PackageId, true, token);
+        if (p.SizeBytes is not null || p.Disabled) throw new RequestRejectedException(RequestFailure.InvalidState);
+        w.RelocateUnreceivedImport(); return await BeginAsync(id, receiveToken, node, token);
+    }
     public async Task<UploadReceipt> ReceivingAsync(Guid id, Guid receiveToken, CancellationToken token)
     {
         var w = await ExistingWork(id, false, token); var p = await Existing(w.PackageId, false, token);

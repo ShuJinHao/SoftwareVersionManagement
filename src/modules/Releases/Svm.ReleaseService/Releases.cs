@@ -2,12 +2,18 @@ using Microsoft.Extensions.DependencyInjection;
 using Svm.Core.Releases;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Releases;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Svm.ReleaseService;
 
 public static class ReleaseRegistration
 {
-    public static IServiceCollection AddSvmReleases(this IServiceCollection services) => services.AddScoped<IReleases, Releases>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
+    public static IServiceCollection AddSvmReleases(this IServiceCollection services)
+    {
+        services.TryAddSingleton(GitLabImportOptions.Disabled);
+        return services.AddScoped<IReleases, Releases>().AddScoped<IReleaseImports, ReleaseImports>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
+    }
 }
 internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRepository software,
     IUnitOfWork unit, TimeProvider clock) : IReleases
@@ -56,7 +62,7 @@ internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRe
     private async Task<SoftwareRelease> Existing(Guid id, bool protect, CancellationToken token) =>
         await repository.GetAsync(id, protect, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
     private void RequireWrite() { if (unit.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
-    private static ReleaseView View(SoftwareRelease r) => new(r.Id.Value, r.SoftwareId, r.Version, r.State, r.ChangeLevel,
+    internal static ReleaseView View(SoftwareRelease r) => new(r.Id.Value, r.SoftwareId, r.Version, r.State, r.ChangeLevel,
         r.ChangeSummary, r.ChangeReason, r.PackageId, false, r.CreatedBy, r.CreatedAt, r.DisabledAt, r.DisableReason, r.Revision,
-        r.PublishedBy, r.PublishedEmployeeNo, r.PublishedAt, r.TestEvidenceId, r.PublishReason, r.PublishConclusion);
+        r.PublishedBy, r.PublishedEmployeeNo, r.PublishedAt, r.TestEvidenceId, r.PublishReason, r.PublishConclusion, r.SourceKind, GitLabFacts.Decode(r.SourceFactsJson));
 }

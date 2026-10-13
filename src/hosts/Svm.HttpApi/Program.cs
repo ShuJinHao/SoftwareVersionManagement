@@ -43,6 +43,8 @@ public partial class Program
 
         var taskOptions = TaskConfiguration.LoadFromEnvironment();
         var packageFiles = PackageFileOptions.LoadFromEnvironment();
+        var gitLab = GitLabOptions.LoadFromEnvironment();
+        if (gitLab is not null && packageFiles is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         var messaging = MessagingConfiguration.LoadFromEnvironment();
         if (packageFiles is not null && messaging is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         if (taskOptions is not null && packageFiles is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
@@ -62,7 +64,7 @@ public partial class Program
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<InstanceCursor>();
         builder.Services.AddSingleton(InstanceAccessConfiguration.LoadFromEnvironment());
-        builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances();
+        builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases();
         builder.Services.AddSingleton(personnel.Management);
         builder.Services.AddScoped<UserCursor>();
         if (messaging is not null) builder.Services.AddSvmMessaging(messaging, delivery: false);
@@ -73,7 +75,8 @@ public partial class Program
         builder.Services.AddScoped<IPackageServiceIdentity>(p => p.GetRequiredService<HttpPackageIdentity>());
         builder.Services.AddScoped<IPackageDownloadProof>(p => p.GetRequiredService<HttpPackageIdentity>());
         if (packageFiles is not null)
-            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleases().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization();
+            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization();
+        if (gitLab is not null) builder.Services.AddSvmGitLab(gitLab);
         builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<HttpPersonnelContext>();
@@ -138,6 +141,7 @@ public partial class Program
         app.MapSiteCatalog();
         app.MapInstanceAccess();
         app.MapPackages(packageFiles is not null);
+        app.MapGitLabReleases(packageFiles is not null);
         app.MapTasks(taskOptions is not null);
         app.MapPackageInternal(packageFiles is not null);
         app.Map("/api/{**path}", (HttpContext http) => Results.Json(new { code = "RESOURCE_NOT_FOUND", traceId = http.TraceIdentifier, retryable = false }, statusCode: 404));

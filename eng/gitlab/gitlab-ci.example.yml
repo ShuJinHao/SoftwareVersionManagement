@@ -1,0 +1,42 @@
+# Copy into the managed software repository after replacing the explicit placeholders.
+# Runner must supply the approved SDK, Node and curl, plus the enterprise CA trust.
+# ci/verify.sh and ci/package.sh belong to that software; this platform does not implement them.
+stages: [verify, package, release]
+variables:
+  SVM_PACKAGE_NAME: replace-with-bound-package-name
+  SVM_PACKAGE_FILE: dist/application.zip
+
+verify:
+  stage: verify
+  script:
+    - ./ci/verify.sh
+
+package:
+  stage: package
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v?[1-9][0-9]*\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - ./ci/package.sh "$SVM_PACKAGE_FILE"
+    - node ci/manifest.mjs "$SVM_PACKAGE_FILE" "$SVM_PACKAGE_NAME" release-manifest.json
+    - |
+      node --input-type=module <<'JS'
+      import { readFileSync, writeFileSync } from 'node:fs';
+      const m = JSON.parse(readFileSync('release-manifest.json', 'utf8'));
+      const base = `${process.env.CI_API_V4_URL}/projects/${m.projectId}/packages/generic/${m.packageName}/${m.packageVersion}`;
+      writeFileSync('release.json', JSON.stringify({ name: m.tag, tag_name: m.tag, description: `Build ${m.commitSha}`, assets: { links: [m.fileName, 'release-manifest.json'].map(name => ({ name, url: `${base}/${name}`, link_type: 'package' })) } }));
+      JS
+    - 'curl --fail-with-body --proto "=https" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$SVM_PACKAGE_FILE" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$SVM_PACKAGE_NAME/$CI_COMMIT_TAG/$(basename "$SVM_PACKAGE_FILE")"'
+    - 'curl --fail-with-body --proto "=https" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file release-manifest.json "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$SVM_PACKAGE_NAME/$CI_COMMIT_TAG/release-manifest.json"'
+  artifacts:
+    paths: [release-manifest.json, release.json]
+    expire_in: 7 days
+
+release:
+  stage: release
+  needs: [{job: package, artifacts: true}]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v?[1-9][0-9]*\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+  script:
+    - 'curl --fail-with-body --proto "=https" --request POST --header "JOB-TOKEN: $CI_JOB_TOKEN" --header "Content-Type: application/json" --data-binary @release.json "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"'
+# Platform waits for the whole Tag pipeline to be success after this job completes.
+# Do not delete/recreate a Release or overwrite files to retry a published Tag.

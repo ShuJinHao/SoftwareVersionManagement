@@ -37,7 +37,7 @@ public sealed class ReleasePublicationMigrationTests
             var directory = Path.Combine(OutboxFixture.Root, "artifacts", "release-publication"); Directory.CreateDirectory(directory);
             await File.WriteAllTextAsync(Path.Combine(directory, "release-publication-upgrade.sql"), script);
             var result = await db.Runner.ApplyAsync(default);
-            Assert.Equal(10, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
+            Assert.Equal(11, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
             await using (var c = Context(db)) Assert.False(c.Database.HasPendingModelChanges());
             Assert.Equal(2, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM rel.releases WHERE \"PublishedAt\" IS NULL AND \"TestEvidenceId\" IS NULL"));
             Assert.Equal(1, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM rel.releases WHERE \"State\"='Disabled' AND \"PublishedAt\" IS NULL"));
@@ -50,7 +50,7 @@ public sealed class ReleasePublicationMigrationTests
     private static SvmDbContext Context(PersistenceDatabase db) => new(new DbContextOptionsBuilder<SvmDbContext>().UseNpgsql(db.MigrationConnection, p => p.MigrationsHistoryTable("__EFMigrationsHistory", "framework")).Options);
     private static Task<string> Digest(PersistenceDatabase db) => PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, """
         SELECT md5(string_agg(value,'|' ORDER BY value)) FROM (
-          SELECT (to_jsonb(x)-ARRAY['PublishedBy','PublishedEmployeeNo','PublishedAt','TestEvidenceId','PublishReason','PublishConclusion'])::text value FROM rel.releases x
+          SELECT (to_jsonb(x)-ARRAY['PublishedBy','PublishedEmployeeNo','PublishedAt','TestEvidenceId','PublishReason','PublishConclusion','SourceKind','SourceBindingId','SourceTag','SourceFactsJson'])::text value FROM rel.releases x
           UNION ALL SELECT to_jsonb(x)::text FROM pkg.packages x
           UNION ALL SELECT to_jsonb(x)::text FROM ins.installation_evidence x
           UNION ALL SELECT to_jsonb(x)::text FROM ins.instances x) facts

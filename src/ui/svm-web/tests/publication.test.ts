@@ -29,7 +29,7 @@ function reads(options: { evidence?: boolean; copies?: number; publish?: boolean
   vi.stubGlobal('fetch', vi.fn(async (path: string, o?: RequestInit) => {
     if (o?.method && o.method !== 'GET' && write) { const r = await write(path, o); if (r.ok) current = await r.clone().json(); return r }
     if (path.endsWith('/session')) return Response.json(session(options.publish ?? true))
-    if (path.endsWith('/capabilities')) return Response.json({ maxPackageBytes: 10000000 })
+    if (path.endsWith('/release-source')) return Response.json({ softwareId: sid, kind: 'Manual', enabled: false }); if (path.endsWith('/capabilities')) return Response.json({ maxPackageBytes: 10000000 })
     if (path.endsWith('/software/' + sid)) return Response.json({ id: sid, name: '夹具视觉', code: 'PUB', category: 'Vision', latestAvailableFormalReleaseId: current.publishedAt ? rid : null })
     if (path.endsWith('/releases/' + rid)) return Response.json(current)
     if (path.endsWith('/packages/' + pid)) return Response.json({ ...pkg, healthyReplicaCount: options.copies ?? 2 })

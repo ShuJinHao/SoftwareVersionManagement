@@ -3,6 +3,7 @@ using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Packages;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Messaging.V1;
+using Svm.Services.Contracts.Releases;
 
 namespace Svm.Worker.Packages;
 
@@ -19,14 +20,17 @@ internal sealed class PackageWorkerIdentity(PackageFileOptions options) : IPacka
     private sealed class Exit(Action exit) : IDisposable { public void Dispose() => exit(); }
 }
 internal sealed class PackageWorkAuthorizer(PackageFileOptions files, SiteCatalogOptions site, IPackages packages,
-    IReleases releases, ISoftwareCatalog software, IPersonnelWorkAuthorization personnel) : IIntegrationWorkAuthorizer
+    IReleases releases, ISoftwareCatalog software, IPersonnelWorkAuthorization personnel, IReleaseImports imports) : IIntegrationWorkAuthorizer
 {
     public async ValueTask<IntegrationWorkAuthority> AuthorizeAsync(IIntegrationEvent message, ModuleOwner owner, bool protect, CancellationToken token)
     {
         if (owner != ModuleOwner.Packages || message is not PackageWorkAvailableV1 p || p.WorkKind == PackageWorkKind.Cleanup)
             throw new IntegrationConsumptionException(ConsumptionFailure.InvalidOwnership);
         var w = await packages.AuthorityAsync(p.WorkId, false, token);
-        if (w.Kind != "Repair" && !await personnel.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token))
+        var source = await releases.GetAsync(w.ReleaseId, false, token);
+        if (w.Kind != "Repair" && !(source.SourceKind == "GitLab"
+            ? await imports.AuthorizesPackageAsync(w.ReleaseId, w.InitiatorId, w.SoftwareId, token)
+            : await personnel.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
             throw new IntegrationConsumptionException(ConsumptionFailure.PermissionDenied);
         if (!await software.ExistsAsync(w.SoftwareId, protect, token) || (await releases.GetAsync(w.ReleaseId, protect, token)).State == "Disabled")
             throw new IntegrationConsumptionException(ConsumptionFailure.PermissionDenied);

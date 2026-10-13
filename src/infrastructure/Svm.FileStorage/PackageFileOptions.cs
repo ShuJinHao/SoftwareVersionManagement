@@ -42,9 +42,41 @@ public sealed record PackageFileOptions(string NodeId, string RootPath, Guid Ser
                 !Peers.Any(p => p.NodeId == NodeId && p.Role == "Peer" && Match(client, p.CertificateSha256)) ||
                 !Peers.Any(p => p.NodeId == NodeId && p.Role == "Collector" && Match(collector, p.CertificateSha256)))
                 throw new InvalidOperationException();
+            ValidateStorageDirectories();
         }
-        catch (Exception e) when (e is System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        catch (Exception e) when (e is System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException or NotSupportedException)
         { throw new RequestRejectedException(RequestFailure.ConfigurationInvalid); }
+    }
+    private void ValidateStorageDirectories()
+    {
+        var root = Path.GetFullPath(RootPath);
+        var logs = Path.GetFullPath(DownloadLogDirectory);
+        ValidateDirectoryTree(root); ValidateDirectoryTree(logs);
+        if (!Directory.Exists(logs)) throw new InvalidOperationException();
+        // Log files belong to the gateway. The collector needs read/search access, not write access.
+        try { _ = File.GetAttributes(Path.Combine(logs, ".svm-search-" + Guid.NewGuid().ToString("N"))); }
+        catch (FileNotFoundException) { } // A missing entry proves directory search access without creating a file.
+        foreach (var entry in Directory.EnumerateFileSystemEntries(Path.Combine(logs, ".")))
+        {
+            if (!entry.EndsWith(".jsonl", StringComparison.Ordinal)) continue;
+            if (new FileInfo(entry).LinkTarget is not null) throw new InvalidOperationException();
+            using var stream = new FileStream(entry, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            _ = stream.ReadByte();
+        }
+        if (OperatingSystem.IsWindows()) Directory.CreateDirectory(root);
+        else Directory.CreateDirectory(root, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        ValidateDirectoryTree(root);
+        using (var entries = Directory.EnumerateFileSystemEntries(Path.Combine(root, ".")).GetEnumerator()) _ = entries.MoveNext();
+        var probe = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.ReadWrite, Share = FileShare.None, Options = FileOptions.DeleteOnClose };
+        if (!OperatingSystem.IsWindows()) probe.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        using var file = new FileStream(Path.Combine(root, ".svm-access-" + Guid.NewGuid().ToString("N")), probe);
+        file.WriteByte(1); file.Position = 0;
+        if (file.ReadByte() != 1) throw new InvalidOperationException();
+    }
+    private static void ValidateDirectoryTree(string path)
+    {
+        for (var directory = new DirectoryInfo(path); directory is not null; directory = directory.Parent)
+            if (directory.LinkTarget is not null || File.Exists(directory.FullName)) throw new InvalidOperationException();
     }
     public static PackageFileOptions? LoadFromEnvironment() => Load(Environment.GetEnvironmentVariable("SVM_PACKAGE_CONFIG_FILE"));
     public static PackageFileOptions? Load(string? path)

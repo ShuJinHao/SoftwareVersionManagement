@@ -61,6 +61,11 @@ public sealed class PackageWork : AggregateRoot<StrongId<PackageWork>>
         if (SourceNode.Length != 0 && SourceNode != node) throw new InvalidOperationException("Upload belongs to another node.");
         ReceiveToken = token; SourceNode = node; ReceiveGeneration++; Stage = "Receiving"; State = "Pending"; LastErrorCode = null; Revision++;
     }
+    public void RelocateUnreceivedImport()
+    {
+        if (Stage is not ("AwaitingUpload" or "Receiving" or "UploadFailed")) throw new InvalidOperationException("Received contents cannot be relocated.");
+        SourceNode = ""; Revision++;
+    }
     public void Dispatch(Guid initiator)
     { InitiatorId = initiator; DispatchSequence++; DispatchEventId = Guid.NewGuid(); Accepted = false; LeaseToken = null; LeaseUntil = null;
       State = "Pending"; Stage = "AwaitingReceipt"; LastErrorCode = null; Revision++; }

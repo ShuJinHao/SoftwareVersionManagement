@@ -38,7 +38,7 @@ public sealed class DeploymentMigrationTests
             var directory = Path.Combine(OutboxFixture.Root, "artifacts", "deployment-update"); Directory.CreateDirectory(directory);
             await File.WriteAllTextAsync(Path.Combine(directory, "deployment-update-upgrade.sql"), script);
             var result = await db.Runner.ApplyAsync(default);
-            Assert.Equal(10, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
+            Assert.Equal(11, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
             await using (var c = Context(db))
             {
                 var snapshot = c.GetService<Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer>().Initialize(c.GetService<IMigrationsAssembly>().ModelSnapshot!.Model, designTime:true);
@@ -65,7 +65,7 @@ public sealed class DeploymentMigrationTests
     private static SvmDbContext Context(PersistenceDatabase db) => new(new DbContextOptionsBuilder<SvmDbContext>().UseNpgsql(db.MigrationConnection, p => p.MigrationsHistoryTable("__EFMigrationsHistory", "framework")).Options);
     private static Task<string> Digest(PersistenceDatabase db) => PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, """
         SELECT md5(string_agg(value,'|' ORDER BY value)) FROM (
-          SELECT (to_jsonb(x)-ARRAY['PublishedBy','PublishedEmployeeNo','PublishedAt','TestEvidenceId','PublishReason','PublishConclusion'])::text value FROM rel.releases x
+          SELECT (to_jsonb(x)-ARRAY['PublishedBy','PublishedEmployeeNo','PublishedAt','TestEvidenceId','PublishReason','PublishConclusion','SourceKind','SourceBindingId','SourceTag','SourceFactsJson'])::text value FROM rel.releases x
           UNION ALL SELECT to_jsonb(x)::text FROM pkg.packages x
           UNION ALL SELECT to_jsonb(x)::text FROM ins.installation_evidence x
           UNION ALL SELECT to_jsonb(x)::text FROM ins.instances x) facts

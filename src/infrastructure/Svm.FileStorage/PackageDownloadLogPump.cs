@@ -15,7 +15,7 @@ internal sealed class PackageDownloadLogPump(PackageFileOptions options, IUnitOf
     public async Task PumpAsync(CancellationToken token)
     {
         if (unit.CurrentOperationId is not null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting);
-        var directory = options.DownloadLogDirectory;
+        var directory = Path.GetFullPath(options.DownloadLogDirectory);
         if (!Directory.Exists(directory)) return;
         if (new DirectoryInfo(directory).LinkTarget is not null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         var cursorDirectory = Path.Combine(options.RootPath, "download-cursors"); Directory.CreateDirectory(cursorDirectory);

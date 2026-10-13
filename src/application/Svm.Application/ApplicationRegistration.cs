@@ -11,6 +11,8 @@ using Svm.Application.Packages;
 using Svm.Application.Tasks;
 using Svm.Services.Contracts.Tasks;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Releases;
+using Svm.Application.Releases;
 
 namespace Svm.Application;
 
@@ -33,7 +35,8 @@ public static class ApplicationRegistration
     public static IServiceCollection AddSvmPackageWorkerApplication(this IServiceCollection services)
     {
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
-        services.AddSvmRequestPipeline(bindings.Where(b => PackageCapabilities.IsWorker(b.RequestType)).ToArray());
+        services.AddSvmRequestPipeline(bindings.Where(b => PackageCapabilities.IsWorker(b.RequestType) || GitLabCapabilities.IsInternal(b.RequestType)).ToArray());
+        services.AddScoped<GitLabAuthorization>();
         services.AddScoped<IRequestAuthorizer, PackageWorkerAuthorization>();
         services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
         return services;
@@ -45,7 +48,8 @@ public static class ApplicationRegistration
     public static IServiceCollection AddSvmTaskWorkerApplication(this IServiceCollection services)
     {
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
-        services.AddSvmRequestPipeline(bindings.Where(b => TaskCapabilities.IsInternal(b.RequestType) || PackageCapabilities.IsWorker(b.RequestType)).ToArray());
+        services.AddSvmRequestPipeline(bindings.Where(b => TaskCapabilities.IsInternal(b.RequestType) || PackageCapabilities.IsWorker(b.RequestType) || GitLabCapabilities.IsInternal(b.RequestType)).ToArray());
+        services.AddScoped<GitLabAuthorization>();
         services.AddScoped<IRequestAuthorizer, TaskWorkerAuthorization>(); services.AddScoped<TaskAuthorization>(); services.AddScoped<TaskOperations>(); services.AddScoped<TaskDispatch>();
         services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>(); return services;
     }
@@ -58,7 +62,7 @@ public static class ApplicationRegistration
                 management && (PersonnelManagementCapabilities.Contains(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) ||
                 siteCatalog && (CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)) ||
                 instanceAccess && (InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)) ||
-                packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType)) || taskAccess && TaskCapabilities.Contains(b.RequestType))).ToArray());
+                packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType) || GitLabCapabilities.Contains(b.RequestType) && !GitLabCapabilities.IsInternal(b.RequestType)) || taskAccess && TaskCapabilities.Contains(b.RequestType))).ToArray());
         services.AddScoped<IRequestAuthorizer, PersonnelAuthorization>();
         services.AddScoped<PersonnelCompletion>();
         if (management)
@@ -97,6 +101,8 @@ public static class ApplicationRegistration
         }
         if (packageAccess)
         {
+            services.AddScoped<GitLabAuthorization>();
+            services.AddScoped<IIdempotencyRequestAdapter<RequestReleaseSyncCommand, OperationResult<ReleaseSyncWorkView>>, RequestReleaseSyncAdapter>();
             services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateReleaseCommand, OperationResult<ReleaseUploadResult>>, CreateReleaseAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<DisableReleaseCommand, OperationResult<ReleaseView>>, DisableReleaseAdapter>();

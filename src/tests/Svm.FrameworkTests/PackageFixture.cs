@@ -17,6 +17,7 @@ using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
 using Svm.Services.Contracts.Packages;
+using Svm.Services.Contracts.Releases;
 using Svm.Services.CrossCutting.Registration;
 namespace Svm.FrameworkTests;
 internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposable
@@ -34,13 +35,14 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
         try { var u = await f.Instances.Site.UserAsync(f.Instances.Site.Proof.SubjectId); await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(), u.Id, u.Revision, u.Permissions.Concat(new[] { "release.upload", "release.disable", "audit.read" }.Select(o => new PermissionView(f.SoftwareId, o))).ToArray(), "版本包夹具显式授权")); return f; }
         catch { await f.DisposeAsync(); throw; }
     }
-    internal ServiceProvider Provider(SessionProof? person = null, AccessProof? access = null, Guid? instance = null, Guid? work = null, string role = "Executor", string node = "node-a", IInterceptor? interceptor = null, bool auditFailure = false)
+    internal ServiceProvider Provider(SessionProof? person = null, AccessProof? access = null, Guid? instance = null, Guid? work = null, string role = "Executor", string node = "node-a", IInterceptor? interceptor = null, bool auditFailure = false, GitLabImportOptions? gitLab = null, bool importer = false, ModuleOwner importOwner = ModuleOwner.Releases)
     {
-        var s = new ServiceCollection(); s.AddSvmPackageApplication();
+        var s = new ServiceCollection(); if (importer) s.AddSvmPackageWorkerApplication(); else s.AddSvmPackageApplication();
         s.AddSvmPostgres(Database.WriterConnection).AddSvmReadPersistence(Database.ReaderConnection).AddSvmUserQueries().AddSvmCatalogQueries().AddSvmReleaseQueries();
         s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmPersonnelWorkAuthorization().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Instances.Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases().AddSvmPackages();
         s.AddSingleton(new PersonnelManagementOptions()); s.AddSingleton(Instances.Site.Options); s.AddSingleton(InstanceFixture.Limits); s.AddSingleton<TimeProvider>(Instances.Clock); s.AddSingleton(Limits); s.AddSingleton(Execution); s.AddSingleton(Nodes);
-        var context = new Context(person ?? Instances.Site.Proof, access, SoftwareId, instance, work, role, node);
+        var context = new Context(person ?? Instances.Site.Proof, access, SoftwareId, instance, work, role, node, importer ? gitLab!.Bindings.Single() : null, importOwner);
+        if (gitLab is not null) s.AddSingleton(gitLab); s.AddScoped<IGitLabServiceIdentity>(_ => context);
         s.AddScoped<ITrustedCallContextSource>(_ => context); s.AddScoped<ISessionProofSource>(_ => context); s.AddScoped<IAccessProofSource>(_ => context); s.AddScoped<IPackageServiceIdentity>(_ => context); s.AddScoped<IPackageDownloadProof>(_ => context); s.AddScoped<IPackageFiles, NoFiles>();
         s.AddSvmMessaging(OutboxFixture.Options(Instances.Site.Options.SiteId), delivery: false);
         if (interceptor is not null) s.AddSingleton(interceptor); if (auditFailure) s.Replace(ServiceDescriptor.Scoped<IAuditWriter, FailingAudit>());
@@ -60,12 +62,13 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
     internal IReadOnlyList<ReplicaFact> Healthy => Nodes.Nodes.Select(n => new ReplicaFact(n, "Healthy", Instances.Clock.GetUtcNow())).ToArray();
     public ValueTask DisposeAsync() => Instances.DisposeAsync();
     private sealed class FailingAudit : IAuditWriter { public void Append(AuditFact fact) => throw new IOException("package fixture audit failure"); }
-    private sealed class Context(SessionProof human, AccessProof? access, Guid software, Guid? instance, Guid? work, string role, string node) : ITrustedCallContextSource, ISessionProofSource, IAccessProofSource, IPackageServiceIdentity, IPackageDownloadProof
+    private sealed class Context(SessionProof human, AccessProof? access, Guid software, Guid? instance, Guid? work, string role, string node, GitLabBinding? binding = null, ModuleOwner importOwner = ModuleOwner.Releases) : IGitLabServiceIdentity, ITrustedCallContextSource, ISessionProofSource, IAccessProofSource, IPackageServiceIdentity, IPackageDownloadProof
     {
         private static readonly Guid Service = Guid.Parse("86c64021-789c-40a8-963d-6f3245174138");
+        public Guid? BindingId => binding?.Id;
         public Guid SubjectId => Service; public string NodeId => node; public string Role => role; public SessionProof? Person => access is null ? human : null; public AccessProof? Instance => access;
         SessionProof? ISessionProofSource.Proof => access is null ? human : null; AccessProof? IAccessProofSource.Proof => access; public string SourceAddress => "package-fixture";
-        public CallContextSnapshot GetCurrent() => work is not null ? new(new(ActorKind.Service, Service, workOwner: ModuleOwner.Packages, workId: work), RequestKind.Internal, Guid.NewGuid().ToString("N")) : access is not null ? new(new(access.Kind, instance, software, instance), RequestKind.Client, Guid.NewGuid().ToString("N")) : new(new(ActorKind.Human, human.SubjectId), RequestKind.Manage, Guid.NewGuid().ToString("N"));
+        public CallContextSnapshot GetCurrent() => binding is not null ? new(new(ActorKind.Service, binding.SubjectId, binding.SoftwareId, workOwner: importOwner, workId: work ?? binding.Id), RequestKind.Internal, Guid.NewGuid().ToString("N")) : work is not null ? new(new(ActorKind.Service, Service, workOwner: ModuleOwner.Packages, workId: work), RequestKind.Internal, Guid.NewGuid().ToString("N")) : access is not null ? new(new(access.Kind, instance, software, instance), RequestKind.Client, Guid.NewGuid().ToString("N")) : new(new(ActorKind.Human, human.SubjectId), RequestKind.Manage, Guid.NewGuid().ToString("N"));
     }
     // Transaction tests never invoke file effects. Separate fixtures use the real adapter.
     private sealed class NoFiles : IPackageFiles

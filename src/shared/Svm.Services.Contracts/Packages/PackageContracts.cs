@@ -9,7 +9,8 @@ public sealed record ReleaseView(Guid Id, Guid SoftwareId, string Version, strin
     string ChangeSummary, string ChangeReason, Guid PackageId, bool DownloadAvailable, Guid CreatedBy,
     DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? DisableReason, long Revision,
     Guid? PublishedBy = null, string? PublishedEmployeeNo = null, DateTimeOffset? PublishedAt = null,
-    Guid? TestEvidenceId = null, string? PublishReason = null, string? PublishConclusion = null);
+    Guid? TestEvidenceId = null, string? PublishReason = null, string? PublishConclusion = null,
+    string SourceKind = "Manual", Svm.Services.Contracts.Releases.GitLabReleaseFacts? Source = null);
 public sealed record ReleaseUploadResult(ReleaseView Release, Guid UploadId, string UploadPath);
 public sealed record PackageView(Guid Id, Guid ReleaseId, string State, long? SizeBytes, string? Sha256,
     long ExpectedSize, string ExpectedSha256, int HealthyReplicaCount, bool DownloadAvailable,
@@ -84,6 +85,7 @@ public interface IPackages
     Task<PackageWorkView> WorkAsync(Guid id, CancellationToken token);
     Task<Guid> CreateAsync(Guid id, Guid releaseId, Guid softwareId, Guid initiator, PackageInput input, CancellationToken token);
     Task<UploadReceipt> BeginAsync(Guid uploadId, Guid receiveToken, string nodeId, CancellationToken token);
+    Task<UploadReceipt> BeginImportedAsync(Guid uploadId, Guid receiveToken, string nodeId, CancellationToken token);
     Task<UploadReceipt> ReceiptAsync(Guid receiveToken, CancellationToken token);
     Task<UploadReceipt> ReceivingAsync(Guid uploadId, Guid receiveToken, CancellationToken token);
     Task<PackageWorkAuthority> FinishAsync(UploadReceipt receipt, long size, string sha256, CancellationToken token);
