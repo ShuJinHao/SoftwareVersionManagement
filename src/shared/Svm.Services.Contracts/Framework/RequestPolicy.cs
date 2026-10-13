@@ -6,7 +6,7 @@ public enum ActorKind { Anonymous = 1, Human, ManagementSystem, Instance, Enroll
 public enum RequestScope { Global = 1, Software, Instance, InternalWork }
 public enum ValidationMode { Required = 1, ExplicitlyNone }
 public enum TransactionMode { ReadOnly = 1, DatabaseAtomic, PhasedFile }
-public enum IdempotencyMode { None = 1, OperationResult, ReportSequence, ReceiptSequence, EnrollmentProtocol }
+public enum IdempotencyMode { None = 1, OperationResult, ReportSequence, ReceiptSequence, SelectionChunk, EnrollmentProtocol }
 
 [AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = false)]
 public sealed class RequestPolicyAttribute(

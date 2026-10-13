@@ -1,5 +1,6 @@
 using FluentValidation;
 using MediatR;
+using Svm.Services.Contracts.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
@@ -29,6 +30,7 @@ public static class FoundationServiceCollectionExtensions
         services.AddSingleton(catalog);
         services.AddScoped<ICallContext, ScopedCallContext>();
         services.AddScoped<IOperationContext, ScopedOperationContext>();
+        services.AddScoped<ITargetSnapshotContext, TargetSnapshotContext>();
         services.AddScoped<IdempotencyCoordinator>();
         services.AddScoped<ProtocolCoordinator>();
         services.AddSingleton<IProtocolRecovery, ScopedRequestExecutor>();
@@ -119,6 +121,8 @@ public static class FoundationServiceCollectionExtensions
             RequireScopedPort(services, typeof(IUnitOfWork)); RequireScopedPort(services, typeof(IReleases));
             RequireScopedPort(services, typeof(IPackages)); RequireScopedPort(services, typeof(IOperationResultStore));
         }
+        if (catalog.Bindings.Any(b => TaskCapabilities.Contains(b.RequestType)))
+        { RequireScopedPort(services, typeof(ITaskWorkflow)); RequireScopedPort(services, typeof(ITaskTime)); RequireScopedPort(services, typeof(IInstanceTaskFacts)); }
         var expectedHandlers = new HashSet<Type>();
         var expectedValidators = new HashSet<(Type Contract, Type Implementation)>();
         var expectedAdapters = new Dictionary<Type, System.Reflection.Assembly>();
@@ -130,7 +134,7 @@ public static class FoundationServiceCollectionExtensions
             expectedHandlers.Add(contract);
             RequireImplementation(services, contract, binding.HandlerType, ServiceLifetime.Scoped);
             if (catalog.GetPolicy(binding.RequestType).Idempotency != IdempotencyMode.None)
-                expectedAdapters.Add((InstanceCapabilities.IsProtocol(binding.RequestType) ? typeof(IProtocolRequestAdapter<,>) : typeof(IIdempotencyRequestAdapter<,>)).MakeGenericType(binding.RequestType, response), binding.HandlerType.Assembly);
+                expectedAdapters.Add((InstanceCapabilities.IsProtocol(binding.RequestType) || TaskCapabilities.IsProtocol(binding.RequestType) ? typeof(IProtocolRequestAdapter<,>) : typeof(IIdempotencyRequestAdapter<,>)).MakeGenericType(binding.RequestType, response), binding.HandlerType.Assembly);
             foreach (var validator in binding.ValidatorTypes)
                 expectedValidators.Add((typeof(IValidator<>).MakeGenericType(binding.RequestType), validator));
         }

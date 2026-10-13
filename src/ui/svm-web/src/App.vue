@@ -10,7 +10,7 @@ const pendingWrite = ref(false)
 provide(pendingWriteKey, pendingWrite)
 const authenticated = computed(() => session.current?.authenticated === true)
 const home = computed(() => session.canAssets ? '/site' : session.canSoftware ? '/software' : session.canInstances ? '/instances' : session.canEnrollment ? '/enrollment' : session.canManage ? '/users' : '/password')
-const allowed = computed(() => route.path === '/password' || route.path === '/site' && session.canAssets || route.path === '/software' && session.canSoftware || route.path === '/releases' && typeof route.query.softwareId === 'string' && session.can('software.read', route.query.softwareId) || route.path === '/users' && session.canManage || route.path === '/instances' && session.canInstances || route.path === '/enrollment' && session.canEnrollment)
+const allowed = computed(() => route.path === '/deployments' && typeof route.query.softwareId === 'string' && (session.can('instance.read',route.query.softwareId) || session.can('deployment.create',route.query.softwareId)) ||  route.path === '/password' || route.path === '/site' && session.canAssets || route.path === '/software' && session.canSoftware || route.path === '/releases' && typeof route.query.softwareId === 'string' && session.can('software.read', route.query.softwareId) || route.path === '/users' && session.canManage || route.path === '/instances' && session.canInstances || route.path === '/enrollment' && session.canEnrollment)
 watch(() => [session.ready, authenticated.value, session.current?.mustChangePassword, allowed.value, home.value, route.path, pendingWrite.value], () => {
   if (!session.ready || session.error) return
   if (pendingWrite.value) return
@@ -38,6 +38,6 @@ async function logout() {
       <RouterLink v-if="session.canAssets" to="/site">现场台账</RouterLink><RouterLink v-if="session.canSoftware" to="/software">软件目录</RouterLink><RouterLink v-if="session.canManage" to="/users">人员账号</RouterLink><RouterLink v-if="session.canInstances" to="/instances">软件实例</RouterLink><RouterLink v-if="session.canEnrollment" to="/enrollment">登记许可</RouterLink><RouterLink to="/password">本人密码</RouterLink>
       <span v-if="!session.canManage && !session.canAssets && !session.canSoftware && !session.canInstances && !session.canEnrollment" class="muted">当前账号未获管理或台账权限</span>
     </nav>
-    <main><p v-if="error" role="alert" class="error">{{ error }}</p><RouterView :key="route.path + (route.path === '/releases' ? String(route.query.softwareId) : '')" v-if="!authenticated && route.path === '/login' || authenticated && (pendingWrite || allowed && (route.path === '/password' || !session.current?.mustChangePassword))" /></main>
+    <main><p v-if="error" role="alert" class="error">{{ error }}</p><RouterView :key="route.path + (['/releases','/deployments'].includes(route.path) ? String(route.query.softwareId) : '')" v-if="!authenticated && route.path === '/login' || authenticated && (pendingWrite || allowed && (route.path === '/password' || !session.current?.mustChangePassword))" /></main>
   </template>
 </template>

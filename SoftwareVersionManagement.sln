@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -81,6 +81,14 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Svm.PackageService", "src\modules\Packages\Svm.PackageService\Svm.PackageService.csproj", "{98EC8F2A-B42B-5E6D-9B69-100F7D3DA682}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Svm.FileStorage", "src\infrastructure\Svm.FileStorage\Svm.FileStorage.csproj", "{E32DE2F3-FDA6-5D05-8219-ABE062BE5081}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "modules", "modules", "{701A6C2A-0C6F-4694-8E25-A1404CC63D2F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tasks", "Tasks", "{4589FA39-9319-44F5-AB4F-2DFE1C8DE96A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Svm.Core.Tasks", "src\modules\Tasks\Svm.Core.Tasks\Svm.Core.Tasks.csproj", "{E68CA34E-369C-44B4-BBB7-F80DDF2AD8D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Svm.TaskService", "src\modules\Tasks\Svm.TaskService\Svm.TaskService.csproj", "{F00728DF-F572-4E86-AAFF-6E677E9D6015}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -196,6 +204,14 @@ Global
 		{E32DE2F3-FDA6-5D05-8219-ABE062BE5081}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E32DE2F3-FDA6-5D05-8219-ABE062BE5081}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E32DE2F3-FDA6-5D05-8219-ABE062BE5081}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E68CA34E-369C-44B4-BBB7-F80DDF2AD8D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E68CA34E-369C-44B4-BBB7-F80DDF2AD8D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E68CA34E-369C-44B4-BBB7-F80DDF2AD8D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E68CA34E-369C-44B4-BBB7-F80DDF2AD8D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F00728DF-F572-4E86-AAFF-6E677E9D6015}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F00728DF-F572-4E86-AAFF-6E677E9D6015}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F00728DF-F572-4E86-AAFF-6E677E9D6015}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F00728DF-F572-4E86-AAFF-6E677E9D6015}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{FB75E5DB-CDC8-5E38-9853-4DDACB27F682} = {4993796F-8C86-57E8-A2AB-724BC2AC5B1B}
@@ -237,5 +253,8 @@ Global
 		{054EF6B3-BB6B-5AA2-AC0D-A692B1B1E78F} = {83A061C5-5881-552D-9A4D-117B4DE5FA51}
 		{98EC8F2A-B42B-5E6D-9B69-100F7D3DA682} = {83A061C5-5881-552D-9A4D-117B4DE5FA51}
 		{E32DE2F3-FDA6-5D05-8219-ABE062BE5081} = {4A52874F-CB61-507A-857B-84F7BF873971}
+		{4589FA39-9319-44F5-AB4F-2DFE1C8DE96A} = {701A6C2A-0C6F-4694-8E25-A1404CC63D2F}
+		{E68CA34E-369C-44B4-BBB7-F80DDF2AD8D9} = {4589FA39-9319-44F5-AB4F-2DFE1C8DE96A}
+		{F00728DF-F572-4E86-AAFF-6E677E9D6015} = {4589FA39-9319-44F5-AB4F-2DFE1C8DE96A}
 	EndGlobalSection
 EndGlobal

@@ -60,6 +60,7 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
 }
 public interface IReleaseRepository
 {
+    Task<IReadOnlyList<SoftwareRelease>> FormalCandidatesAsync(Guid softwareId, CancellationToken token);
     Task<SoftwareRelease?> GetAsync(Guid id, bool protect, CancellationToken token);
     Task<SoftwareRelease?> LatestAsync(Guid softwareId, CancellationToken token);
     void Add(SoftwareRelease release);

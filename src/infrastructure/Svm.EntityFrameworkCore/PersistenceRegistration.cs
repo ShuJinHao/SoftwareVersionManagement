@@ -36,6 +36,10 @@ public static class PersistenceRegistration
         services.AddScoped<IAuditRepository, AuditRepository>();
         services.AddScoped<IInstanceAccessRepository, InstanceAccessRepository>();
         services.AddScoped<IManagedInstanceRepository, ManagedInstanceRepository>();
+        services.AddScoped<IInstanceTargetRepository, InstanceTargetRepository>();
+        services.AddScoped<Svm.Core.Tasks.ITaskRepository, Tasks.TaskRepository>();
+        services.AddScoped<Svm.Services.Contracts.Tasks.ITaskTime, Tasks.TaskTime>();
+        services.AddScoped<IIntegrationMaterialRepository, Tasks.IntegrationMaterialRepository>();
         return services;
     }
 }

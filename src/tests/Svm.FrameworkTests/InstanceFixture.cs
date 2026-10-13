@@ -39,21 +39,21 @@ internal sealed class InstanceFixture(SiteCatalogFixture site) : IAsyncDisposabl
         }
         catch { await f.DisposeAsync(); throw; }
     }
-    internal ServiceProvider Provider(AccessProof? access=null,Guid? instanceId=null,IInterceptor? interceptor=null,bool auditFailure=false,SessionProof? human=null)
+    internal ServiceProvider Provider(AccessProof? access=null,Guid? instanceId=null,IInterceptor? interceptor=null,bool auditFailure=false,SessionProof? human=null,Guid? softwareId=null)
     {
         var s=new ServiceCollection(); s.AddSvmInstanceApplication(); s.AddSingleton(Limits);
         s.AddSvmPostgres(Site.Personnel.Personnel.Database.WriterConnection).AddSvmReadPersistence(Site.Personnel.Personnel.Database.ReaderConnection).AddSvmUserQueries().AddSvmCatalogQueries();
         s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances();
         s.AddSingleton(new PersonnelManagementOptions()); s.AddSingleton(Site.Options); s.AddSingleton<TimeProvider>(Clock);
-        s.AddScoped<ISessionProofSource>(_=>new Context(human??Site.Proof,access,SoftwareId,instanceId));
-        s.AddScoped<IAccessProofSource>(_=>new Context(human??Site.Proof,access,SoftwareId,instanceId));
-        s.AddScoped<ITrustedCallContextSource>(_=>new Context(human??Site.Proof,access,SoftwareId,instanceId));
+        s.AddScoped<ISessionProofSource>(_=>new Context(human??Site.Proof,access,softwareId??SoftwareId,instanceId));
+        s.AddScoped<IAccessProofSource>(_=>new Context(human??Site.Proof,access,softwareId??SoftwareId,instanceId));
+        s.AddScoped<ITrustedCallContextSource>(_=>new Context(human??Site.Proof,access,softwareId??SoftwareId,instanceId));
         if(interceptor is not null) s.AddSingleton(interceptor);
         if(auditFailure) s.Replace(ServiceDescriptor.Scoped<IAuditWriter,FailingAudit>());
         s.ValidateSvmFoundation(); return s.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild=true,ValidateScopes=true });
     }
-    internal async Task<T> SendAsync<T>(IRequest<T> x,AccessProof? access=null,Guid? instanceId=null,IInterceptor? interceptor=null,bool auditFailure=false,CancellationToken token=default,SessionProof? human=null)
-    { await using var p=Provider(access,instanceId,interceptor,auditFailure,human); await using var scope=p.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<ISender>().Send(x,token); }
+    internal async Task<T> SendAsync<T>(IRequest<T> x,AccessProof? access=null,Guid? instanceId=null,IInterceptor? interceptor=null,bool auditFailure=false,CancellationToken token=default,SessionProof? human=null,Guid? softwareId=null)
+    { await using var p=Provider(access,instanceId,interceptor,auditFailure,human,softwareId); await using var scope=p.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<ISender>().Send(x,token); }
     internal async Task<(GrantView Grant,AccessProof Proof)> GrantAsync(int capacity=10,DateTimeOffset? expires=null)
     {
         var secret=Secret(); var result=await SendAsync(new CreateEnrollmentGrantCommand(Guid.NewGuid(),SoftwareId,[Device.Id],expires??Clock.GetUtcNow().AddHours(1),capacity,secret,"夹具登记许可"));

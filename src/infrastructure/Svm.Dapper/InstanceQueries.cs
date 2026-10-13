@@ -6,7 +6,7 @@ using Svm.Services.Contracts.Packages;
 
 namespace Svm.Dapper;
 
-internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope scope,TimeProvider? clock=null, IFormalReleaseAvailability? availability = null) : IInstanceQueries
+internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope scope,TimeProvider? clock=null, IFormalReleaseAvailability? availability = null, Svm.Services.Contracts.Tasks.ITaskQueries? tasks = null) : IInstanceQueries
 {
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
     internal const string Projection = """
@@ -50,6 +50,8 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
     }
     private async Task SetLatestAsync(IReadOnlyList<InstanceRow> rows, CancellationToken token)
     {
+        if (tasks is not null)
+        { var summaries = await tasks.LatestAsync(rows.Select(x => x.Id).ToArray(), token); foreach (var row in rows) if (summaries.TryGetValue(row.Id, out var summary)) { row.LatestTaskId = summary.TaskId; row.LatestTaskResult = summary.Result; } }
         if (availability is null) return;
         var latest = await availability.LatestAsync(rows.Select(row => row.SoftwareId).Distinct().ToArray(), token);
         foreach (var row in rows) row.LatestAvailableFormalReleaseId = latest.TryGetValue(row.SoftwareId, out var id) ? id : null;
@@ -113,7 +115,9 @@ internal class InstanceRow
     public string ProcessCode {get;set;}=""; public string ProcessName {get;set;}=""; public string Lifecycle {get;set;}="";
     public long Revision {get;set;} public string? SnapshotJson {get;set;} public DateTimeOffset? LastAcceptedAt {get;set;}
     public Guid? LatestAvailableFormalReleaseId { get; set; }
+    public Guid? LatestTaskId { get; set; }
+    public string? LatestTaskResult { get; set; }
     internal InstanceView View(SiteView site,DateTimeOffset now) => new(Id,SoftwareId,DeviceId,DeviceNo,DeviceName,new(site.SiteId,site.SiteName,ProcessId,ProcessCode,ProcessName),
         Lifecycle,SnapshotJson is null?null:JsonSerializer.Deserialize<StateReport>(SnapshotJson),LastAcceptedAt,
-        LastAcceptedAt is { } t ? Math.Max(0,(long)Math.Floor((now-t).TotalSeconds)):null,InstanceValidation.Freshness(LastAcceptedAt,now),LatestAvailableFormalReleaseId,null,null,Revision);
+        LastAcceptedAt is { } t ? Math.Max(0,(long)Math.Floor((now-t).TotalSeconds)):null,InstanceValidation.Freshness(LastAcceptedAt,now),LatestAvailableFormalReleaseId,LatestTaskId,LatestTaskResult,Revision);
 }

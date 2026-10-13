@@ -91,6 +91,12 @@
           "Svm.SharedKernel": "[1.0.0, )"
         }
       },
+      "svm.core.tasks": {
+        "type": "Project",
+        "dependencies": {
+          "Svm.SharedKernel": "[1.0.0, )"
+        }
+      },
       "svm.dapper": {
         "type": "Project",
         "dependencies": {
@@ -115,6 +121,7 @@
           "Svm.Core.Instances": "[1.0.0, )",
           "Svm.Core.Packages": "[1.0.0, )",
           "Svm.Core.Releases": "[1.0.0, )",
+          "Svm.Core.Tasks": "[1.0.0, )",
           "Svm.Services.Contracts": "[1.0.0, )",
           "Svm.SharedKernel": "[1.0.0, )"
         }
@@ -160,6 +167,7 @@
           "Svm.Services.Contracts": "[1.0.0, )",
           "Svm.Services.CrossCutting": "[1.0.0, )",
           "Svm.SharedKernel": "[1.0.0, )",
+          "Svm.TaskService": "[1.0.0, )",
           "Swashbuckle.AspNetCore": "[10.2.3, 10.2.3]"
         }
       },
@@ -242,6 +250,15 @@
       "svm.sharedkernel": {
         "type": "Project"
       },
+      "svm.taskservice": {
+        "type": "Project",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "[8.0.2, 8.0.2]",
+          "Svm.Core.Tasks": "[1.0.0, )",
+          "Svm.Services.Contracts": "[1.0.0, )",
+          "Svm.SharedKernel": "[1.0.0, )"
+        }
+      },
       "svm.worker": {
         "type": "Project",
         "dependencies": {
@@ -261,7 +278,8 @@
           "Svm.ServiceDefaults": "[1.0.0, )",
           "Svm.Services.Contracts": "[1.0.0, )",
           "Svm.Services.CrossCutting": "[1.0.0, )",
-          "Svm.SharedKernel": "[1.0.0, )"
+          "Svm.SharedKernel": "[1.0.0, )",
+          "Svm.TaskService": "[1.0.0, )"
         }
       },
       "Dapper": {

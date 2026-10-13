@@ -9,7 +9,7 @@ using Svm.Services.Contracts.Packages;
 namespace Svm.Application.Personnel;
 
 internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessionProofSource proofSource, IUnitOfWork unitOfWork,
-    IPersonnelAdministration? administration = null, ISiteAssets? assets = null, ISoftwareCatalog? software = null, InstanceAuthorization? instanceAuthorization = null, PackageAuthorization? packageAuthorization = null) : IRequestAuthorizer
+    IPersonnelAdministration? administration = null, ISiteAssets? assets = null, ISoftwareCatalog? software = null, InstanceAuthorization? instanceAuthorization = null, PackageAuthorization? packageAuthorization = null, Svm.Application.Tasks.TaskAuthorization? taskAuthorization = null) : IRequestAuthorizer
 {
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
     {
@@ -17,6 +17,8 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
             request.Context.EntryKind == RequestKind.Internal && request.Context.Actor.WorkOwner == ModuleOwner.Identity)
             return request.Context.Actor.WorkId is { } workId ? AuthorizationDecision.Allow(AuthorizationTarget.Work(ModuleOwner.Identity, workId)) :
                 AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        if (Svm.Services.Contracts.Tasks.TaskCapabilities.Contains(request.Request.GetType()) && request.Context.Actor.Kind is ActorKind.Service or ActorKind.Instance)
+            return taskAuthorization is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await taskAuthorization.AuthorizeAsync(request, null, cancellationToken);
         if (PackageCapabilities.IsWrite(request.Request.GetType()) || PackageCapabilities.IsQuery(request.Request.GetType()))
         {
             if (packageAuthorization is null) return AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid);
@@ -41,6 +43,8 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
         if (request.Request is CurrentSessionQuery or ChangePasswordCommand or LogoutCommand)
             return AuthorizationDecision.Allow(AuthorizationTarget.Global());
         if (person.MustChangePassword) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        if (Svm.Services.Contracts.Tasks.TaskCapabilities.Contains(request.Request.GetType()))
+            return taskAuthorization is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await taskAuthorization.AuthorizeAsync(request, person, cancellationToken);
         if (PackageCapabilities.IsWrite(request.Request.GetType()) || PackageCapabilities.IsQuery(request.Request.GetType()))
             return await packageAuthorization!.ExternalAsync(request, person, cancellationToken);
         if (InstanceCapabilities.IsWrite(request.Request.GetType()) || InstanceCapabilities.IsQuery(request.Request.GetType()))

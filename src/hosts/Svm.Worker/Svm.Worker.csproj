@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../modules/Tasks/Svm.TaskService/Svm.TaskService.csproj" />
     <ProjectReference Include="../../shared/Svm.SharedKernel/Svm.SharedKernel.csproj" />
     <ProjectReference Include="../../shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
     <ProjectReference Include="../../shared/Svm.Services.CrossCutting/Svm.Services.CrossCutting.csproj" />

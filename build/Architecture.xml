@@ -71,6 +71,7 @@
     <Package name="MassTransit.EntityFrameworkCore" />
     <Package name="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" />
     <Reference name="Svm.Core.Packages" />
+    <Reference name="Svm.Core.Tasks" />
   </Project>
   <Project name="Svm.Dapper" path="src/infrastructure/Svm.Dapper/Svm.Dapper.csproj" kind="infrastructure">
     <Reference name="Svm.SharedKernel" />
@@ -125,6 +126,7 @@
     <Package name="Microsoft.OpenApi" />
     <Reference name="Svm.PackageService" />
     <Reference name="Svm.FileStorage" />
+    <Reference name="Svm.TaskService" />
   </Project>
   <Project name="Svm.Worker" path="src/hosts/Svm.Worker/Svm.Worker.csproj" kind="hosts">
     <Reference name="Svm.SharedKernel" />
@@ -144,6 +146,7 @@
     <Package name="MediatR" />
     <Reference name="Svm.PackageService" />
     <Reference name="Svm.FileStorage" />
+    <Reference name="Svm.TaskService" />
   </Project>
   <Project name="Svm.Migration" path="src/hosts/Svm.Migration/Svm.Migration.csproj" kind="hosts">
     <Reference name="Svm.Services.Contracts" />
@@ -202,6 +205,15 @@
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>
   <Project name="Svm.FileStorage" path="src/infrastructure/Svm.FileStorage/Svm.FileStorage.csproj" kind="infrastructure">
+    <Reference name="Svm.Services.Contracts" />
+    <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
+  </Project>
+  <Project name="Svm.Core.Tasks" path="src/modules/Tasks/Svm.Core.Tasks/Svm.Core.Tasks.csproj" kind="core">
+    <Reference name="Svm.SharedKernel" />
+  </Project>
+  <Project name="Svm.TaskService" path="src/modules/Tasks/Svm.TaskService/Svm.TaskService.csproj" kind="services">
+    <Reference name="Svm.Core.Tasks" />
+    <Reference name="Svm.SharedKernel" />
     <Reference name="Svm.Services.Contracts" />
     <Package name="Microsoft.Extensions.DependencyInjection.Abstractions" />
   </Project>

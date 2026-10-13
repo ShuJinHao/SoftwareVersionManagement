@@ -24,7 +24,7 @@ public sealed class PackageMigrationTests
                 """);
             var before = await Digest(db); var script = db.Runner.GenerateScript(); Assert.Contains("20261010000100_ReleasesAndPackages", script);
             var directory = Path.Combine(OutboxFixture.Root, "artifacts", "releases-packages"); Directory.CreateDirectory(directory); await File.WriteAllTextAsync(Path.Combine(directory, "releases-packages-upgrade.sql"), script);
-            var result = await db.Runner.ApplyAsync(default); Assert.Equal(9, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db)); await using (var c = Context(db)) Assert.False(c.Database.HasPendingModelChanges());
+            var result = await db.Runner.ApplyAsync(default); Assert.Equal(10, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db)); await using (var c = Context(db)) Assert.False(c.Database.HasPendingModelChanges());
             foreach (var table in new[] { "rel.releases", "pkg.packages", "pkg.works", "pkg.replicas", "pkg.download_sessions", "pkg.dispatches", "pkg.receive_attempts" }) Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM " + table));
             await Assert.ThrowsAsync<PostgresException>(() => PersistenceDatabase.ExecuteAsync(db.WriterConnection, "DELETE FROM pkg.dispatches")); await Assert.ThrowsAsync<PostgresException>(() => PersistenceDatabase.ExecuteAsync(db.ReaderConnection, "INSERT INTO pkg.dispatches VALUES(gen_random_uuid(),gen_random_uuid(),1)")); Assert.Equal(result.Applied, (await db.Runner.ApplyAsync(default)).Applied);
         }

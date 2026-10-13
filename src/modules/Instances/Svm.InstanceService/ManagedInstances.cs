@@ -11,7 +11,7 @@ namespace Svm.InstanceService;
 
 public static class ManagedInstanceRegistration
 {
-    public static IServiceCollection AddSvmManagedInstances(this IServiceCollection services) => services.AddScoped<IManagedInstances,ManagedInstances>();
+    public static IServiceCollection AddSvmManagedInstances(this IServiceCollection services) => services.AddScoped<IManagedInstances,ManagedInstances>().AddScoped<Svm.Services.Contracts.Tasks.IInstanceTaskFacts,InstanceTaskFacts>();
 }
 internal sealed class ManagedInstances(IManagedInstanceRepository repository, IUnitOfWork unitOfWork, SiteCatalogOptions options, TimeProvider clock) : IManagedInstances
 {

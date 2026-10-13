@@ -33,6 +33,7 @@ public sealed record DownloadAuditPage(IReadOnlyList<DownloadAuditView> Items, G
 /// <summary>REL owns numbering and state. Cross-module package facts enter only through Application.</summary>
 public interface IReleases
 {
+    Task<IReadOnlyList<ReleaseView>> FormalCandidatesAsync(Guid softwareId, CancellationToken token);
     Task<Guid?> SoftwareForAsync(Guid releaseId, bool protect, CancellationToken token);
     Task<ReleaseView> GetAsync(Guid releaseId, bool protect, CancellationToken token);
     Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token);

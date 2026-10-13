@@ -25,6 +25,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     internal LocalApi ApiB { get; private set; } = null!;
     internal string DirectoryPath { get; } = Path.Combine(OutboxFixture.Root, ".cache", "package-verification-" + Guid.NewGuid().ToString("N"));
     internal PackageCopyProxy? CopyProxy { get; private set; }
+    internal Svm.Services.Contracts.Tasks.TaskOptions? Tasks { get; private set; }
     internal string GatewayUrl { get; private set; } = "";
     internal string CertificatePassword { get; } = Guid.NewGuid().ToString("N");
     internal MessagingOptions Messaging => Broker.Options with { SiteId = Site.Require().SiteId, QueryDelaySeconds = 1 };
@@ -32,9 +33,9 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     private readonly List<PackageProcess> _workers = []; private readonly List<string> _files = [];
     private readonly Dictionary<string, string> _gatewayThumbprints = new();
     private string? _container; private bool _brokerReady; private Guid _generationA = Guid.NewGuid(), _generationB = Guid.NewGuid();
-    internal static async Task<PackageHostFixture> CreateAsync(bool copyProxy = false)
+    internal static async Task<PackageHostFixture> CreateAsync(bool copyProxy = false, bool tasks = false)
     {
-        var f = new PackageHostFixture();
+        var f = new PackageHostFixture(); if(tasks) f.Tasks = TaskFixture.TaskOptions with { SelectionChunkSize=100, ResultWaitSeconds=300 };
         try
         {
             Directory.CreateDirectory(f.DirectoryPath); if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(f.DirectoryPath, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
@@ -44,8 +45,8 @@ internal sealed class PackageHostFixture : IAsyncDisposable
             if (copyProxy) f.CopyProxy = new(f.CertPath("server-node-b", ".pfx"), f.CertPath("peer-node-a", ".pfx"), f.CertificatePassword, pb);
             var nodes = new[] { f.Node("node-a", pa), f.Node("node-b", f.CopyProxy?.Port ?? pb) }; var peers = f.Peers();
             f.A = f.Options("node-a", pa, nodes, peers); f.B = f.Options("node-b", pb, nodes, peers);
-            f.ApiA = await LocalApi.StartAsync(f.Personnel.Database, site: f.Site, instanceAccess: InstanceFixture.Limits, packages: f.A, messaging: f.Messaging, publicPort: f.ApiPortA);
-            f.ApiB = await LocalApi.StartAsync(f.Personnel.Database, site: f.Site, instanceAccess: InstanceFixture.Limits, packages: f.B, messaging: f.Messaging, publicPort: f.ApiPortB);
+            f.ApiA = await LocalApi.StartAsync(f.Personnel.Database, site: f.Site, instanceAccess: InstanceFixture.Limits, packages: f.A, messaging: f.Messaging, publicPort: f.ApiPortA,tasks:f.Tasks);
+            f.ApiB = await LocalApi.StartAsync(f.Personnel.Database, site: f.Site, instanceAccess: InstanceFixture.Limits, packages: f.B, messaging: f.Messaging, publicPort: f.ApiPortB,tasks:f.Tasks);
             return f;
         }
         catch { await f.DisposeAsync(); throw; }
@@ -53,7 +54,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     internal async Task<PackageProcess> WorkerAsync(PackageFileOptions options)
     { var worker = await PackageProcess.StartAsync(this, options); _workers.Add(worker); return worker; }
     internal async Task RestartApiBAsync()
-    { await ApiB.DisposeAsync(); ApiB = await LocalApi.StartAsync(Personnel.Database, site: Site, instanceAccess: InstanceFixture.Limits, packages: B, messaging: Messaging, publicPort: ApiPortB); }
+    { await ApiB.DisposeAsync(); ApiB = await LocalApi.StartAsync(Personnel.Database, site: Site, instanceAccess: InstanceFixture.Limits, packages: B, messaging: Messaging, publicPort: ApiPortB,tasks:Tasks); }
     internal HttpClient Client(CookieContainer cookies) => ApiA.Client(cookies);
     internal string Replica(PackageFileOptions node, Guid id) => Path.Combine(node.RootPath, "replicas", id.ToString("D") + ".bin");
     internal static int Port() { var l = new TcpListener(IPAddress.Loopback, 0); l.Start(); var port = ((IPEndPoint)l.LocalEndpoint).Port; l.Stop(); return port; }
@@ -125,13 +126,14 @@ internal sealed class PackageProcess : IAsyncDisposable
     private PackageProcess(Process p, string[] configs, string[] secrets) { _process = p; _configs = configs; _secrets = secrets; _errors = p.StandardError.ReadToEndAsync(); }
     internal static async Task<PackageProcess> StartAsync(PackageHostFixture f, PackageFileOptions options)
     {
-        var configs = new[] { await OutboxFixture.PrivateJsonAsync(new { writerConnectionString = f.Personnel.Database.WriterConnection, readerConnectionString = f.Personnel.Database.ReaderConnection }), await OutboxFixture.PrivateJsonAsync(f.Messaging), await OutboxFixture.PrivateJsonAsync(f.Site), await OutboxFixture.PrivateJsonAsync(options) };
+        var configs = new List<string> { await OutboxFixture.PrivateJsonAsync(new { writerConnectionString = f.Personnel.Database.WriterConnection, readerConnectionString = f.Personnel.Database.ReaderConnection }), await OutboxFixture.PrivateJsonAsync(f.Messaging), await OutboxFixture.PrivateJsonAsync(f.Site), await OutboxFixture.PrivateJsonAsync(options) };
         var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root, "eng/dotnet")) { WorkingDirectory = OutboxFixture.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false }; info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net8.0/Svm.Worker.dll"));
+        info.Environment.Remove("SVM_TASK_CONFIG_FILE"); if(f.Tasks is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.Tasks)); info.Environment["SVM_TASK_CONFIG_FILE"]=configs[^1]; }
         foreach (var (name, i) in new[] { ("SVM_PERSISTENCE_CONFIG_FILE", 0), ("SVM_MESSAGING_CONFIG_FILE", 1), ("SVM_SITE_CONFIG_FILE", 2), ("SVM_PACKAGE_CONFIG_FILE", 3) }) info.Environment[name] = configs[i]; info.Environment["Logging__LogLevel__Default"] = "Information"; info.Environment["Logging__LogLevel__MassTransit"] = "Warning";
         var p = new Process { StartInfo = info, EnableRaisingEvents = true }; var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); PackageProcess? worker = null;
         p.Exited += (_, _) => ready.TrySetException(new InvalidOperationException("Package Worker exited before readiness; redacted log retained."));
         p.OutputDataReceived += (_, e) => { if (e.Data is null) return; lock (worker!._logs) worker._logs.AppendLine(e.Data); if (e.Data.Contains("Application started.", StringComparison.Ordinal)) ready.TrySetResult(); };
-        try { Assert.True(p.Start()); worker = new(p, configs, [f.CertificatePassword, f.Messaging.Password]); p.BeginOutputReadLine(); await ready.Task.WaitAsync(TimeSpan.FromSeconds(25)); Assert.False(p.HasExited); return worker; }
+        try { Assert.True(p.Start()); worker = new(p, configs.ToArray(), [f.CertificatePassword, f.Messaging.Password]); p.BeginOutputReadLine(); await ready.Task.WaitAsync(TimeSpan.FromSeconds(25)); Assert.False(p.HasExited); return worker; }
         catch { if (worker is not null) await worker.DisposeAsync(); else { foreach (var c in configs) File.Delete(c); p.Dispose(); } throw; }
     }
     public async ValueTask DisposeAsync()

@@ -96,6 +96,12 @@
           "Svm.SharedKernel": "[1.0.0, )"
         }
       },
+      "svm.core.tasks": {
+        "type": "Project",
+        "dependencies": {
+          "Svm.SharedKernel": "[1.0.0, )"
+        }
+      },
       "svm.services.contracts": {
         "type": "Project",
         "dependencies": {
