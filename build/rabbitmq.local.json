@@ -1,6 +1,7 @@
 {
   "version": "4.3.6",
-  "platform": "linux/arm64",
-  "image": "docker.io/library/rabbitmq@sha256:fe9009076fc11578b8b02ff62ea246e2c224c4972c73aa803f32791342e3d447",
-  "dockerContext": "desktop-linux"
+  "images": {
+    "linux/amd64": "docker.io/library/rabbitmq@sha256:81b8ade331d0360a514025e64fc61309106e6bf8ea449c377aa5d12d07682a28",
+    "linux/arm64": "docker.io/library/rabbitmq@sha256:fe9009076fc11578b8b02ff62ea246e2c224c4972c73aa803f32791342e3d447"
+  }
 }

@@ -1,0 +1,20 @@
+{
+  "siteName": "虚构演示厂区（非生产台账）",
+  "timeZone": "Asia/Shanghai",
+  "publicHost": "localhost",
+  "publicBind": "127.0.0.1",
+  "httpsPort": 9443,
+  "secondaryHttpsPort": 9444,
+  "mode": "full",
+  "platform": "linux/amd64",
+  "networkSubnet": "172.31.249.0/28",
+  "gatewayAddress": "172.31.249.10",
+  "packageLimits": { "maxPackageBytes": 33554432, "uploadIdleSeconds": 30 },
+  "packageExecution": { "leaseSeconds": 60, "pollSeconds": 2, "replicaCheckSeconds": 10, "workBatchSize": 20 },
+  "task": {
+    "defaultStartLocalTime": "00:00", "defaultLatestStartLocalTime": "23:59",
+    "batchSize": 10, "failureLimit": 2, "resultWaitSeconds": 300,
+    "selectionChunkSize": 100, "leaseSeconds": 60, "pollRetrySeconds": 2,
+    "maxSelectionMembers": 1000, "snapshotTimeoutSeconds": 10
+  }
+}

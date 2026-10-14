@@ -1,0 +1,119 @@
+name: Platform delivery
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: platform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.impact.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: impact
+        run: node eng/ci-changes.mjs
+  compatibility:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+        sdk: ['8.0.400', '8.0.425']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: 验证 Workspace/SoftwareVersionManagement
+    env:
+      SVM_SDK_VERSION: ${{ matrix.sdk }}
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: 验证 Workspace/SoftwareVersionManagement
+          persist-credentials: false
+      - name: Bootstrap Unix tools
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if [ "$SVM_SDK_VERSION" = 8.0.400 ]; then eng/bootstrap --sdk 8.0.400; else eng/bootstrap; fi
+      - name: Bootstrap Windows tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if ($env:SVM_SDK_VERSION -eq '8.0.400') { ./eng/bootstrap.ps1 --sdk 8.0.400 } else { ./eng/bootstrap.ps1 }
+      - name: Locked restore and build on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          eng/dotnet restore SoftwareVersionManagement.sln --locked-mode
+          eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
+      - name: Locked restore and build on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./eng/dotnet.ps1 restore SoftwareVersionManagement.sln --locked-mode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./eng/dotnet.ps1 build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $env:DOTNET_MSBUILD_SDK_RESOLVER_CLI_DIR = (Resolve-Path ".tools/win-x64/dotnet/$env:SVM_SDK_VERSION").Path
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -products '*' -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (!$msbuild) { throw 'Visual Studio MSBuild not found.' }
+          & $msbuild SoftwareVersionManagement.sln /t:Build /m:1 /nologo
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preview exact test selections
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        shell: bash
+        run: |
+          eng/test architecture --preview
+          eng/test tools --filter 'toolchain|publish|nginx|solution' --preview
+          eng/test framework --filter 'FullyQualifiedName~HostRuntimeTests|FullyQualifiedName~HostDeploymentTests' --preview
+      - name: Architecture gate and affected selections
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        shell: bash
+        run: |
+          eng/test architecture --results-directory artifacts/test-results/platform/architecture
+          eng/test tools --filter 'toolchain|publish|nginx|solution' --results-directory artifacts/test-results/platform/tools
+          eng/test framework --filter 'FullyQualifiedName~HostRuntimeTests|FullyQualifiedName~HostDeploymentTests' --results-directory artifacts/test-results/platform/host
+      - name: Complete Release and Linux demo
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        shell: bash
+        run: |
+          eng/publish --output artifacts/releases/ci
+          eng/node deploy/linux/prepare.mjs --demo --settings deploy/linux/demo-settings.json --release artifacts/releases/ci --output artifacts/linux-demo/ci
+          artifacts/linux-demo/ci/svm.sh build
+          artifacts/linux-demo/ci/svm.sh pull
+          artifacts/linux-demo/ci/svm.sh dependencies
+          artifacts/linux-demo/ci/svm.sh preflight
+          artifacts/linux-demo/ci/svm.sh status
+          artifacts/linux-demo/ci/svm.sh script > artifacts/cross-platform-upgrade.sql
+          artifacts/linux-demo/ci/svm.sh apply
+          artifacts/linux-demo/ci/svm.sh seed
+          artifacts/linux-demo/ci/svm.sh validate
+          artifacts/linux-demo/ci/svm.sh up
+          PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node src/ui/svm-web/node_modules/playwright/cli.js install --with-deps chromium
+          eng/node deploy/linux/verify.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-demo
+      - name: Stop owned demo resources
+        if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        shell: bash
+        run: |
+          if [ -f artifacts/linux-demo/ci/svm.sh ]; then artifacts/linux-demo/ci/svm.sh down; fi
+      - name: Upload safe verification evidence
+        if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: platform-verification
+          path: 验证 Workspace/SoftwareVersionManagement/artifacts/test-results/platform
+          retention-days: 14
+          if-no-files-found: ignore

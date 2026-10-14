@@ -1,3 +1,5 @@
+import { localDockerBaseline } from './docker.mjs';
+import { dotnetCommand } from './toolchain.mjs';
 import { spawnSync, spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, openSync, closeSync, unlinkSync } from 'node:fs';
@@ -5,7 +7,7 @@ import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const baseline = JSON.parse(readFileSync(join(root, 'build/postgres.local.json'), 'utf8'));
+const baseline = localDockerBaseline('postgres.local.json');
 const identity = createHash('sha256').update(root).digest('hex').slice(0, 12);
 const directory = join(root, '.cache/postgres-local');
 const statePath = join(directory, 'state.json');
@@ -110,7 +112,7 @@ async function up() {
     docker(['pull', '--platform', baseline.platform, baseline.image]);
     image = inspect('image', baseline.image);
   }
-  if (!image || image.Os !== 'linux' || image.Architecture !== 'arm64' || !image.RepoDigests?.some(d => d.endsWith(baseline.image.split('@')[1])))
+  if (!image || image.Os !== 'linux' || image.Architecture !== baseline.platform.split('/')[1] || !image.RepoDigests?.some(d => d.endsWith(baseline.image.split('@')[1])))
     fail('PostgreSQL image identity or platform does not match the baseline.');
   if (!currentVolume) docker(['volume', 'create', '--label', `${label}=${identity}`, volume]);
   if (!current) {
@@ -137,7 +139,7 @@ async function up() {
   writeConnections();
   console.log(`PostgreSQL ${baseline.version} ready at 127.0.0.1:${state.port}; database svm_dev. Secrets remain in ignored local files.`);
 }
-async function child(args, executable = join(root, 'eng/dotnet')) {
+async function child(args, executable = dotnetCommand().command) {
   const exitCode = await new Promise((accept, reject) => {
     const process_ = spawn(executable, args, {
       cwd: root, stdio: 'inherit', env: { ...process.env,
@@ -155,11 +157,11 @@ try {
   if (!allowed.has(command)) fail('Usage: eng/postgres up|status|stop|migrate status|script|apply|test architecture|security|framework');
   if (command === 'test') {
     // Test selection is independent of Docker lifecycle; only pass this project's private configuration paths.
-    await child(arguments_, join(root, 'eng/test'));
+    await child([join(root, 'eng/test.mjs'), ...arguments_], process.execPath);
   } else {
     if (['up', 'status', 'stop'].includes(command) && arguments_.length) fail('Lifecycle commands do not accept extra arguments.');
     const endpoint = docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim();
-    if (!endpoint.startsWith('unix://')) fail('This helper only manages the existing local Unix-socket Docker context.');
+    if (!endpoint.startsWith('unix://') && !endpoint.startsWith('npipe://')) fail('This helper only manages the existing local Unix-socket Docker context.');
     const engine = docker(['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}']).stdout.trim();
     if (engine !== baseline.platform) fail('Local Docker platform does not match the pinned PostgreSQL image.');
     mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);

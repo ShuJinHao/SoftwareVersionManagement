@@ -20,7 +20,7 @@ public sealed class DeploymentBrowserTests
         var artifacts = Path.Combine(OutboxFixture.Root,"artifacts/deployment-update/browser-"+run);
         var coordination = Path.Combine(f.DirectoryPath,"coordination"); Directory.CreateDirectory(coordination);
         var config = await OutboxFixture.PrivateJsonAsync(new {url=f.GatewayUrl,employeeNo=PersonnelDatabase.EmployeeNo,initialPassword=f.Personnel.Password,password,artifacts,coordination});
-        var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root,".tools/node/bin/node")) {WorkingDirectory=OutboxFixture.Root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true};
+        var info = new ProcessStartInfo(RepositoryTools.Node) {WorkingDirectory=OutboxFixture.Root,UseShellExecute=false,RedirectStandardOutput=true,RedirectStandardError=true};
         info.ArgumentList.Add(Path.Combine(OutboxFixture.Root,"src/ui/svm-web/tests/browser/deployments.mjs"));
         info.Environment["SVM_DEPLOYMENT_BROWSER_CONFIG_FILE"]=config; info.Environment["PLAYWRIGHT_BROWSERS_PATH"]=Path.Combine(OutboxFixture.Root,".cache/playwright-browsers");
         using var process = new Process {StartInfo=info}; var started=false; Task<string>? stdout=null,stderr=null;

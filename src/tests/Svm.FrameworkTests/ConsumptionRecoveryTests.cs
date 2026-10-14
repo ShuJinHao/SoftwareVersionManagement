@@ -133,7 +133,7 @@ internal sealed class ConsumptionChild : IAsyncDisposable
     {
         var path=await OutboxFixture.PrivateJsonAsync(new { }); var marker=Path.Combine(Path.GetDirectoryName(path)!,Path.GetFileNameWithoutExtension(path));
         await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new ConsumptionHarnessConfiguration(db.WriterConnection,db.ReaderConnection,options,serviceId,phase,marker),new JsonSerializerOptions {PropertyNamingPolicy=JsonNamingPolicy.CamelCase}));
-        var info=new ProcessStartInfo(Path.Combine(OutboxFixture.Root,"eng/dotnet")) {WorkingDirectory=OutboxFixture.Root,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};
+        var info=new ProcessStartInfo(RepositoryTools.Dotnet) {WorkingDirectory=OutboxFixture.Root,RedirectStandardOutput=true,RedirectStandardError=true,UseShellExecute=false};
         foreach(var arg in new[]{"test","src/tests/Svm.FrameworkTests/Svm.FrameworkTests.csproj","--no-build","--filter","FullyQualifiedName=Svm.FrameworkTests.ConsumptionProcessHarness.RunOwnedConsumer","--verbosity","quiet"}) info.ArgumentList.Add(arg);
         info.Environment["SVM_CONSUMPTION_HARNESS_CONFIG"]=path;
         info.Environment["Logging__LogLevel__Default"]="Warning";

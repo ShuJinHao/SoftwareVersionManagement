@@ -12,7 +12,7 @@ public sealed class ReleasePublicationBrowserTests
         await using var f = await PackageHostFixture.CreateAsync(); await f.GatewayAsync(); await f.WorkerAsync(f.A);
         var run = Guid.NewGuid().ToString("N"); var password = Guid.NewGuid().ToString("N");
         var config = await OutboxFixture.PrivateJsonAsync(new { url = f.GatewayUrl, employeeNo = PersonnelDatabase.EmployeeNo, initialPassword = f.Personnel.Password, password, artifacts = Path.Combine(OutboxFixture.Root, "artifacts/release-publication/browser-" + run) });
-        var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root, ".tools/node/bin/node")) { WorkingDirectory = OutboxFixture.Root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        var info = new ProcessStartInfo(RepositoryTools.Node) { WorkingDirectory = OutboxFixture.Root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/ui/svm-web/tests/browser/publication.mjs")); info.Environment["SVM_PUBLICATION_BROWSER_CONFIG_FILE"] = config; info.Environment["PLAYWRIGHT_BROWSERS_PATH"] = Path.Combine(OutboxFixture.Root, ".cache/playwright-browsers");
         using var process = new Process { StartInfo = info }; var started = false;
         try

@@ -33,7 +33,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     internal int ApiPortA { get; private set; } internal int ApiPortB { get; private set; }
     private readonly List<PackageProcess> _workers = []; private readonly List<string> _files = [];
     private readonly Dictionary<string, string> _gatewayThumbprints = new();
-    private string? _container; private bool _brokerReady; private Guid _generationA = Guid.NewGuid(), _generationB = Guid.NewGuid();
+    private string? _container; private string _dockerContext = ""; private bool _brokerReady; private Guid _generationA = Guid.NewGuid(), _generationB = Guid.NewGuid();
     internal static async Task<PackageHostFixture> CreateAsync(bool copyProxy = false, bool tasks = false)
     {
         var f = new PackageHostFixture(); if(tasks) f.Tasks = TaskFixture.TaskOptions with { SelectionChunkSize=100, ResultWaitSeconds=300 };
@@ -77,7 +77,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
             using var key = RSA.Create(2048); var request = new CertificateRequest("CN=" + role + "-" + node, key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true)); request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
             request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new(role == "server" ? "1.3.6.1.5.5.7.3.1" : "1.3.6.1.5.5.7.3.2") }, true));
-            if (role == "server") { var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); san.AddDnsName("host.docker.internal"); san.AddIpAddress(IPAddress.Loopback); request.CertificateExtensions.Add(san.Build()); }
+            if (role == "server") { var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("localhost"); san.AddDnsName("host.svm.test"); san.AddIpAddress(IPAddress.Loopback); request.CertificateExtensions.Add(san.Build()); }
             using var publicCertificate = request.Create(issuer, DateTimeOffset.UtcNow.AddHours(-1), DateTimeOffset.UtcNow.AddDays(1), RandomNumberGenerator.GetBytes(16)); using var certificate = publicCertificate.CopyWithPrivateKey(key);
             var name = role + "-" + node; File.WriteAllBytes(CertPath(name, ".pfx"), certificate.Export(X509ContentType.Pfx, CertificatePassword)); if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(CertPath(name, ".pfx"), UnixFileMode.UserRead | UnixFileMode.UserWrite);
             Write(CertPath(name, ".pem"), certificate.ExportCertificatePem()); Write(CertPath(name, ".key"), key.ExportPkcs8PrivateKeyPem());
@@ -94,19 +94,21 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     }
     internal async Task GatewayAsync()
     {
+        _dockerContext = Environment.GetEnvironmentVariable("SVM_DOCKER_CONTEXT") ?? (await Command("docker", ["context", "show"])).Output.Trim();
+        var platform = (await Command("docker", ["--context", _dockerContext, "version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"])).Output.Trim();
         var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(OutboxFixture.Root, "build/nginx.packages.json"))).RootElement.Clone();
         var config = new { workerUser = "root", certificateDirectory = "/svm/certs", gatewayFingerprints = _gatewayThumbprints.Values.ToArray(), nodes = new[] {
-            new { nodeId = A.NodeId, generation = _generationA, publicPort = 10443, privatePort = 20443, apiPublicPort = ApiPortA, apiInternalPort = A.InternalListenPort, rootPath = "/svm/node-a/files", logDirectory = "/svm/node-a/download-logs", maxPackageBytes = A.Limits.MaxPackageBytes, uploadIdleSeconds = A.Limits.UploadIdleSeconds },
-            new { nodeId = B.NodeId, generation = _generationB, publicPort = 11443, privatePort = 21443, apiPublicPort = ApiPortB, apiInternalPort = B.InternalListenPort, rootPath = "/svm/node-b/files", logDirectory = "/svm/node-b/download-logs", maxPackageBytes = B.Limits.MaxPackageBytes, uploadIdleSeconds = B.Limits.UploadIdleSeconds } } };
+            new { apiHost = "host.svm.test", apiTlsName = "localhost", gatewayTlsName = "localhost", nodeId = A.NodeId, generation = _generationA, publicPort = 10443, privatePort = 20443, apiPublicPort = ApiPortA, apiInternalPort = A.InternalListenPort, rootPath = "/svm/node-a/files", logDirectory = "/svm/node-a/download-logs", maxPackageBytes = A.Limits.MaxPackageBytes, uploadIdleSeconds = A.Limits.UploadIdleSeconds },
+            new { apiHost = "host.svm.test", apiTlsName = "localhost", gatewayTlsName = "localhost", nodeId = B.NodeId, generation = _generationB, publicPort = 11443, privatePort = 21443, apiPublicPort = ApiPortB, apiInternalPort = B.InternalListenPort, rootPath = "/svm/node-b/files", logDirectory = "/svm/node-b/download-logs", maxPackageBytes = B.Limits.MaxPackageBytes, uploadIdleSeconds = B.Limits.UploadIdleSeconds } } };
         var input = Path.Combine(DirectoryPath, "nginx-input.json"); Write(input, JsonSerializer.Serialize(config, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
-        var conf = Path.Combine(DirectoryPath, "nginx.conf"); await Command(Path.Combine(OutboxFixture.Root, ".tools/node/bin/node"), [Path.Combine(OutboxFixture.Root, "eng/packages/nginx.mjs"), input, conf]);
-        _container = "svm-package-nginx-" + Guid.NewGuid().ToString("N"); var port = Port(); var image = manifest.GetProperty("image").GetString()!;
-        var inspected = await Command("docker", ["--context", "desktop-linux", "image", "inspect", image], optional: true);
-        if (inspected.Exit != 0) await Command("docker", ["--context", "desktop-linux", "pull", "--platform", "linux/arm64", image]);
-        await Command("docker", ["--context", "desktop-linux", "run", "--detach", "--name", _container, "--label", "io.svm.package-test=" + Path.GetFileName(DirectoryPath), "--platform", "linux/arm64", "--publish", $"127.0.0.1:{port}:10443", "--mount", "type=bind,src=" + DirectoryPath + ",dst=/svm", "--mount", "type=bind,src=" + conf + ",dst=/etc/nginx/nginx.conf,readonly", image]);
-        var valid = await Command("docker", ["--context", "desktop-linux", "exec", _container, "nginx", "-t"], optional: true);
-        if (valid.Exit != 0) { var diagnostic = await Command("docker", ["--context", "desktop-linux", "logs", _container], optional: true); throw new InvalidOperationException("Owned Nginx validation failed: " + diagnostic.Output); }
-        var compiled = await Command("docker", ["--context", "desktop-linux", "exec", _container, "nginx", "-V"]); Assert.Contains("--with-http_auth_request_module", compiled.Output);
+        var conf = Path.Combine(DirectoryPath, "nginx.conf"); await Command(RepositoryTools.Node, [Path.Combine(OutboxFixture.Root, "eng/packages/nginx.mjs"), input, conf]);
+        _container = "svm-package-nginx-" + Guid.NewGuid().ToString("N"); var port = Port(); var image = manifest.GetProperty("images").GetProperty(platform).GetString()!;
+        var inspected = await Command("docker", ["--context", _dockerContext, "image", "inspect", image], optional: true);
+        if (inspected.Exit != 0) await Command("docker", ["--context", _dockerContext, "pull", "--platform", platform, image]);
+        await Command("docker", ["--context", _dockerContext, "run", "--detach", "--add-host", "host.svm.test:host-gateway", "--name", _container, "--label", "io.svm.package-test=" + Path.GetFileName(DirectoryPath), "--platform", platform, "--publish", $"127.0.0.1:{port}:10443", "--mount", "type=bind,src=" + DirectoryPath + ",dst=/svm", "--mount", "type=bind,src=" + conf + ",dst=/etc/nginx/nginx.conf,readonly", image]);
+        var valid = await Command("docker", ["--context", _dockerContext, "exec", _container, "nginx", "-t"], optional: true);
+        if (valid.Exit != 0) { var diagnostic = await Command("docker", ["--context", _dockerContext, "logs", _container], optional: true); throw new InvalidOperationException("Owned Nginx validation failed: " + diagnostic.Output); }
+        var compiled = await Command("docker", ["--context", _dockerContext, "exec", _container, "nginx", "-V"]); Assert.Contains("--with-http_auth_request_module", compiled.Output);
         GatewayUrl = $"https://127.0.0.1:{port}"; using var client = Client(new()); await OutboxFixture.WaitAsync(async () => { try { using var r = await client.GetAsync(GatewayUrl + "/api/v1/session"); return r.IsSuccessStatusCode; } catch { return false; } }, 15);
     }
     internal static async Task<(int Exit, string Output)> Command(string command, IReadOnlyList<string> args, bool optional = false)
@@ -119,7 +121,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     {
         foreach (var w in _workers) await w.DisposeAsync();
         if (CopyProxy is not null) await CopyProxy.DisposeAsync();
-        if (_container is not null) { await Command("docker", ["--context", "desktop-linux", "rm", "--force", _container], optional: true); _container = null; }
+        if (_container is not null) { await Command("docker", ["--context", _dockerContext, "rm", "--force", _container], optional: true); _container = null; }
         if (ApiA is not null) { ApiA.AssertRedacted(CertificatePassword); await ApiA.DisposeAsync(); }
         if (ApiB is not null) { ApiB.AssertRedacted(CertificatePassword); await ApiB.DisposeAsync(); }
         if (_brokerReady) { await Broker.DisposeAsync(); _brokerReady = false; }
@@ -134,7 +136,7 @@ internal sealed class PackageProcess : IAsyncDisposable
     internal static async Task<PackageProcess> StartAsync(PackageHostFixture f, PackageFileOptions options)
     {
         var configs = new List<string> { await OutboxFixture.PrivateJsonAsync(new { writerConnectionString = f.Personnel.Database.WriterConnection, readerConnectionString = f.Personnel.Database.ReaderConnection }), await OutboxFixture.PrivateJsonAsync(f.Messaging), await OutboxFixture.PrivateJsonAsync(f.Site), await OutboxFixture.PrivateJsonAsync(options) };
-        var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root, "eng/dotnet")) { WorkingDirectory = OutboxFixture.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false }; info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net8.0/Svm.Worker.dll"));
+        var info = new ProcessStartInfo(RepositoryTools.Dotnet) { WorkingDirectory = OutboxFixture.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false }; info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net8.0/Svm.Worker.dll"));
         info.Environment.Remove("SVM_GITLAB_CONFIG_FILE"); if (f.GitLab is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.GitLab)); info.Environment["SVM_GITLAB_CONFIG_FILE"] = configs[^1]; }
         info.Environment.Remove("SVM_TASK_CONFIG_FILE"); if(f.Tasks is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.Tasks)); info.Environment["SVM_TASK_CONFIG_FILE"]=configs[^1]; }
         foreach (var (name, i) in new[] { ("SVM_PERSISTENCE_CONFIG_FILE", 0), ("SVM_MESSAGING_CONFIG_FILE", 1), ("SVM_SITE_CONFIG_FILE", 2), ("SVM_PACKAGE_CONFIG_FILE", 3) }) info.Environment[name] = configs[i]; info.Environment["Logging__LogLevel__Default"] = "Information"; info.Environment["Logging__LogLevel__MassTransit"] = "Warning";
