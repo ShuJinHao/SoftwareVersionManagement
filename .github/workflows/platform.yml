@@ -64,7 +64,7 @@ jobs:
         run: |
           ./eng/dotnet.ps1 restore SoftwareVersionManagement.sln --locked-mode
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          ./eng/dotnet.ps1 build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
+          ./eng/dotnet.ps1 build SoftwareVersionManagement.sln --no-restore --disable-build-servers '-m:1'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $env:DOTNET_MSBUILD_SDK_RESOLVER_CLI_DIR = (Resolve-Path ".tools/win-x64/dotnet/$env:SVM_SDK_VERSION").Path
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

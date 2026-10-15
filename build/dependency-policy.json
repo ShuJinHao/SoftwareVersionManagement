@@ -890,17 +890,17 @@
     },
     {
       "name": "System.Security.Cryptography.Pkcs",
-      "version": "8.0.1",
+      "version": "8.0.2",
       "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/system.security.cryptography.pkcs/8.0.1/system.security.cryptography.pkcs.nuspec",
+      "source": "https://api.nuget.org/v3-flatcontainer/system.security.cryptography.pkcs/8.0.2/system.security.cryptography.pkcs.nuspec",
       "licenseType": "expression",
       "licenseUrl": "https://licenses.nuget.org/MIT"
     },
     {
       "name": "System.Security.Cryptography.Xml",
-      "version": "8.0.4",
+      "version": "8.0.5",
       "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/system.security.cryptography.xml/8.0.4/system.security.cryptography.xml.nuspec",
+      "source": "https://api.nuget.org/v3-flatcontainer/system.security.cryptography.xml/8.0.5/system.security.cryptography.xml.nuspec",
       "licenseType": "expression",
       "licenseUrl": "https://licenses.nuget.org/MIT"
     },

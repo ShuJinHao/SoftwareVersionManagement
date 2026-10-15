@@ -19,6 +19,12 @@ eng/publish --output artifacts/releases/my-release
 
 Windows 原生 PowerShell 使用 eng/bootstrap.ps1、eng/dotnet.ps1、eng/publish.ps1 等同名入口，参数相同。初次引导会下载并核验固定 Node，不要求先安装 Node 或 WSL。工具缓存按 OS/架构/版本隔离，错误身份或实际版本拒绝复用。
 
+传给 PowerShell 脚本的含冒号参数需要整项加引号，避免脚本参数绑定拆分。例如：
+
+~~~powershell
+./eng/dotnet.ps1 build SoftwareVersionManagement.sln --no-restore --disable-build-servers '-m:1'
+~~~
+
 兼容 SDK：
 
 ~~~sh

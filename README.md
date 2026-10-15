@@ -43,7 +43,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
-跨平台开发、完整 Release 和 Linux Compose 演示入口已补入，见 [部署手册](deploy/linux/README.md)。Windows VS GUI、原生 Linux x64 与本机 ARM64 容器证据分别记录，不以工具入口存在代替目标环境验收。
+跨平台开发、完整 Release 和 Linux Compose 演示入口已补入，见 [部署手册](deploy/linux/README.md)。2026-10-14 的 [CI 运行](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/38572348342)已通过原生 Linux x64 两 SDK 构建及完整 HTTPS/API/浏览器演示；首次 Windows 失败分别为依赖漏洞审计与 PowerShell 参数拆分。获准追加的两项最小修复及本地定向验证已完成，Windows 远端复测尚待执行，尚未完成跨平台交付。具体结果与清理见框架设计第 11.1 节；VS GUI、真实 GitLab 和生产验收仍待执行。
 
 ## GitLab 正式版本导入
 
