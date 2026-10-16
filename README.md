@@ -45,7 +45,7 @@ SDK 统一范围与网页操作整改的当前状态、精确选集和后续 R00
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
-跨平台开发、完整 Release 和 Linux Compose 演示入口已补入，见 [部署手册](deploy/linux/README.md)。2026-10-16 核对的[最终 CI](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/38748852955)中，Windows/Linux x64 × SDK 8.0.400/8.0.425 四项组合全部通过；Windows 包含 VS MSBuild，原生 Linux 包含完整 HTTPS/API/浏览器演示。首次 Windows 参数和依赖问题已按确认范围修复；具体证据、失败历史和清理见框架设计第 11.1 节。VS GUI、真实 GitLab、企业配置及生产验收仍待执行。
+跨平台开发、完整 Release 和 Linux Compose 演示入口见 [部署手册](deploy/linux/README.md)。本批 [CI #38907621333](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/38907621333)的 Windows/Linux x64 × SDK 8.0.400/8.0.425 四项组合全部通过，Windows 包含 VS MSBuild；两个 Linux SDK 均生成干净正式 Release，原生 Linux 一次通过本批八阶段 HTTPS/API/浏览器选集。Architecture 79、工具 10、网页 60 项通过，另 5 项按名称排除；具体证据、失败历史、清理及 R00—R18 状态见框架设计第 11.1 节。VS GUI、公司实际 SDK/runtime、真实 GitLab、企业配置及生产验收仍待执行。
 
 ## GitLab 正式版本导入
 
