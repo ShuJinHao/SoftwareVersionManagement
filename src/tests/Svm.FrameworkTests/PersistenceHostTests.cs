@@ -31,7 +31,7 @@ public sealed class PersistenceHostTests
                 UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
             }))
                 await JsonSerializer.SerializeAsync(file, new { writerConnectionString = database.WriterConnection, readerConnectionString = database.ReaderConnection });
-            var info = new ProcessStartInfo(Path.Combine(root.FullName, "eng/dotnet"))
+            var info = new ProcessStartInfo(RepositoryTools.Dotnet)
             {
                 WorkingDirectory = root.FullName, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
             };

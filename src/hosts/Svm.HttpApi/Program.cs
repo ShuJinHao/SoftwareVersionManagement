@@ -33,6 +33,8 @@ public partial class Program
 {
     public static void Main(string[] args)
     {
+        if (args.Length == 1 && args[0] == "--healthcheck")
+        { Environment.ExitCode = HostDiagnostics.ProbeAsync(HostRuntimeConfiguration.Load()).GetAwaiter().GetResult(); return; }
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args,
             WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot") });
         builder.Host.UseDefaultServiceProvider(options =>
@@ -41,6 +43,7 @@ public partial class Program
             options.ValidateOnBuild = true;
         });
 
+        var runtime = HostRuntimeConfiguration.Load();
         var taskOptions = TaskConfiguration.LoadFromEnvironment();
         var packageFiles = PackageFileOptions.LoadFromEnvironment();
         var gitLab = GitLabOptions.LoadFromEnvironment();
@@ -103,9 +106,12 @@ public partial class Program
             options.SlidingExpiration = false; options.ExpireTimeSpan = TimeSpan.FromHours(personnel.Policy.SessionHours);
             options.EventsType = typeof(PersonnelCookieEvents);
         });
+        using var publicCertificate = runtime.PublicCertificatePath is null ? null
+            : PackageFileOptions.LoadCertificate(runtime.PublicCertificatePath, runtime.PublicCertificatePassword);
         using var internalCertificate = packageFiles is null ? null : PackageFileOptions.LoadCertificate(packageFiles.ServerCertificatePath, packageFiles.ServerCertificatePassword);
         builder.WebHost.ConfigureKestrel(options =>
         {
+            if (publicCertificate is not null) options.ConfigureHttpsDefaults(https => https.ServerCertificate = publicCertificate);
             options.Limits.MaxRequestBodySize = 8192;
             if (packageFiles is not null)
             {
@@ -120,9 +126,22 @@ public partial class Program
                     }
             }
         });
+        builder.Services.AddHealthChecks();
+        var databaseProbe = new ReadPersistenceProbe(persistence.ReaderConnectionString);
+        builder.Services.AddSingleton<IHostedService>(provider => new HostDiagnostics(runtime, "HttpApi", databaseProbe.CheckAsync,
+            provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>()));
         builder.Services.ValidateSvmFoundation();
 
+        if (args.Length == 1 && args[0] == "--validate-config")
+        {
+            using var validation = builder.Build();
+            Console.WriteLine("CONFIGURATION_VALID HttpApi; no listeners, consumers, migration or seed started.");
+            databaseProbe.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            return;
+        }
         var app = builder.Build();
+        app.Lifetime.ApplicationStopped.Register(() => databaseProbe.DisposeAsync().AsTask().GetAwaiter().GetResult());
+        app.UseForwardedHeaders(runtime.Forwarding());
         app.Use(SessionErrors.Handle);
         app.Use(HttpPackageIdentity.VerifyPeer);
         app.Use(HttpAccessProofSource.Authenticate);

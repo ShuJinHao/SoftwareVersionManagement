@@ -10,7 +10,7 @@
 
 | 已有实现 | 后续实现 |
 |---|---|
-| 29 个 C# 项目、99 条普通项目引用、固定工具链和依赖锁、编译期架构检查 | 完整系统、Linux 部署与生产验收 |
+| 29 个 C# 项目、99 条普通项目引用、固定工具链和依赖锁、编译期架构检查 | 完整系统、目标现场部署与生产验收 |
 | DDD 基础类型、IOC、CQRS 请求分类/验证/授权基础 | 管理系统凭据与完整观测 |
 | PostgreSQL 工作单元、只读连接、显式迁移与人员播种 | 部分回退与结构化兼容声明 |
 | 人员登录、首次/本人改密、退出、共享会话及必要审计 | 外部管理系统的凭据接入 |
@@ -42,6 +42,8 @@
 Application 通过类型化端口登记三类固定消息；业务、审计、幂等结果及 Outbox 共同提交或回滚。HttpApi 只登记，Worker 使用 MassTransit 8.3.6 原生服务投递到三个固定持久队列；确认丢失允许重复交付，保持原 MessageId 和正文。消费基础在原生事务中保存处理事实、Inbox 完成标记及后续消息，提交确认后才确认领域事件；提交未知只在新 Scope 重新授权并查询，不就地重执行。包配置完整时启用包消费者，任务配置完整时另启用两个 TSK 消费者；非空目录启用原生 Inbox 清理。消息事务只保存接收事实，执行器在事务外复制文件。不可变派发记录与工作接收事实在 Inbox 窗口外继续阻止重复推进；未配置包能力仍为空业务目录。FND-06、FND-08、FND-09 均为部分通过；详见[框架设计第 8 节](docs/软件框架设计.md#8-事件总线mq-和持久化工作)。
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
+
+跨平台开发、完整 Release 和 Linux Compose 演示入口已补入，见 [部署手册](deploy/linux/README.md)。2026-10-16 核对的[最终 CI](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/38748852955)中，Windows/Linux x64 × SDK 8.0.400/8.0.425 四项组合全部通过；Windows 包含 VS MSBuild，原生 Linux 包含完整 HTTPS/API/浏览器演示。首次 Windows 参数和依赖问题已按确认范围修复；具体证据、失败历史和清理见框架设计第 11.1 节。VS GUI、真实 GitLab、企业配置及生产验收仍待执行。
 
 ## GitLab 正式版本导入
 
@@ -102,6 +104,7 @@ SVM_TASK_CONFIG_FILE 指向受限绝对 JSON 文件，字段为 defaultStartLoca
 | `src/analyzers`、`src/tests` | 架构分析器与 Architecture、Security、Framework/Business 测试 |
 | `build`、`eng` | 引用白名单、依赖/工具链清单和本机开发脚本 |
 | `docs` | 七份设计与验收文档 |
+| `deploy/linux` | Release 运行镜像、独立 Compose 演示、配置准备与运维手册 |
 
 内层定义端口，基础设施实现端口，Hosts 注册具体实现。模块 Core、Service 和 Application 不引用数据库、消息或安全技术实现；完整引用图由[软件框架设计第 3 节](docs/软件框架设计.md#3-目录类库和完整引用关系)及 `build/Architecture.xml` 共同约束。
 
@@ -125,26 +128,20 @@ SVM_TASK_CONFIG_FILE 指向受限绝对 JSON 文件，字段为 defaultStartLoca
 
 ### 工具与编译
 
-已验证的开发环境为 macOS arm64。需要可用的 Node.js（仅用于运行首次引导）、curl、tar、OpenSSL 及 Docker CLI/引擎。工具链清单也提供 macOS x64、Linux arm64/x64 下载项，但不代表这些环境的完整运行验收已经完成。
-
-所有命令均从仓库根目录执行：
+开发使用稳定 .NET 8 SDK 8.0.400 及以上的同 8.0 范围，正式发布固定 8.0.425；运行时下限 8.0.31、LatestPatch。Node 24.21.0/npm 11.19.0 保持固定。Windows 使用原生 PowerShell 入口与受支持 VS（建议 2022 17.11+）；Mac/Linux 使用 Bash。私有工具按系统、架构、版本隔离，VS 另需可发现的系统 SDK，不依赖 WSL。
 
 ```sh
-node eng/bootstrap.mjs
+eng/bootstrap
 eng/dotnet restore SoftwareVersionManagement.sln --locked-mode
-eng/dotnet tool restore --configfile NuGet.Config
-eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
-eng/npm --prefix src/ui/svm-web ci --ignore-scripts
-eng/npm --prefix src/ui/svm-web run build
-eng/dotnet build src/hosts/Svm.HttpApi/Svm.HttpApi.csproj --no-restore --disable-build-servers -m:1 -p:UseSharedCompilation=false
-.tools/node/bin/node eng/verify-dependencies.mjs
+eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
+eng/publish --output artifacts/releases/my-release
 ```
 
-网页先构建到 `dist/`，再编译或发布 HttpApi 将构建产物复制到 `wwwroot/`，由同一主机托管。未知 `/api/...` 仍返回 JSON 错误，不落入网页路由。工具版本与摘要由 `build/toolchain.lock.json` 固定；NuGet 版本和许可清单见软件框架设计。脚本只设置本项目的工具和缓存目录，不修改系统 SDK。
+Windows 将入口换为 eng/bootstrap.ps1、eng/dotnet.ps1、eng/publish.ps1。发布入口先构建网页，再发布 HttpApi/Worker/Migration、许可和摘要清单；运行机无需 SDK 或 Node。未知 API 路径仍返回 JSON 错误。工具、兼容 SDK 与 Linux Compose 的完整步骤见 [跨平台与部署手册](deploy/linux/README.md)。目标平台验收与本机证据分别记录。
 
 ### PostgreSQL 与人员 API
 
-当前本机数据库脚本仅支持 `build/postgres.local.json` 固定的 **linux/arm64 镜像及本机 `desktop-linux` Docker context**；脚本会拒绝远程 Docker、错误平台或不属于本项目的容器/卷。请先完成上面的编译，再执行：
+本机数据库脚本按所选本地 Docker 引擎的平台选择已核对的 amd64/arm64 镜像；可通过 SVM_DOCKER_CONTEXT 显式选择本地 context，不修改全局设置。拒绝远程端点及不属于本项目的资源。请先完成上面的编译，再执行：
 
 ```sh
 eng/postgres up
@@ -191,7 +188,7 @@ HttpApi/Worker 仅在显式设置 `SVM_MESSAGING_CONFIG_FILE` 时启用消息注
 
 Migration 私有配置新增 `enableInboxWrites`，默认 `false` 保持发送端权限；显式 `true` 只补充 Inbox 表读写及其 ID 序列权限，不新增结构迁移。消费基础批次只在一次性测试库启用，当时生成的 `artifacts/consumer-outbox-review.sql` 包含既有四份迁移及消费权限，供另行审阅，未在开发库执行。包工作已有可信工作授权适配、不可变派发和持久接收事实；其他业务仍待实现，启用 Inbox 清理不能删除这些业务事实。
 
-本项目验证工具固定 RabbitMQ `4.3.6` 的 linux/arm64 镜像摘要与本机 `desktop-linux` Docker context，只绑定回环地址，管理带本仓归属标签的容器和卷。首次分配的端口在容器停止/启动期间保持；随机测试 vhost 默认 quorum，临时总线队列显式 classic。测试账号只具有所属 vhost 权限，无管理标签。工具不会配置生产 broker。
+本项目验证工具固定 RabbitMQ `4.3.6`，按本地 Docker 平台选择已核对的 amd64/arm64 镜像摘要与当前或显式 context，只绑定回环地址，管理带本仓归属标签的容器和卷。首次分配的端口在容器停止/启动期间保持；随机测试 vhost 默认 quorum，临时总线队列显式 classic。测试账号只具有所属 vhost 权限，无管理标签。工具不会配置生产 broker。
 
 ```sh
 eng/rabbitmq up

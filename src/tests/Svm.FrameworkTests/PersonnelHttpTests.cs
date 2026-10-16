@@ -172,7 +172,7 @@ internal sealed class LocalApi : IAsyncDisposable
         var certPath = packages?.ServerCertificatePath ?? Path.Combine(Path.GetDirectoryName(personnel.CertificatePath)!, "https.pfx");
         var certPassword = packages?.ServerCertificatePassword ?? personnel.CertificatePassword;
         using var cert = new X509Certificate2(certPath, certPassword);
-        var info = new ProcessStartInfo(Path.Combine(root.FullName, "eng/dotnet"))
+        var info = new ProcessStartInfo(RepositoryTools.Dotnet)
         { WorkingDirectory = root.FullName, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add(Path.Combine(root.FullName, "src/hosts/Svm.HttpApi/bin/Debug/net8.0/Svm.HttpApi.dll"));
         info.Environment["SVM_PERSISTENCE_CONFIG_FILE"] = config;

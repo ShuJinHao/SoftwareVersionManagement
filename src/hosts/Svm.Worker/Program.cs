@@ -22,8 +22,11 @@ using Svm.Worker.Tasks;
 using Svm.Worker.Releases;
 using Svm.Services.Contracts.Releases;
 
+if (args.Length == 1 && args[0] == "--healthcheck")
+{ Environment.ExitCode = await HostDiagnostics.ProbeAsync(HostRuntimeConfiguration.Load()); return; }
 var builder = Host.CreateApplicationBuilder(args);
 builder.ConfigureContainer(new DefaultServiceProviderFactory(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }));
+var runtime = HostRuntimeConfiguration.Load();
 var tasks = TaskConfiguration.LoadFromEnvironment();
 var files = PackageFileOptions.LoadFromEnvironment();
 var gitLab = GitLabOptions.LoadFromEnvironment();
@@ -69,6 +72,12 @@ builder.Services.AddSvmPostgres(persistence.WriterConnectionString);
 builder.Services.AddSvmReadPersistence(persistence.ReaderConnectionString);
 if (messaging is not null) builder.Services.AddSvmMessaging(messaging, delivery: true,
     consumers: files is null ? [] : tasks is null ? ApplicationRegistration.PackageConsumers : ApplicationRegistration.TaskConsumers);
+builder.Services.AddHealthChecks();
+await using var databaseProbe = new ReadPersistenceProbe(persistence.ReaderConnectionString);
+builder.Services.AddSingleton<IHostedService>(provider => new HostDiagnostics(runtime, "Worker", databaseProbe.CheckAsync,
+    provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>()));
 builder.Services.ValidateSvmFoundation();
 using var host = builder.Build();
+if (args.Length == 1 && args[0] == "--validate-config")
+{ Console.WriteLine("CONFIGURATION_VALID Worker; no listeners, consumers, migration or seed started."); return; }
 await host.RunAsync();

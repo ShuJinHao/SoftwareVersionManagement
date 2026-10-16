@@ -20,7 +20,7 @@ public sealed class PersonnelBrowserTests
         var config = Path.Combine(root, ".cache", $"personnel-browser-{run}.json");
         var artifacts = Path.Combine(root, "artifacts", "personnel", "browser-" + run);
         var passwords = Enumerable.Range(0, 4).Select(_ => Guid.NewGuid().ToString("N")).ToArray();
-        var info = new ProcessStartInfo(Path.Combine(root, ".tools/node/bin/node"))
+        var info = new ProcessStartInfo(RepositoryTools.Node)
         {
             WorkingDirectory = root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true
         };

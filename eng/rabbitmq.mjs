@@ -1,3 +1,5 @@
+import { localDockerBaseline } from './docker.mjs';
+import { dotnetCommand } from './toolchain.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, rmSync, openSync, closeSync, unlinkSync } from 'node:fs';
@@ -6,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:net';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const baseline = JSON.parse(readFileSync(join(root, 'build/rabbitmq.local.json'), 'utf8'));
+const baseline = localDockerBaseline('rabbitmq.local.json');
 const identity = createHash('sha256').update(root).digest('hex').slice(0, 12);
 const directory = join(root, '.cache/rabbitmq-local');
 const name = `svm-rabbit-${identity}`, volume = `${name}-data`, label = 'io.svm.local-project';
@@ -50,7 +52,7 @@ async function freePort() {
 async function main() {
   if (!['up', 'status', 'stop', 'start', 'down'].includes(command) || process.argv.length !== 3)
     fail('Usage: eng/rabbitmq up|status|stop|start|down');
-  if (!docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim().startsWith('unix://'))
+  if (!/^(unix|npipe):\/\//.test(docker(['context', 'inspect', baseline.dockerContext, '--format', '{{.Endpoints.docker.Host}}']).stdout.trim()))
     fail('Only the existing local Unix-socket Docker context is allowed.');
   if (docker(['version', '--format', '{{.Server.Os}}/{{.Server.Arch}}']).stdout.trim() !== baseline.platform) fail('Docker platform differs from the RabbitMQ baseline.');
   mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
@@ -83,7 +85,7 @@ async function main() {
     privateFile(join(directory, 'rabbitmq.conf'), 'load_definitions = /run/secrets/definitions.json\n');
     if (!inspect('image', baseline.image)) docker(['pull', '--platform', baseline.platform, baseline.image]);
     const image = inspect('image', baseline.image);
-    if (image.Os !== 'linux' || image.Architecture !== 'arm64' || !image.RepoDigests?.some(d => d.endsWith(baseline.image.split('@')[1]))) fail('RabbitMQ image identity mismatch.');
+    if (image.Os !== 'linux' || image.Architecture !== baseline.platform.split('/')[1] || !image.RepoDigests?.some(d => d.endsWith(baseline.image.split('@')[1]))) fail('RabbitMQ image identity mismatch.');
     if (!existingVolume) docker(['volume', 'create', '--label', `${label}=${identity}`, volume]);
     const amqpPort = await freePort(); let managementPort = await freePort();
     while (managementPort === amqpPort) managementPort = await freePort();
