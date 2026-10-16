@@ -41,6 +41,8 @@
 
 Application 通过类型化端口登记三类固定消息；业务、审计、幂等结果及 Outbox 共同提交或回滚。HttpApi 只登记，Worker 使用 MassTransit 8.3.6 原生服务投递到三个固定持久队列；确认丢失允许重复交付，保持原 MessageId 和正文。消费基础在原生事务中保存处理事实、Inbox 完成标记及后续消息，提交确认后才确认领域事件；提交未知只在新 Scope 重新授权并查询，不就地重执行。包配置完整时启用包消费者，任务配置完整时另启用两个 TSK 消费者；非空目录启用原生 Inbox 清理。消息事务只保存接收事实，执行器在事务外复制文件。不可变派发记录与工作接收事实在 Inbox 窗口外继续阻止重复推进；未配置包能力仍为空业务目录。FND-06、FND-08、FND-09 均为部分通过；详见[框架设计第 8 节](docs/软件框架设计.md#8-事件总线mq-和持久化工作)。
 
+SDK 统一范围与网页操作整改的当前状态、精确选集和后续 R00—R18 台账见软件框架设计第 11.1 节；已有 Linux 交付和消息验证不因本批重复实施。
+
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
 跨平台开发、完整 Release 和 Linux Compose 演示入口已补入，见 [部署手册](deploy/linux/README.md)。2026-10-16 核对的[最终 CI](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/38748852955)中，Windows/Linux x64 × SDK 8.0.400/8.0.425 四项组合全部通过；Windows 包含 VS MSBuild，原生 Linux 包含完整 HTTPS/API/浏览器演示。首次 Windows 参数和依赖问题已按确认范围修复；具体证据、失败历史和清理见框架设计第 11.1 节。VS GUI、真实 GitLab、企业配置及生产验收仍待执行。
@@ -128,10 +130,10 @@ SVM_TASK_CONFIG_FILE 指向受限绝对 JSON 文件，字段为 defaultStartLoca
 
 ### 工具与编译
 
-开发使用稳定 .NET 8 SDK 8.0.400 及以上的同 8.0 范围，正式发布固定 8.0.425；运行时下限 8.0.31、LatestPatch。Node 24.21.0/npm 11.19.0 保持固定。Windows 使用原生 PowerShell 入口与受支持 VS（建议 2022 17.11+）；Mac/Linux 使用 Bash。私有工具按系统、架构、版本隔离，VS 另需可发现的系统 SDK，不依赖 WSL。
+开发、CI、发布统一使用稳定 .NET 8 SDK 8.0.400 及以上的同 8.0 范围，不再要求唯一精确 SDK；运行时下限 8.0.31、LatestPatch。Node 24.21.0/npm 11.19.0 保持固定。Windows 使用原生 PowerShell 入口与受支持 VS（建议 2022 17.11+）；Mac/Linux 使用 Bash。私有工具按系统、架构、版本隔离，VS 另需可发现的系统 SDK，不依赖 WSL。
 
 ```sh
-eng/bootstrap
+eng/bootstrap --node-only # 公司已有兼容 .NET 8 SDK 时；需要仓库 SDK 缓存可用 eng/bootstrap
 eng/dotnet restore SoftwareVersionManagement.sln --locked-mode
 eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
 eng/publish --output artifacts/releases/my-release

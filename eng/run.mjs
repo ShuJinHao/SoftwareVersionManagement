@@ -6,7 +6,7 @@ try {
   verifyInstallation('node');
   if (process.version !== 'v' + manifest.node) throw new Error('Use the reviewed repository Node installation.');
   if (tool === 'dotnet') {
-    const dotnet = dotnetCommand(args.includes('-p:SvmReproducibleBuild=true'));
+    const dotnet = dotnetCommand();
     process.exitCode = await run(dotnet.command, args, { env: dotnet.env });
   } else if (tool === 'node') process.exitCode = await run(paths().node, args, { env: environment() });
   else if (tool === 'npm') {

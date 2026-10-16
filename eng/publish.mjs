@@ -24,7 +24,7 @@ async function main() {
   if (rel === '..' || rel.startsWith('../') || rel.startsWith('..\\') || !rel) throw new Error('Output must be a new folder under artifacts/releases.');
   try { await access(output); throw new Error('Publish output already exists; select a new folder.'); }
   catch (e) { if (e.code !== 'ENOENT') throw e; }
-  const dotnet = dotnetCommand(true);
+  const dotnet = dotnetCommand();
   const env = { ...dotnet.env, CI: 'true' };
   async function checked(command, args, options = {}) {
     if (await run(command, args, { env, ...options }) !== 0) throw new Error('Release stage failed; incomplete output is not a release.');
@@ -34,11 +34,11 @@ async function main() {
   await checked(paths().node, [paths().npm, 'run', 'typecheck'], { cwd: web });
   await checked(paths().node, [paths().npm, 'run', 'build'], { cwd: web });
   // MSBuild evaluates the HttpApi dist glob only after the completed web build.
-  await checked(dotnet.command, ['restore', 'SoftwareVersionManagement.sln', '--locked-mode', '-p:SvmReproducibleBuild=true']);
+  await checked(dotnet.command, ['restore', 'SoftwareVersionManagement.sln', '--locked-mode']);
   await mkdir(output, { recursive: true });
   const hosts = ['Svm.HttpApi', 'Svm.Worker', 'Svm.Migration'];
   for (const host of hosts) await checked(dotnet.command, ['publish', 'src/hosts/' + host + '/' + host + '.csproj',
-    '-c', 'Release', '--no-restore', '--self-contained', 'false', '-p:UseAppHost=false', '-p:SvmReproducibleBuild=true', '-o', join(output, host)]);
+    '-c', 'Release', '--no-restore', '--self-contained', 'false', '-p:UseAppHost=false', '-o', join(output, host)]);
   await verifyWeb(join(output, 'Svm.HttpApi/wwwroot'));
   await checked(paths().node, [join(root, 'eng/verify-dependencies.mjs')]);
   await cp(join(root, 'artifacts/licenses'), join(output, 'licenses'), { recursive: true });
@@ -74,7 +74,7 @@ async function main() {
   await writeFile(join(output, 'release.json'), JSON.stringify({ format: 1,
     commit: execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),
     dirty,
-    sdk: dotnet.version, runtimeMinimum: '8.0.31', runtimeRollForward: 'LatestPatch', target: 'portable-net8.0',
+    sdk: dotnet.version, sdkSource: dotnet.source, runtimeMinimum: '8.0.31', runtimeRollForward: 'LatestPatch', target: 'portable-net8.0',
     node: process.version, locks: locks.sort((a,b)=>a.path.localeCompare(b.path)), files: files.sort((a,b)=>a.path.localeCompare(b.path)) }, null, 2) + '\n');
   console.log('Complete Release published at ' + relative(root, output));
 }
