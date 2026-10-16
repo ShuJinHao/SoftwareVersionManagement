@@ -6,7 +6,9 @@
 
 仓库使用 .NET 8 / C# 12。普通开发允许稳定 SDK 8.0.400 及以上的同 8.0 版本，VS 2022 建议 17.11 或以上的配套版本。VS 需安装能由 IDE 发现的 .NET 8 SDK/工作负载；仓库私有 ZIP 安装不会自动注册为系统 SDK。
 
-正式发布固定 SDK 8.0.425、Node 24.21.0、npm 11.19.0。运行策略为 8.0.31 下限、LatestPatch，只允许同 8.0 补丁滚动。服务器运行已发布制品，无需 SDK 或 Node。
+正式发布与开发共用上述 SDK 范围，8.0.425 仅为可选复现环境；Node 24.21.0、npm 11.19.0 保持固定。运行策略为 8.0.31 下限、LatestPatch，只允许同 8.0 补丁滚动。服务器运行已发布制品，无需 SDK 或 Node。
+
+公司已经安装兼容 SDK 时，先执行 `eng/bootstrap --node-only` 仅准备 Node/npm，再执行下面的还原、构建与发布命令。`eng/bootstrap` 和 `eng/bootstrap --sdk 8.0.400` 则显式准备可选的仓库 SDK 缓存；不会修改全局 PATH 或替换公司安装。
 
 从仓库根运行：
 
@@ -31,9 +33,10 @@ Windows 原生 PowerShell 使用 eng/bootstrap.ps1、eng/dotnet.ps1、eng/publis
 eng/bootstrap --sdk 8.0.400
 SVM_SDK_VERSION=8.0.400 eng/dotnet restore SoftwareVersionManagement.sln --locked-mode
 SVM_SDK_VERSION=8.0.400 eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
+SVM_SDK_VERSION=8.0.400 eng/publish --output artifacts/releases/sdk400-release
 ~~~
 
-Windows 用 $env:SVM_SDK_VERSION='8.0.400' 设置当前进程环境。要使用已有系统 SDK，可显式设置 SVM_DOTNET 为 dotnet 可执行文件的绝对路径；正式发布仍核验 8.0.425。不支持的 SDK 有明确报错，不能关闭 Analyzer、锁定还原或审计门禁。
+Windows 用 $env:SVM_SDK_VERSION='8.0.400' 设置当前进程环境。SDK 选择顺序为 SVM_DOTNET 的显式绝对路径、SVM_SDK_VERSION 对应的已核验仓库 SDK、PATH 中兼容的系统 SDK、已核验仓库缓存。显式选择不可用时直接失败，不静默替换；开发与正式发布使用相同规则。不支持的 SDK 有明确报错，不能关闭 Analyzer、锁定还原或审计门禁。
 
 发布入口按顺序构建前端、还原并发布 HttpApi/Worker/Migration，核验页面资源、许可、runtimeconfig，输出 release.json 的代码提交、dirty 状态、锁文件与 SHA-256。默认拒绝有未提交改动的工作区；仅显式 --allow-dirty 可生成标记 dirty=true 的开发验证制品，不可冒充干净发布。不要复制 Mac 的 bin/obj/node_modules 到 Linux。
 
@@ -143,6 +146,22 @@ eng/node deploy/linux/verify.mjs --deployment artifacts/linux-demo/my-demo --res
 
 唯一固定测试门禁是完整 Architecture；其他选集先 eng/test --preview。tools 组也必须显式 --filter。构建和类型检查不冒充测试，文档/提交/纯合并不重跑代码测试。
 
-平台 CI 使用 Windows/Linux x64 与两个 SDK 的加载/构建矩阵，仅一个 Linux 任务运行 Architecture 和受影响选集、完整发布与 Compose 演示。VS MSBuild 成功不替代 GUI 实机验收。PR 文档单独更新复用已有代码证据，GitLab 接入示例不承担平台自身 CI。
+平台 CI 使用 Windows/Linux x64 与两个 SDK 的加载/构建矩阵；两个 Linux SDK 分别完成正式发布，仅 Linux 8.0.425 运行 Architecture、受影响选集和本批定向 Compose 浏览器流程。VS MSBuild 成功不替代 GUI 实机验收。PR 文档单独更新复用已有代码证据，GitLab 接入示例不承担平台自身 CI。
 
 当前执行结果见框架设计与验收记录；任何尚未完成的目标环境验证须明确标注。
+
+## 网页操作定向验证
+
+任务和版本读取按对象/请求代次失效，旧响应不覆盖新对象；自动轮询不重置已加载分页。投放明细显示读取时间，显式刷新才从首页重载。投放草稿与资料版本独立，封存后固定草稿；人工关闭逐任务重新核实，结果仍为 Unknown。
+
+公共 JSON 读/写默认 15/30 秒，响应正文也在预算内。写入超时保留原键和正文，仅在本页人工核实；展示操作编号与安全 traceId，不持久化密码或请求正文。核实先检查原人员身份和当前会话；换人或会话无法确认时保留原操作但不发送。跨页和浏览器重开恢复尚未实现。
+
+`eng/test web --file tests/deployments.test.ts --filter 'deployment read ownership' --preview` 预览精确文件和名称，`--list` 列出实际匹配；零匹配拒绝执行。省略预览参数才执行测试。网页构建、测试、浏览器证据分别记录。
+
+`verify-ui.mjs` 只用于专用的 full 演示环境：准备参数须明确 task.batchSize 至少 3、resultWaitSeconds 为 1。它使用真实 HTTPS/API 创建明确虚构的界面夹具；延迟、分页缩小和丢响应注入单独记录，不重跑 MQ/文件恢复验收。命令与原演示验证器相同：
+
+~~~sh
+eng/node deploy/linux/verify-ui.mjs --deployment artifacts/linux-demo/ui-demo --results artifacts/test-results/linux-ui
+~~~
+
+准备成功后，私有 ui-fixture.json 保存安全恢复所需的工作标识。尚未进入后续写入阶段可加 `--resume-browser`；冻结阶段尚未写入且前序三任务事实满足时可加 `--resume-freeze`；原键核实和两任务关闭已完成时可加 `--resume-viewport` 仅复验读取与布局。验证器检查对应检查点，拒绝跳过未知写入；不得重建未知业务或更换原操作键。200% 场景记录为等效 CSS 视口/DPR 验证，不能称为人工浏览器菜单缩放验收。

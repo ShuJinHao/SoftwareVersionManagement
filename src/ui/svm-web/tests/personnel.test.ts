@@ -9,7 +9,7 @@ import UsersPage from '../src/pages/UsersPage.vue'
 import { useMutation } from '../src/mutation'
 import { useSession } from '../src/session'
 
-afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = '' })
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = '' })
 const snapshot = (mustChangePassword: boolean, permissions: object[]) => ({ authenticated: true, subjectId: 'fixture-subject',
   employeeNo: 'FIXTURE', displayName: '测试人员', mustChangePassword, permissions, csrfToken: 'fixture-token', serverTime: '2026-10-07T00:00:00Z' })
 async function mount(session: object) {
@@ -73,6 +73,44 @@ describe('personnel access', () => {
   })
 })
 describe('uncertain management writes', () => {
+  it('keeps a timed-out account creation in the form and verifies its original body and key', async () => {
+    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function () { this.open = true })
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function () { this.open = false })
+    let submissions = 0
+    const created = { id: 'fixture-created', employeeNo: 'FIXTURE-NEW', displayName: '虚构人员', isEnabled: true, mustChangePassword: true, permissions: [], revision: 1 }
+    const fetch = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === '/api/v1/manage/users' && init?.method === 'POST') {
+        if (++submissions === 1) return { ok: true, status: 200, headers: new Headers(), json: () => new Promise(() => {}) } as Response
+        return Response.json(created)
+      }
+      if (path === '/api/v1/session') return Response.json(snapshot(false, [{ softwareId: null, operation: 'identity.manage' }]))
+      return Response.json({ items: [], nextCursor: null, serverTime: '2026-10-07T00:00:00Z' })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const pinia = createPinia(); useSession(pinia).current = snapshot(false, [{ softwareId: null, operation: 'identity.manage' }]) as never
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/users', component: UsersPage }] }); await router.push('/users')
+    const root = document.createElement('div'); document.body.appendChild(root)
+    const app = createApp({ template: '<RouterView />' }).use(pinia).use(router); app.mount(root)
+    try {
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+      ;[...root.querySelectorAll('button')].find(button => button.textContent === '创建账号')!.click(); await nextTick()
+      const form = root.querySelector('dialog form')!, inputs = [...form.querySelectorAll('input')]
+      for (const [index, value] of ['FIXTURE-NEW', '虚构人员', 'fixture memory secret'].entries()) {
+        inputs[index]!.value = value; inputs[index]!.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      vi.useFakeTimers(); form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await nextTick()
+      await vi.advanceTimersByTimeAsync(30_000); await nextTick()
+      expect(root.textContent).toContain('结果仍待核实'); expect(root.textContent).toContain('操作编号')
+      expect(root.textContent).not.toContain('fixture memory secret')
+      await vi.advanceTimersByTimeAsync(60_000); expect(submissions).toBe(1)
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })); await vi.advanceTimersByTimeAsync(0); await nextTick()
+      expect(submissions).toBe(2)
+      const writes = fetch.mock.calls.filter(call => call[1]?.method === 'POST').map(call => call[1]!)
+      expect(writes[1]!.body).toBe(writes[0]!.body)
+      expect((writes[1]!.headers as Record<string, string>)['Idempotency-Key']).toBe((writes[0]!.headers as Record<string, string>)['Idempotency-Key'])
+      expect(root.textContent).toContain('操作已完成')
+    } finally { app.unmount() }
+  })
   it('retains exactly the original request and key without automatic resend', async () => {
     const fetch = vi.fn().mockResolvedValueOnce(Response.json({ code: 'DEPENDENCY_UNAVAILABLE' }, { status: 503 }))
       .mockResolvedValueOnce(Response.json({ id: 'fixture-user' }))

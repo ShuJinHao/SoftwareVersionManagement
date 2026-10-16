@@ -8,9 +8,10 @@ import { Readable } from 'node:stream';
 import { root, manifest, platform, paths, environment } from './toolchain.mjs';
 
 const args = process.argv.slice(2);
-if (args.length && (args.length !== 2 || args[0] !== '--sdk' || !manifest.compatibilitySdks?.[args[1]]))
-  throw new Error('Usage: eng/bootstrap [--sdk 8.0.400]');
-const sdk = args[1] ?? manifest.dotnetSdk;
+const nodeOnly = args.length === 1 && args[0] === '--node-only';
+if (!nodeOnly && args.length && (args.length !== 2 || args[0] !== '--sdk' || !manifest.compatibilitySdks?.[args[1]]))
+  throw new Error('Usage: eng/bootstrap [--sdk 8.0.400 | --node-only]');
+const sdk = nodeOnly ? manifest.dotnetSdk : args[1] ?? manifest.dotnetSdk;
 const archives = manifest.platforms[platform];
 if (!archives) throw new Error('No reviewed toolchain for ' + platform);
 const p = paths(root, platform, sdk);
@@ -53,7 +54,7 @@ function extract(file, target, node = false) {
       { stdio: 'inherit', env: { ...process.env, SVM_TOOL_ARCHIVE: file, SVM_TOOL_STAGE: target } });
   } else execFileSync('tar', ['-xzf', file, '-C', target, ...(node ? ['--strip-components=1'] : [])], { stdio: 'inherit' });
 }
-for (const name of ['node', 'dotnet']) {
+for (const name of (nodeOnly ? ['node'] : ['node', 'dotnet'])) {
   const target = name === 'node' ? p.nodeRoot : p.dotnetRoot;
   const artifact = name === 'node' ? archives.node : sdk === manifest.dotnetSdk ? archives.dotnet : manifest.compatibilitySdks[sdk][platform];
   const version = name === 'node' ? manifest.node : sdk;
@@ -76,13 +77,13 @@ for (const name of ['node', 'dotnet']) {
     await rename(contents, target);
   } finally { await rm(staging, { recursive: true, force: true }); }
 }
-const env = environment(p.dotnetRoot);
+const env = environment(nodeOnly ? undefined : p.dotnetRoot);
 await mkdir(join(root, '.cache'), { recursive: true });
 await writeFile(env.npm_config_userconfig, '');
 const version = (command, args) => execFileSync(command, args, { cwd: root, env, encoding: 'utf8' }).trim();
-if (version(p.dotnet, ['--version']) !== sdk) throw new Error('SDK version mismatch.');
+if (!nodeOnly && version(p.dotnet, ['--version']) !== sdk) throw new Error('SDK version mismatch.');
 for (const name of ['Microsoft.NETCore.App', 'Microsoft.AspNetCore.App'])
-  if (!version(p.dotnet, ['--list-runtimes']).includes(name + ' ' + manifest.runtime + ' [')) throw new Error(name + ': runtime mismatch.');
+  if (!nodeOnly && !version(p.dotnet, ['--list-runtimes']).includes(name + ' ' + manifest.runtime + ' [')) throw new Error(name + ': runtime mismatch.');
 if (version(p.node, ['--version']) !== 'v' + manifest.node || version(p.node, [p.npm, '--version']) !== manifest.npm)
   throw new Error('Node/npm version mismatch.');
-console.log('Verified ' + platform + ': SDK ' + sdk + ', runtime ' + manifest.runtime + ', Node ' + manifest.node + ', npm ' + manifest.npm);
+console.log('Verified ' + platform + ': ' + (nodeOnly ? 'Node-only preparation; SDK selection remains with the caller, ' : 'optional SDK cache ' + sdk + ', runtime ' + manifest.runtime + ', ') + 'Node ' + manifest.node + ', npm ' + manifest.npm);
