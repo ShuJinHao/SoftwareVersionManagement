@@ -54,9 +54,10 @@ async function read<T>(name: string, reset: boolean, allowed: () => boolean, act
   finally { token.finish(); if (inFlight.get(name) === owner) inFlight.delete(name) }
 }
 const get = <T,>(path: string, signal: AbortSignal) => request<T>(path,'GET',undefined,undefined,undefined,{signal})
-function query() { const q = new URLSearchParams({ softwareId, pageSize: '50' }); for (const [k,v] of Object.entries(filter.value)) if (v) q.set(k,v); return q }
-async function loadInstances(cursor?: string | null) { const q = query(); if (cursor) q.set('cursor',cursor)
-  await read('instances',!cursor,() => canRead.value,signal => get<Page<Instance>>('/api/v1/manage/instances?' + q,signal),p => { instances.value = cursor ? unique(instances.value,p.items,x=>x.id) : p.items; instanceNext.value = p.nextCursor }) }
+const appliedInstanceFilter = ref({...filter.value})
+function query(filters = filter.value) { const q = new URLSearchParams({ softwareId, pageSize: '50' }); for (const [k,v] of Object.entries(filters)) if (v) q.set(k,v); return q }
+async function loadInstances(cursor?: string | null) { const applied = {...(cursor ? appliedInstanceFilter.value : filter.value)}; const q = query(applied); if (cursor) q.set('cursor',cursor)
+  await read('instances',!cursor,() => canRead.value,signal => get<Page<Instance>>('/api/v1/manage/instances?' + q,signal),p => { instances.value = cursor ? unique(instances.value,p.items,x=>x.id) : p.items; instanceNext.value = p.nextCursor; appliedInstanceFilter.value = applied }) }
 async function loadDeployments(cursor?: string | null) { const q = new URLSearchParams({ softwareId, pageSize: '50' }); if (cursor) q.set('cursor',cursor)
   await read('deployments',!cursor,() => canRead.value,signal => get<Page<Deployment>>('/api/v1/manage/deployments?' + q,signal),p => { deployments.value = cursor ? unique(deployments.value,p.items,x=>x.id) : p.items; deploymentNext.value = p.nextCursor; observe(p) }) }
 async function loadReleases(cursor?: string | null) { const q = new URLSearchParams({ channel: 'Formal', pageSize: '50' }); if (cursor) q.set('cursor',cursor)

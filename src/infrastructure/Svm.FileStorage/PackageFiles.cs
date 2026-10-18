@@ -64,7 +64,9 @@ internal sealed class PackageFiles(PackageFileOptions options, PackagePeerClient
                 }
                 else
                 {
-                    using var response = await peer.Client.GetAsync(Address(w.SourceNode, SourceRoute(lease)), HttpCompletionOption.ResponseHeadersRead, token);
+                    using var request = new HttpRequestMessage(HttpMethod.Get, Address(w.SourceNode, SourceRoute(lease)));
+                    using var transfer = new PackageTransfer(options.Execution.PeerResponseSeconds, options.Limits.UploadIdleSeconds, token);
+                    using var response = await transfer.SendAsync(peer.Client, request);
                     response.EnsureSuccessStatusCode(); await using var input = await response.Content.ReadAsStreamAsync(token);
                     await Write(temp, input, w.ExpectedSize, w.ExpectedSha256, renew, token);
                 }
@@ -76,35 +78,35 @@ internal sealed class PackageFiles(PackageFileOptions options, PackagePeerClient
             await renew(token);
             using var request = new HttpRequestMessage(HttpMethod.Put, Address(node.NodeId, ReplicaRoute(lease)));
             request.Headers.ExpectContinue = true;
-            request.Content = new StreamContent(Open(Location("replicas", $"{w.PackageId:D}.bin")));
-            request.Content.Headers.ContentType = new("application/octet-stream");
-            request.Content.Headers.ContentLength = w.ExpectedSize;
-            using var response = await peer.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token); response.EnsureSuccessStatusCode();
+            using var transfer = new PackageTransfer(options.Execution.PeerResponseSeconds, options.Limits.UploadIdleSeconds, token);
+            using var response = await transfer.SendAsync(peer.Client, request, Open(Location("replicas", $"{w.PackageId:D}.bin")), w.ExpectedSize); response.EnsureSuccessStatusCode();
         }
         await renew(token); return await InspectAsync(w.PackageId, w.ExpectedSize, w.ExpectedSha256, token);
     }
     public async Task<IReadOnlyList<ReplicaFact>> InspectAsync(Guid packageId, long size, string sha256, CancellationToken token)
+    { Outside(); return await Task.WhenAll(options.Nodes.Select(n => InspectNodeAsync(n.NodeId, packageId, size, sha256, token))); }
+    public async Task<ReplicaFact> InspectNodeAsync(string nodeId, Guid packageId, long size, string sha256, CancellationToken token)
     {
-        Outside(); return await Task.WhenAll(options.Nodes.Select(async n =>
+        Outside(); if (!options.Nodes.Any(n => n.NodeId == nodeId)) throw new RequestRejectedException(RequestFailure.PermissionDenied);
+        if (nodeId == NodeId) return await InspectLocalAsync(packageId, size, sha256, token);
+        // Order facts by probe start, so a slow earlier probe cannot overwrite a later observation.
+        var observed = clock.GetUtcNow();
+        try
         {
-            if (n.NodeId == NodeId) return await InspectLocalAsync(packageId, size, sha256, token);
-            try
-            {
-                using var request = new HttpRequestMessage(HttpMethod.Head, Address(n.NodeId, $"internal/v1/package-replicas/{packageId:D}/integrity"));
-                using var budget = CancellationTokenSource.CreateLinkedTokenSource(token); budget.CancelAfter(TimeSpan.FromSeconds(options.Limits.UploadIdleSeconds));
-                using var response = await peer.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, budget.Token);
-                var valid = response.IsSuccessStatusCode && response.Headers.TryGetValues("X-Svm-Sha256", out var values) && values.SingleOrDefault() == sha256 &&
-                    response.Content.Headers.ContentLength == size;
-                return new ReplicaFact(n.NodeId, valid ? "Healthy" : "Missing", clock.GetUtcNow());
-            }
-            catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException)
-            { token.ThrowIfCancellationRequested(); return new ReplicaFact(n.NodeId, "Missing", clock.GetUtcNow()); }
-        }));
+            using var request = new HttpRequestMessage(HttpMethod.Head, Address(nodeId, $"internal/v1/package-replicas/{packageId:D}/integrity"));
+            using var transfer = new PackageTransfer(options.Execution.PeerResponseSeconds, options.Limits.UploadIdleSeconds, token);
+            using var response = await transfer.SendAsync(peer.Client, request);
+            var valid = response.IsSuccessStatusCode && response.Headers.TryGetValues("X-Svm-Sha256", out var values) && values.SingleOrDefault() == sha256 && response.Content.Headers.ContentLength == size;
+            return new(nodeId, valid ? "Healthy" : "Missing", observed);
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or TimeoutException)
+        { token.ThrowIfCancellationRequested(); return new(nodeId, "Missing", observed); }
     }
     public async Task<ReplicaFact> InspectLocalAsync(Guid id, long size, string digest, CancellationToken token)
     {
-        Outside(); var file = Location("replicas", $"{id:D}.bin");
-        return new(NodeId, !File.Exists(file) ? "Missing" : await Verified(file, size, digest, token) ? "Healthy" : "Suspect", clock.GetUtcNow());
+        Outside(); var observed = clock.GetUtcNow(); var file = Location("replicas", $"{id:D}.bin");
+        try { return new(NodeId, !File.Exists(file) ? "Missing" : await Verified(file, size, digest, token) ? "Healthy" : "Suspect", observed); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { token.ThrowIfCancellationRequested(); return new(NodeId, "Suspect", observed); }
     }
     public Task<Stream> OpenReplicaAsync(Guid id, CancellationToken token)
     { Outside(); token.ThrowIfCancellationRequested(); return Task.FromResult<Stream>(Open(Location("replicas", $"{id:D}.bin"))); }
@@ -135,9 +137,14 @@ internal sealed class PackageFiles(PackageFileOptions options, PackagePeerClient
         while (true)
         {
             using var idle = CancellationTokenSource.CreateLinkedTokenSource(token); idle.CancelAfter(TimeSpan.FromSeconds(options.Limits.UploadIdleSeconds));
-            var n = await input.ReadAsync(buffer, idle.Token); if (n == 0) break;
+            int n;
+            try { n = await input.ReadAsync(buffer, idle.Token); }
+            catch (OperationCanceledException e) when (!token.IsCancellationRequested) { throw new TimeoutException("Package input made no progress.", e); }
+            if (n == 0) break;
             count = checked(count + n); if (count > expected || count > options.Limits.MaxPackageBytes) throw new RequestRejectedException(RequestFailure.PayloadTooLarge);
-            hash.AppendData(buffer, 0, n); await output.WriteAsync(buffer.AsMemory(0, n), token);
+            hash.AppendData(buffer, 0, n); idle.CancelAfter(TimeSpan.FromSeconds(options.Limits.UploadIdleSeconds));
+            try { await output.WriteAsync(buffer.AsMemory(0, n), idle.Token); }
+            catch (OperationCanceledException e) when (!token.IsCancellationRequested) { throw new TimeoutException("Package output made no progress.", e); }
             if (clock.GetUtcNow() >= nextCheck) { await verify(token); nextCheck = clock.GetUtcNow().AddSeconds(5); }
         }
         var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();

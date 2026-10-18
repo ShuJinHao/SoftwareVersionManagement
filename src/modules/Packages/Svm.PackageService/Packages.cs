@@ -124,28 +124,32 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
     public async Task<PackageView> CompleteAsync(PackageLease lease, IReadOnlyList<ReplicaFact> facts, CancellationToken token)
     {
         RequireWrite(); var (w, p) = await Owned(lease, token); CheckFacts(facts);
-        if (facts.Count(x => x.State == "Healthy") != 2) throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
-        await SaveFacts(p.Id.Value, facts, token); if (p.State != "Ready") p.Ready(); w.Complete(clock.GetUtcNow()); return await View(p, w, token);
+        if (facts.Count != 2 || facts.Count(x => x.State == "Healthy") != 2) throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
+        await SaveFacts(p.Id.Value, facts, token);
+        if ((await repository.ReplicasAsync(p.Id.Value, true, token)).Any(x => !Healthy(x))) throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
+        if (p.State != "Ready") p.Ready(); w.Complete(clock.GetUtcNow()); return await View(p, w, token);
     }
     public async Task FailWorkAsync(PackageLease lease, string code, CancellationToken token)
     { RequireWrite(); var (w, p) = await Owned(lease, token); w.Fail(code); p.Fail(); }
     public async Task<PackageWorkAuthority?> CheckReplicasAsync(Guid id, IReadOnlyList<ReplicaFact> facts, CancellationToken token)
     {
         RequireWrite(); var p = await Existing(id, true, token); CheckFacts(facts); await SaveFacts(id, facts, token);
-        if (p.Disabled || p.State != "Ready" || facts.Count(x => x.State == "Healthy") != 1) return null;
+        var current = await repository.ReplicasAsync(id, true, token);
+        if (p.Disabled || p.State != "Ready" || current.Count(Healthy) != 1) return null;
         var work = await repository.UploadAsync(id, true, token);
         if (work is { Kind: "Repair", State: "Pending" or "Running" }) return null;
         var w = new PackageWork(Guid.NewGuid(), id, p.SoftwareId, Guid.Empty, clock.GetUtcNow(), "Repair");
-        w.RepairFrom(facts.Single(x => x.State == "Healthy").NodeId); w.Dispatch(Guid.Empty); repository.Add(w);
+        w.RepairFrom(current.Single(Healthy).NodeId); w.Dispatch(Guid.Empty); repository.Add(w);
         repository.Add(new PackageDispatch(w.DispatchEventId, w.Id.Value, w.DispatchSequence)); return Authority(w, p);
     }
     public async Task<DownloadAuthorization> AuthorizeDownloadAsync(Guid id, Guid requestId, string node, Guid generation,
-        bool head, Guid subject, string actor, string? employee, CancellationToken token)
+        bool head, Guid subject, string actor, string? employee, CancellationToken token, string? verifiedNode = null)
     {
-        RequireWrite(); nodes.Require(node); var p = await Existing(id, true, token);
+        RequireWrite(); nodes.Require(node); if (verifiedNode is not null) nodes.Require(verifiedNode);
+        if (!head && verifiedNode is null) throw new RequestRejectedException(RequestFailure.ValidationFailed);
+        var p = await Existing(id, true, token);
         if (p.Disabled || p.State != "Ready") throw new RequestRejectedException(RequestFailure.InvalidState);
-        var healthy = (await repository.ReplicasAsync(id, true, token)).Where(x => x.State == "Healthy" &&
-            x.CheckedAt > clock.GetUtcNow().AddSeconds(-execution.ReplicaCheckSeconds * 2)).OrderByDescending(x => x.NodeId == node).ThenBy(x => x.NodeId).FirstOrDefault();
+        var healthy = (await repository.ReplicasAsync(id, true, token)).Where(x => Healthy(x) && (verifiedNode is null || x.NodeId == verifiedNode)).OrderByDescending(x => x.NodeId == node).ThenBy(x => x.NodeId).FirstOrDefault();
         if (healthy is null) throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
         var created = false;
         if (!head)
@@ -192,12 +196,15 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
     private void CheckFacts(IReadOnlyList<ReplicaFact> facts)
     {
         nodes.Validate();
-        if (facts.Count != 2 || !facts.Select(x => x.NodeId).Order(StringComparer.Ordinal).SequenceEqual(nodes.Nodes.Order(StringComparer.Ordinal)) ||
+        if (facts.Count is < 1 or > 2 || facts.Select(x => x.NodeId).Distinct(StringComparer.Ordinal).Count() != facts.Count ||
+            facts.Any(x => !nodes.Nodes.Contains(x.NodeId, StringComparer.Ordinal)) ||
             facts.Any(x => x.State is not ("Healthy" or "Missing" or "Suspect") || x.CheckedAt > clock.GetUtcNow().AddSeconds(5) ||
-                x.CheckedAt < clock.GetUtcNow().AddSeconds(-execution.LeaseSeconds))) throw new RequestRejectedException(RequestFailure.ValidationFailed);
+                x.CheckedAt < clock.GetUtcNow().AddSeconds(-Math.Max(execution.LeaseSeconds, execution.DownloadAuthorizationSeconds) - 5))) throw new RequestRejectedException(RequestFailure.ValidationFailed);
     }
     private async Task SaveFacts(Guid id, IReadOnlyList<ReplicaFact> facts, CancellationToken token)
-    { foreach (var r in await repository.ReplicasAsync(id, true, token)) { var f = facts.Single(x => x.NodeId == r.NodeId); r.Check(f.State, f.CheckedAt); } }
+    { foreach (var r in await repository.ReplicasAsync(id, true, token)) { var f = facts.SingleOrDefault(x => x.NodeId == r.NodeId);
+        if (f is not null && (r.CheckedAt is null || f.CheckedAt >= r.CheckedAt)) r.Check(f.State, f.CheckedAt); } }
+    private bool Healthy(PackageReplica replica) => replica.State == "Healthy" && replica.CheckedAt > clock.GetUtcNow().AddSeconds(-execution.ReplicaCheckSeconds * 2);
     private async Task<PackageAsset> Existing(Guid id, bool protect, CancellationToken token) =>
         await repository.GetAsync(id, protect, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
     private async Task<PackageWork> ExistingWork(Guid id, bool protect, CancellationToken token) =>

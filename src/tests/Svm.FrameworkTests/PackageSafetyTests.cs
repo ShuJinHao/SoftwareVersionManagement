@@ -41,7 +41,7 @@ public sealed class PackageSafetyTests
     [Fact] public async Task OriginalDownloadProofIsRecheckedForPersonnelRevocationAndIndependentInstanceCredential()
     {
         await using var f = await PackageFixture.CreateAsync(); var r = (await f.SendAsync(f.Create())).Value; var lease = await f.Lease(r); await f.SendAsync(new CompletePackageWorkCommand(lease, f.Healthy), work: r.UploadId);
-        var generation = Guid.NewGuid(); var get = new AuthorizeDownloadCommand(r.Release.PackageId, Guid.NewGuid(), "node-a", generation, false);
+        var generation = Guid.NewGuid(); var get = new AuthorizeDownloadCommand(r.Release.PackageId, Guid.NewGuid(), "node-a", generation, false, "node-a");
         await f.SendAsync(get, work: r.Release.PackageId, role: "Gateway"); var u = await f.Instances.Site.UserAsync(f.Instances.Site.Proof.SubjectId); await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(), u.Id, u.Revision, u.Permissions.Where(p => p.Operation != "software.read").ToArray(), "撤销下载查看"));
         await Rejected(RequestFailure.ResourceNotFound, () => f.SendAsync(get, work: r.Release.PackageId, role: "Gateway")); Assert.Equal(1, await f.Count("pkg.download_sessions"));
         var e = await f.Instances.EnrollAsync(); await f.SendAsync(get with { RequestId = Guid.NewGuid() }, work: r.Release.PackageId, role: "Gateway", access: e.Proof, instance: e.Registration.InstanceId);
@@ -52,14 +52,14 @@ public sealed class PackageSafetyTests
     [Fact] public async Task WrongInternalRolesAndAllMissingCopiesCannotAuthorizeDownloads()
     {
         await using var f = await PackageFixture.CreateAsync(); var r = (await f.SendAsync(f.Create())).Value; var lease = await f.Lease(r); await f.SendAsync(new CompletePackageWorkCommand(lease, f.Healthy), work: r.UploadId);
-        var get = new AuthorizeDownloadCommand(r.Release.PackageId, Guid.NewGuid(), "node-a", Guid.NewGuid(), false); await Rejected(RequestFailure.PermissionDenied, () => f.SendAsync(get, work: r.Release.PackageId, role: "Peer"));
+        var get = new AuthorizeDownloadCommand(r.Release.PackageId, Guid.NewGuid(), "node-a", Guid.NewGuid(), false, "node-a"); await Rejected(RequestFailure.PermissionDenied, () => f.SendAsync(get, work: r.Release.PackageId, role: "Peer"));
         await f.SendAsync(new CheckPackageReplicasCommand(r.Release.PackageId, PackageFixture.Nodes.Nodes.Select(n => new ReplicaFact(n, "Missing", f.Instances.Clock.GetUtcNow())).ToArray()), work: r.Release.PackageId);
         await Rejected(RequestFailure.NoHealthyReplica, () => f.SendAsync(get, work: r.Release.PackageId, role: "Gateway")); Assert.Equal(0, await f.Count("pkg.download_sessions")); Assert.Equal("Test", (await f.SendAsync(new GetReleaseQuery(r.Release.Id))).State);
     }
     [Fact] public async Task FastDownloadEndUsesGatewayTimePrecisionAndUnknownCommitOnlyQueriesTheSavedFact()
     {
         await using var f = await PackageFixture.CreateAsync(); var r = (await f.SendAsync(f.Create())).Value; var lease = await f.Lease(r); await f.SendAsync(new CompletePackageWorkCommand(lease, f.Healthy), work: r.UploadId); f.Instances.Clock.Advance(TimeSpan.FromTicks(5100));
-        var request = Guid.NewGuid(); var generation = Guid.NewGuid(); await f.SendAsync(new AuthorizeDownloadCommand(r.Release.PackageId, request, "node-a", generation, false), work: r.Release.PackageId, role: "Gateway");
+        var request = Guid.NewGuid(); var generation = Guid.NewGuid(); await f.SendAsync(new AuthorizeDownloadCommand(r.Release.PackageId, request, "node-a", generation, false, "node-a"), work: r.Release.PackageId, role: "Gateway");
         var end = new DownloadEnd(request, "node-a", generation, DateTimeOffset.FromUnixTimeMilliseconds(f.Instances.Clock.GetUtcNow().ToUnixTimeMilliseconds()), 9, "Closed");
         await Rejected(RequestFailure.ValidationFailed, () => f.SendAsync(new RecordDownloadEndCommand(end with { EndedAt = end.EndedAt.AddMilliseconds(-1) }), work: request, role: "Collector"));
         var lost = new LostConfirmation(); var verified = await f.SendAsync(new RecordDownloadEndCommand(end), work: request, role: "Collector", interceptor: lost); Assert.True(verified.Value);

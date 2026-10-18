@@ -34,7 +34,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     private readonly List<PackageProcess> _workers = []; private readonly List<string> _files = [];
     private readonly Dictionary<string, string> _gatewayThumbprints = new();
     private string? _container; private string _dockerContext = ""; private bool _brokerReady; private Guid _generationA = Guid.NewGuid(), _generationB = Guid.NewGuid();
-    internal static async Task<PackageHostFixture> CreateAsync(bool copyProxy = false, bool tasks = false)
+    internal static async Task<PackageHostFixture> CreateAsync(bool copyProxy = false, bool tasks = false, int uploadIdleSeconds = 5)
     {
         var f = new PackageHostFixture(); if(tasks) f.Tasks = TaskFixture.TaskOptions with { SelectionChunkSize=100, ResultWaitSeconds=300 };
         try
@@ -45,7 +45,7 @@ internal sealed class PackageHostFixture : IAsyncDisposable
             var pa = Port(); var pb = Port(); f.ApiPortA = Port(); f.ApiPortB = Port();
             if (copyProxy) f.CopyProxy = new(f.CertPath("server-node-b", ".pfx"), f.CertPath("peer-node-a", ".pfx"), f.CertificatePassword, pb);
             var nodes = new[] { f.Node("node-a", pa), f.Node("node-b", f.CopyProxy?.Port ?? pb) }; var peers = f.Peers();
-            f.A = f.Options("node-a", pa, nodes, peers); f.B = f.Options("node-b", pb, nodes, peers);
+            f.A = f.Options("node-a", pa, nodes, peers, uploadIdleSeconds); f.B = f.Options("node-b", pb, nodes, peers, uploadIdleSeconds);
             f.ApiA = await LocalApi.StartAsync(f.Personnel.Database, site: f.Site, instanceAccess: InstanceFixture.Limits, packages: f.A, messaging: f.Messaging, publicPort: f.ApiPortA,tasks:f.Tasks);
             f.ApiB = await LocalApi.StartAsync(f.Personnel.Database, site: f.Site, instanceAccess: InstanceFixture.Limits, packages: f.B, messaging: f.Messaging, publicPort: f.ApiPortB,tasks:f.Tasks);
             return f;
@@ -86,11 +86,11 @@ internal sealed class PackageHostFixture : IAsyncDisposable
     }
     private PackageNode Node(string node, int port) { using var c = new X509Certificate2(CertPath("server-" + node, ".pfx"), CertificatePassword); return new(node, $"https://127.0.0.1:{port}/", c.GetCertHashString(HashAlgorithmName.SHA256)); }
     private PackagePeer[] Peers() => new[] { "node-a", "node-b" }.SelectMany(n => new[] { "Peer", "Gateway", "Collector" }.Select(r => { using var c = new X509Certificate2(CertPath(r.ToLowerInvariant() + "-" + n, ".pfx"), CertificatePassword); return new PackagePeer(c.GetCertHashString(HashAlgorithmName.SHA256), n, Guid.NewGuid(), r); })).ToArray();
-    private PackageFileOptions Options(string n, int port, PackageNode[] nodes, PackagePeer[] peers)
+    private PackageFileOptions Options(string n, int port, PackageNode[] nodes, PackagePeer[] peers, int uploadIdleSeconds)
     {
         var log = Path.Combine(DirectoryPath, n, "download-logs"); Directory.CreateDirectory(log);
         return new(n, Path.Combine(DirectoryPath, n, "files"), Guid.NewGuid(), "0.0.0.0", port, CertPath("server-" + n, ".pfx"), CertificatePassword,
-            CertPath("peer-" + n, ".pfx"), CertificatePassword, CertPath("root", ".pem"), CertPath("collector-" + n, ".pfx"), CertificatePassword, log, new(32 * 1024 * 1024, 5), new(15, 1, 5, 20), nodes, peers);
+            CertPath("peer-" + n, ".pfx"), CertificatePassword, CertPath("root", ".pem"), CertPath("collector-" + n, ".pfx"), CertificatePassword, log, new(32 * 1024 * 1024, uploadIdleSeconds), new(15, 1, 5, 20), nodes, peers);
     }
     internal async Task GatewayAsync()
     {

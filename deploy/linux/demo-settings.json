@@ -10,7 +10,7 @@
   "networkSubnet": "172.31.249.0/28",
   "gatewayAddress": "172.31.249.10",
   "packageLimits": { "maxPackageBytes": 33554432, "uploadIdleSeconds": 30 },
-  "packageExecution": { "leaseSeconds": 60, "pollSeconds": 2, "replicaCheckSeconds": 10, "workBatchSize": 20 },
+  "packageExecution": { "leaseSeconds": 60, "pollSeconds": 2, "replicaCheckSeconds": 10, "workBatchSize": 20, "peerResponseSeconds": 15, "downloadAuthorizationSeconds": 20 },
   "task": {
     "defaultStartLocalTime": "00:00", "defaultLatestStartLocalTime": "23:59",
     "batchSize": 10, "failureLimit": 2, "resultWaitSeconds": 300,

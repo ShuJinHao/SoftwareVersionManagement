@@ -115,6 +115,16 @@ test('nginx rejects injected addresses and incomplete explicit topology', () => 
   const resolver=gateway();resolver.resolverAddress='127.0.0.11; injection';assert.throws(()=>renderNginx(resolver));
   const missing=gateway();delete missing.nodes[0].apiTlsName;assert.throws(()=>renderNginx(missing));
 });
+test('package gateway budget stays below nginx wait with compatible defaults', () => {
+  const normal = renderNginx(gateway());
+  assert.match(normal, /proxy_read_timeout 30s/);
+  for (const value of [1, 30, 31, 2.5, '20']) {
+    const input = gateway(); input.nodes[0].downloadAuthorizationSeconds = value;
+    assert.throws(() => renderNginx(input));
+  }
+  const custom = gateway(); custom.nodes.forEach(n => { n.downloadAuthorizationSeconds = 25; });
+  assert.match(renderNginx(custom), /proxy_read_timeout 30s/);
+});
 test('solution retains exactly the approved projects and unique standard folder metadata', async () => {
   const text=await readFile(join(root,'SoftwareVersionManagement.sln'),'utf8');
   assert.ok(!text.includes('66A26720-8FB5-11D2-AA7E-00C04F688DDE'));
