@@ -38,7 +38,7 @@ public sealed class GitLabBrowserTests
         Assert.Equal("Formal", (await Get<ReleaseView>(client, f.ApiA.Url + "/api/v1/manage/releases/" + release.Id)).State);
         var run = Guid.NewGuid().ToString("N"); var config = await OutboxFixture.PrivateJsonAsync(new { url = f.GatewayUrl, softwareId = software, releaseId = release.Id,
             sha256 = gitLab.Hash, employeeNo = PersonnelDatabase.EmployeeNo, password = setup.Password, artifacts = Path.Combine(OutboxFixture.Root, "artifacts/gitlab-import/browser-" + run) });
-        var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root, ".tools/node/bin/node")) { WorkingDirectory = OutboxFixture.Root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        var info = new ProcessStartInfo(RepositoryTools.Node) { WorkingDirectory = OutboxFixture.Root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/ui/svm-web/tests/browser/gitlab.mjs")); info.Environment["SVM_GITLAB_BROWSER_CONFIG_FILE"] = config;
         info.Environment["PLAYWRIGHT_BROWSERS_PATH"] = Path.Combine(OutboxFixture.Root, ".cache/playwright-browsers"); using var process = new Process { StartInfo = info }; var started = false;
         try

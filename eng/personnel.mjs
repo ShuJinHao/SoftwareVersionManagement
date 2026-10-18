@@ -1,4 +1,5 @@
 import { spawnSync, spawn } from 'node:child_process';
+import { dotnetCommand } from './toolchain.mjs';
 import { randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync, unlinkSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
@@ -61,7 +62,7 @@ try {
       env.Kestrel__Certificates__Default__Password = readFileSync(join(directory, 'certificate-password'), 'utf8');
       args = ['src/hosts/Svm.HttpApi/bin/Debug/net8.0/Svm.HttpApi.dll'];
     }
-    const process_ = spawn(join(root, 'eng/dotnet'), args, { cwd: root, env, stdio: 'inherit' });
+    const process_ = spawn(dotnetCommand().command, args, { cwd: root, env, stdio: 'inherit' });
     process_.on('error', () => { console.error('Local personnel process could not start.'); process.exitCode = 1; });
     process_.on('exit', code => { process.exitCode = code ?? 1; });
   }

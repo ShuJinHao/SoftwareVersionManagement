@@ -18,7 +18,7 @@ public sealed class SiteCatalogBrowserTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "build/postgres.local.json"))) directory = directory.Parent;
         var root = directory?.FullName ?? throw new InvalidOperationException("SVM workspace missing.");
         var run = Guid.NewGuid().ToString("N"); var config = Path.Combine(root, ".cache", $"site-browser-{run}.json"); var password = Guid.NewGuid().ToString("N");
-        var info = new ProcessStartInfo(Path.Combine(root, ".tools/node/bin/node")) { WorkingDirectory = root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        var info = new ProcessStartInfo(RepositoryTools.Node) { WorkingDirectory = root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add(Path.Combine(root, "src/ui/svm-web/tests/browser/catalog.mjs"));
         info.Environment["SVM_SITE_BROWSER_CONFIG_FILE"] = config; info.Environment["PLAYWRIGHT_BROWSERS_PATH"] = Path.Combine(root, ".cache/playwright-browsers");
         using var process = new Process { StartInfo = info }; var started = false;

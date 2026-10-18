@@ -1,0 +1,8 @@
+services:
+  api-a:
+    environment:
+      SVM_PACKAGE_CONFIG_FILE: !reset null
+      SVM_MESSAGING_CONFIG_FILE: !reset null
+      SVM_TASK_CONFIG_FILE: !reset null
+    ports:
+      - "${SVM_PUBLIC_BIND}:${SVM_HTTPS_PORT}:7443"

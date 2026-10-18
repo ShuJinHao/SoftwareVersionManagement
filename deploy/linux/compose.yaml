@@ -1,0 +1,164 @@
+name: ${SVM_PROJECT}
+x-runtime: &runtime
+  image: ${SVM_RUNTIME_IMAGE}
+  platform: ${SVM_PLATFORM}
+  user: "${SVM_UID}:${SVM_GID}"
+  restart: unless-stopped
+  read_only: true
+  tmpfs: ["/tmp"]
+  networks: [svm]
+  security_opt: [no-new-privileges:true]
+  labels:
+    io.svm.commit: ${SVM_CODE_COMMIT:-unrecorded}
+    io.svm.deployment: ${SVM_PROJECT}
+x-environment: &environment
+  SVM_PERSISTENCE_CONFIG_FILE: /svm/config/persistence.json
+  SVM_SITE_CONFIG_FILE: /svm/config/site.json
+  SVM_HOST_CONFIG_FILE: /svm/config/host.json
+  SVM_PERSONNEL_CONFIG_FILE: /svm/config/personnel.json
+  SVM_INSTANCE_ACCESS_CONFIG_FILE: /svm/config/instances.json
+  SVM_PACKAGE_CONFIG_FILE: ${SVM_PACKAGE_CONFIG_FILE:-}
+  SVM_MESSAGING_CONFIG_FILE: ${SVM_MESSAGING_CONFIG_FILE:-}
+  SVM_TASK_CONFIG_FILE: ${SVM_TASK_CONFIG_FILE:-}
+  ASPNETCORE_URLS: https://0.0.0.0:7443
+  Logging__LogLevel__Default: Information
+  Logging__LogLevel__MassTransit: Warning
+services:
+  postgres:
+    image: ${SVM_POSTGRES_IMAGE}
+    platform: ${SVM_PLATFORM}
+    user: "${SVM_UID}:${SVM_GID}"
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: svm_bootstrap
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/bootstrap-password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+      - ./postgres/bootstrap-password:/run/secrets/bootstrap-password:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/10-svm.sql:ro
+    networks: [svm]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "svm_bootstrap", "-d", "postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  rabbitmq:
+    profiles: [full]
+    image: ${SVM_RABBITMQ_IMAGE}
+    platform: ${SVM_PLATFORM}
+    hostname: rabbitmq
+    user: "${SVM_UID}:${SVM_GID}"
+    restart: unless-stopped
+    volumes:
+      - ./rabbitmq/data:/var/lib/rabbitmq
+      - ./rabbitmq/config:/etc/rabbitmq:ro
+    networks: [svm]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  api-a:
+    <<: *runtime
+    build: { context: ./image }
+    command: [/opt/svm/Svm.HttpApi/Svm.HttpApi.dll]
+    environment: *environment
+    volumes:
+      - ./runtime/node-a:/svm/config:ro
+      - ./packages/node-a:/svm/packages
+      - ./logs/node-a:/svm/logs:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "dotnet", "/opt/svm/Svm.HttpApi/Svm.HttpApi.dll", "--healthcheck"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+  api-b:
+    <<: *runtime
+    profiles: [full]
+    command: [/opt/svm/Svm.HttpApi/Svm.HttpApi.dll]
+    environment: *environment
+    volumes:
+      - ./runtime/node-b:/svm/config:ro
+      - ./packages/node-b:/svm/packages
+      - ./logs/node-b:/svm/logs:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "dotnet", "/opt/svm/Svm.HttpApi/Svm.HttpApi.dll", "--healthcheck"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+  worker-a:
+    <<: *runtime
+    profiles: [full]
+    command: [/opt/svm/Svm.Worker/Svm.Worker.dll]
+    environment: *environment
+    volumes:
+      - ./runtime/node-a:/svm/config:ro
+      - ./packages/node-a:/svm/packages
+      - ./logs/node-a:/svm/logs:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "dotnet", "/opt/svm/Svm.Worker/Svm.Worker.dll", "--healthcheck"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+  worker-b:
+    <<: *runtime
+    profiles: [full]
+    command: [/opt/svm/Svm.Worker/Svm.Worker.dll]
+    environment: *environment
+    volumes:
+      - ./runtime/node-b:/svm/config:ro
+      - ./packages/node-b:/svm/packages
+      - ./logs/node-b:/svm/logs:ro
+    depends_on:
+      postgres: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "dotnet", "/opt/svm/Svm.Worker/Svm.Worker.dll", "--healthcheck"]
+      interval: 10s
+      timeout: 8s
+      retries: 12
+  gateway:
+    profiles: [full]
+    image: ${SVM_NGINX_IMAGE}
+    platform: ${SVM_PLATFORM}
+    user: "${SVM_UID}:${SVM_GID}"
+    entrypoint: [nginx]
+    command: ["-g", "daemon off;"]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp"]
+    ports:
+      - "${SVM_PUBLIC_BIND}:${SVM_HTTPS_PORT}:10443"
+      - "127.0.0.1:${SVM_SECONDARY_HTTPS_PORT}:11443"
+    volumes:
+      - ./gateway:/svm/gateway:ro
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./packages/node-a:/svm/node-a/files:ro
+      - ./packages/node-b:/svm/node-b/files:ro
+      - ./logs/node-a:/svm/node-a/logs
+      - ./logs/node-b:/svm/node-b/logs
+    depends_on:
+      api-a: { condition: service_healthy }
+      api-b: { condition: service_healthy }
+    networks:
+      svm: { ipv4_address: "${SVM_GATEWAY_ADDRESS}" }
+  migration:
+    <<: *runtime
+    profiles: [tools]
+    restart: "no"
+    command: [/opt/svm/Svm.Migration/Svm.Migration.dll, status, --config, /svm/init/migration.json]
+    environment: {}
+    volumes: [./init:/svm/init:ro]
+networks:
+  svm:
+    ipam:
+      config: [{ subnet: "${SVM_NETWORK_SUBNET}" }]

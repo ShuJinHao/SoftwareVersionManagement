@@ -16,7 +16,7 @@
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>low</NuGetAuditLevel>
     <RuntimeFrameworkVersion Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers'">8.0.31</RuntimeFrameworkVersion>
-    <RollForward>Disable</RollForward>
+    <RollForward>LatestPatch</RollForward>
     <RestorePackagesPath>$(SvmRoot).cache/nuget/packages</RestorePackagesPath>
     <RestoreConfigFile>$(SvmRoot)NuGet.Config</RestoreConfigFile>
   </PropertyGroup>

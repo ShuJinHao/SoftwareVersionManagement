@@ -166,7 +166,7 @@ internal sealed class OutboxWorker : IAsyncDisposable
     {
         var persistence = await OutboxFixture.PrivateJsonAsync(new { writerConnectionString = db.WriterConnection, readerConnectionString = db.ReaderConnection });
         var messaging = await OutboxFixture.PrivateJsonAsync(options);
-        var info = new ProcessStartInfo(Path.Combine(OutboxFixture.Root, "eng/dotnet")) { WorkingDirectory = OutboxFixture.Root,
+        var info = new ProcessStartInfo(RepositoryTools.Dotnet) { WorkingDirectory = OutboxFixture.Root,
             RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net8.0/Svm.Worker.dll"));
         info.Environment["SVM_PERSISTENCE_CONFIG_FILE"] = persistence; info.Environment["SVM_MESSAGING_CONFIG_FILE"] = messaging;

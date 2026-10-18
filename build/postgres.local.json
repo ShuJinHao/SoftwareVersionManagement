@@ -1,6 +1,7 @@
 {
   "version": "17.11",
-  "platform": "linux/arm64",
-  "image": "docker.io/library/postgres@sha256:75731e2765e7d0c8bb7dea960ef3bdcde68d16314991ab2057a2a74ea0fff257",
-  "dockerContext": "desktop-linux"
+  "images": {
+    "linux/amd64": "docker.io/library/postgres@sha256:91eb910c44c7ed13f7f1a4ccadaa9ca72ef14cddc04cacb6e070e48eb44731a3",
+    "linux/arm64": "docker.io/library/postgres@sha256:75731e2765e7d0c8bb7dea960ef3bdcde68d16314991ab2057a2a74ea0fff257"
+  }
 }

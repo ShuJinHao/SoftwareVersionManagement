@@ -9,7 +9,8 @@
     <AdditionalFiles Include="$(SvmRoot)src/**/*.csproj" />
   </ItemGroup>
   <Target Name="ValidateSvmBuildSettings" BeforeTargets="CoreCompile">
-    <Error Condition="'$(NETCoreSdkVersion)' != '8.0.425'" Text="SVM100: Build requires .NET SDK 8.0.425." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NETCoreSdkVersion)', '^8\.0\.[0-9]+$')) or $([MSBuild]::VersionLessThan('$(NETCoreSdkVersion)', '8.0.400'))" Text="SVM100: Development requires a stable .NET 8 SDK version 8.0.400 or later within 8.0." />
+    <Error Condition="'$(SvmReproducibleBuild)' == 'true' and '$(NETCoreSdkVersion)' != '8.0.425'" Text="SVM100: Reproducible publishing requires .NET SDK 8.0.425." />
     <Error Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers' and '$(TargetFramework)' != 'net8.0'" Text="SVM100: Product and test projects require net8.0." />
     <Error Condition="'$(MSBuildProjectName)' == 'Svm.Analyzers' and '$(TargetFramework)' != 'netstandard2.0'" Text="SVM100: Analyzer requires netstandard2.0." />
     <Error Condition="'$(LangVersion)' != '12.0'" Text="SVM100: C# version must be 12.0." />
