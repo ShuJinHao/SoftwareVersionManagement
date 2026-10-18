@@ -180,3 +180,5 @@ eng/node deploy/linux/verify-audit.mjs --deployment artifacts/linux-demo/audit-c
 验证器通过真实 HTTPS/API 准备台账、双副本、Formal 和 Update，再检查页面固定对象、分页、迟到响应和丢响应后的原键人工核实。浏览器故障注入与真实接口分别记录；安装上报来自测试夹具，不代表厂家安装。私有 audit-fixture.json 保存工作标识，已有夹具拒绝重复准备；全部操作已验证后可使用 --display-only 重新截图，只执行读页面。不要删除检查点后重做尚未核实的写操作。
 
 用户查看用的演示单独保留。operator.json 包含本机演示登录材料，不上传仓库；svm.sh stop 暂停容器，svm.sh down 删除该演示的容器/网络并保留绑定目录数据。故障测试资源与这个保留演示分开清理，不能把保留演示记录成资源残留为零。
+
+2026-10-18 实际展示使用 Release 5e8b272（dirty=false），宿主 macOS arm64、服务 Linux arm64，专属项目 svm-demo-35dbe7795749。七阶段局部走查完成；初次键盘断言将 Tab 进入浏览器界面误判，修正验证器后仅以 --display-only 重查页面和焦点，原写入不重跑。完整截图在 artifacts/test-results/audit-correctness/pages.md，测试与资源汇总在同目录 test-selection-results.json。七容器演示保留，故障测试用的一次性 PG/RabbitMQ 已删除；开发库容器保持停止。

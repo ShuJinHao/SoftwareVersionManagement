@@ -21,7 +21,7 @@ if (!identity.demo || identity.mode !== 'full' || !/^svm-demo-[a-z0-9]+$/.test(i
 await mkdir(results, { recursive: true });
 const fixturePath = join(deployment, 'audit-fixture.json');
 const agent = new Agent({ ca: await readFile(resolve(deployment, config.caFile)), keepAlive: true });
-const cookies = new Map(), stages = [], injections = [], screenshots = [];
+const cookies = new Map(), stages = [], injections = [], screenshots = [], keyboard = [];
 let phase = 'prepare', browser, page, fixture;
 const now = () => new Date().toISOString();
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -205,14 +205,22 @@ try {
   await page.getByRole('button',{name:new RegExp(fixture.devices[0].name)}).click();await expect(page.locator('.device-detail')).toContainText(a.name);await screenshot('04-site');
   await page.goto(config.url+'/software');await page.getByRole('button',{name:a.name,exact:true}).click();await expect(page.locator('aside.detail h2')).toHaveText(a.name);await screenshot('05-software');
   await page.setViewportSize({width:1280,height:720});await page.getByRole('button',{name:'修改软件资料',exact:true}).click();
-  for(let i=0;i<8;i++) {await page.keyboard.press('Tab');assert.ok(await page.locator('dialog').evaluate(el=>el.contains(document.activeElement)));}
+  for(let i=0;i<8;i++) {
+    await page.keyboard.press('Tab');
+    const focus=await page.locator('dialog').evaluate(el=>({inside:el.contains(document.activeElement),documentFocused:document.hasFocus(),tag:document.activeElement?.tagName}));
+    keyboard.push(focus);
+    // Native Chromium permits Tab to browser chrome. While the document has focus,
+    // every target must stay in the modal; background application controls are inert.
+    assert.ok(focus.inside || (!focus.documentFocused && focus.tag==='BODY'));
+  }
+  assert.ok(keyboard.some(x=>x.inside));
   await page.keyboard.press('Escape');await expect(page.locator('dialog')).toHaveCount(0);await expect(page.getByRole('button',{name:'修改软件资料',exact:true})).toBeFocused();
   await page.setViewportSize({width:1440,height:1000});await page.goto(config.url+'/instances?softwareId='+a.id);
   await page.locator('tbody tr').filter({hasText:ib.device.deviceNo}).getByRole('button',{name:'查看实例'}).click();await expect(page.locator('.device-facts')).toContainText(ib.id);await screenshot('06-instances');
   await page.goto(config.url+'/releases?softwareId='+a.id+'&channel=Formal&releaseId='+fixture.release.id);await page.getByRole('heading',{name:/1\.0\.0/}).waitFor();await screenshot('07-releases');
   await page.goto(config.url+'/deployments?softwareId='+a.id);await page.getByRole('button',{name:fixture.deployment.id,exact:true}).click();await page.getByRole('heading',{name:/投放详情/}).waitFor();await screenshot('08-deployments');
   assert.deepEqual(await page.evaluate(()=>[localStorage.length,sessionStorage.length]),[0,0]);await complete(phase);
-  await writeFile(join(results,'result.json'),JSON.stringify({passed:true,stages,injections,screenshots,displayOnly,releaseCommit:identity.releaseCommit,releaseDirty:identity.releaseDirty,
+  await writeFile(join(results,'result.json'),JSON.stringify({passed:true,stages,injections,screenshots,keyboard,displayOnly,releaseCommit:identity.releaseCommit,releaseDirty:identity.releaseDirty,
     verificationHost:process.platform+'/'+process.arch,runtimePlatform:identity.platform,simulatedInstallation:true,realGitLab:false,browserTrust:'demo leaf SPKI; API CA and hostname validated'},null,2)+'\n');
 } catch(error) {
   await writeFile(join(results,'result.json'),JSON.stringify({passed:false,phase,stages,injections,errorType:error.name,locations:(error.stack??'').split('\n').filter(line=>line.includes('verify-audit.mjs:'))},null,2)+'\n');
