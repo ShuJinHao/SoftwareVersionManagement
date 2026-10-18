@@ -52,7 +52,7 @@ internal static class PackageInternalEndpoints
             await files.ReceiveReplicaAsync(w, http.Request.Body, async ct => { await Lease(http, executor, workId, ct); }, http.RequestAborted);
             return Results.Json(new { verified = true });
         });
-        group.MapGet("/download-authorizations", async (HttpContext http, IPackageFiles files, ScopedRequestExecutor executor, IPackageDownloadProof proof) =>
+        group.MapGet("/download-authorizations", async (HttpContext http, IPackageFiles files, ScopedRequestExecutor executor, IPackageDownloadProof proof, PackageFileOptions options) =>
         {
             var packageId = HeaderId(http, "X-Svm-Package-Id"); Bind(http, packageId, "Gateway"); PackageEndpoints.Empty(http);
             if (http.Request.Headers.Authorization.Count > 0 && (http.Request.Cookies.ContainsKey(SessionEndpoints.CookieName) || proof.Instance is null))
@@ -61,25 +61,29 @@ internal static class PackageInternalEndpoints
             var method = Header(http, "X-Svm-Original-Method");
             if (method is not ("GET" or "HEAD") || node != peer.NodeId) throw new RequestRejectedException(RequestFailure.PermissionDenied);
             var requestId = HeaderId(http, "X-Svm-Request-Id"); var generation = HeaderId(http, "X-Svm-Worker-Generation");
-            // Check the original caller before probing files or registering a repair intent.
-            // HEAD performs the same current authorization without creating a download fact.
-            try { await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, true), http.RequestAborted); }
-            catch (RequestRejectedException e) when (e.Failure == RequestFailure.NoHealthyReplica)
+            var localOnly = http.Request.Headers.ContainsKey("X-Svm-Local-Only");
+            if (localOnly && (Header(http, "X-Svm-Local-Only") != "1" || method != "HEAD")) throw Invalid();
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted);
+            budget.CancelAfter(TimeSpan.FromSeconds(options.Execution.DownloadAuthorizationSeconds));
+            var token = budget.Token;
+            try
             {
-                // This failure is reached only after current caller/release authorization.
-                // Cached health may have expired while Worker was offline; probe actual files.
+                // Check the original caller before probing files or registering a repair intent.
+                // HEAD performs current authorization without creating a download fact.
+                try { await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, true), token); }
+                catch (RequestRejectedException e) when (e.Failure == RequestFailure.NoHealthyReplica) { }
+                var p = await executor.SendAsync(new InspectReplicaQuery(packageId), token);
+                var verifiedNode = await FirstHealthy(files, executor, options, p, localOnly, token);
+                // Recheck current authorization/disable state and bind this request to the node
+                // actually verified above. Cached health cannot select a different replica.
+                var result = await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, method == "HEAD", verifiedNode), token);
+                http.Response.Headers["X-Svm-Replica-Uri"] = result.Value.InternalUri;
+                http.Response.Headers["X-Svm-Download-Authorized"] = method == "GET" ? "1" : "0";
+                http.Response.Headers["X-Svm-Sha256"] = result.Value.Sha256;
+                return Results.StatusCode(204);
             }
-            var p = await executor.SendAsync(new InspectReplicaQuery(packageId), http.RequestAborted);
-            var facts = await files.InspectAsync(packageId, p.ExpectedSize, p.ExpectedSha256, http.RequestAborted);
-            await executor.SendAsync(new CheckPackageReplicasCommand(packageId, facts), http.RequestAborted);
-            var result = await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, method == "HEAD"), http.RequestAborted);
-            if (http.Request.Headers.ContainsKey("X-Svm-Local-Only") &&
-                (Header(http, "X-Svm-Local-Only") != "1" || method != "HEAD" || result.Value.NodeId != files.NodeId))
-                throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
-            http.Response.Headers["X-Svm-Replica-Uri"] = result.Value.InternalUri;
-            http.Response.Headers["X-Svm-Download-Authorized"] = method == "GET" ? "1" : "0";
-            http.Response.Headers["X-Svm-Sha256"] = result.Value.Sha256;
-            return Results.StatusCode(204);
+            catch (OperationCanceledException) when (!http.RequestAborted.IsCancellationRequested && budget.IsCancellationRequested)
+            { throw new RequestRejectedException(RequestFailure.NoHealthyReplica); }
         }).AddEndpointFilter(async (context, next) =>
         {
             try { return await next(context); }
@@ -115,6 +119,32 @@ internal static class PackageInternalEndpoints
                 return Results.Json(new { recorded = true });
             }
         });
+    }
+    private static async Task<string> FirstHealthy(IPackageFiles files, ScopedRequestExecutor executor, PackageFileOptions options,
+        PackageView package, bool localOnly, CancellationToken token)
+    {
+        using var remaining = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var probes = options.Nodes.Where(n => !localOnly || n.NodeId == files.NodeId)
+            .Select(n => files.InspectNodeAsync(n.NodeId, package.Id, package.ExpectedSize, package.ExpectedSha256, remaining.Token)).ToList();
+        var all = probes.ToArray();
+        try
+        {
+            while (probes.Count > 0)
+            {
+                var completed = await Task.WhenAny(probes); probes.Remove(completed);
+                var fact = await completed;
+                // Only completed probes enter persistence; cancellation is never a Missing fact.
+                await executor.SendAsync(new CheckPackageReplicasCommand(package.Id, [fact]), token);
+                if (fact.State == "Healthy") return fact.NodeId;
+            }
+            throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
+        }
+        finally
+        {
+            remaining.Cancel();
+            // Observe cancellation and finish resources before the request scope is released.
+            foreach (var probe in all) { try { await probe; } catch (OperationCanceledException) when (remaining.IsCancellationRequested) { } }
+        }
     }
     private static void Bind(HttpContext http, Guid resource, string role)
     {

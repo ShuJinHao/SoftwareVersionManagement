@@ -155,6 +155,9 @@ public sealed class GitLabImportTests
             var packages = scope.ServiceProvider.GetRequiredService<IPackages>(); var work = await packages.AuthorityAsync(id, false, default);
             await scope.ServiceProvider.GetRequiredService<IUnitOfWork>().ExecuteAsync(Guid.NewGuid(), async ct => { await packages.AcceptAsync(id, work.DispatchSequence, work.DispatchEventId, ct); return true; }, default);
         }
+        // This assertion reads SQL availability using database time. Refresh the fake
+        // observation clock before the new repair, not the historical publication fact.
+        f.Instances.Clock.Advance(DateTimeOffset.UtcNow - f.Instances.Clock.GetUtcNow());
         var lease = (await f.SendAsync(new ClaimPackageWorkCommand(id, "node-a", Guid.NewGuid()), work: id)).Value!;
         await f.SendAsync(new CompletePackageWorkCommand(lease, f.Healthy), work: id);
         var after = await f.SendAsync(new GetReleaseQuery(ready.Id)); Assert.Equal(published, after);

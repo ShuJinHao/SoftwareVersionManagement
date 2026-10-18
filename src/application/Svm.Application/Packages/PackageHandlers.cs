@@ -193,7 +193,7 @@ internal sealed class AuthorizeDownloadCommandHandler(IPackages packages, IPacka
         if (!await catalog.ExistsAsync(software, true, token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         var package = await packages.GetAsync(x.PackageId, false, false, token);
         if ((await releases.GetAsync(package.ReleaseId, true, token)).State is not ("Test" or "Formal")) throw new RequestRejectedException(RequestFailure.InvalidState);
-        var authorization = await packages.AuthorizeDownloadAsync(x.PackageId, x.RequestId, x.NodeId, x.WorkerGeneration, x.Head, subject, actor, employee, token);
+        var authorization = await packages.AuthorizeDownloadAsync(x.PackageId, x.RequestId, x.NodeId, x.WorkerGeneration, x.Head, subject, actor, employee, token, x.VerifiedNode);
         var op = unit.CurrentOperationId!.Value;
         if (authorization.NewSession) audit.Append(new(op, subject, actor, employee, null, "pkg.download.started", x.RequestId, "authorized", "protected GET", calls.Current!.CorrelationId));
         return OperationResult<DownloadAuthorization>.Completed(op, authorization, x.PackageId);

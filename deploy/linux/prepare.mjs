@@ -11,6 +11,10 @@ if (args.length !== 7 || args[0] !== '--demo' || args[1] !== '--settings' || arg
   throw new Error('Usage: eng/node deploy/linux/prepare.mjs --demo --settings file --release folder --output new-folder');
 const settings = JSON.parse(await readFile(resolve(args[2]), 'utf8'));
 const release = resolve(args[4]), output = resolve(args[6]);
+const packageExecution = {peerResponseSeconds:15,downloadAuthorizationSeconds:20,...settings.packageExecution};
+if (!Number.isInteger(packageExecution.peerResponseSeconds) || packageExecution.peerResponseSeconds < 1 ||
+    !Number.isInteger(packageExecution.downloadAuthorizationSeconds) || packageExecution.downloadAuthorizationSeconds >= 30 ||
+    packageExecution.peerResponseSeconds >= packageExecution.downloadAuthorizationSeconds) throw new Error('Invalid package response/authorization budgets.');
 if (!['full', 'preview'].includes(settings.mode) || !['linux/amd64', 'linux/arm64'].includes(settings.platform) ||
     !/^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$/.test(settings.publicHost) || !isIP(settings.publicBind) ||
     ![settings.httpsPort, settings.secondaryHttpsPort].every(p => Number.isInteger(p) && p >= 1024 && p <= 65535) ||
@@ -100,7 +104,7 @@ for (const node of ['node-a','node-b']) {
     await file(directory+'/package.json',{nodeId:node,rootPath:'/svm/packages',serviceSubjectId:randomUUID(),internalListenAddress:'0.0.0.0',internalListenPort:7444,
       serverCertificatePath:'/svm/config/certs/server-'+node+'.pfx',serverCertificatePassword:password,clientCertificatePath:'/svm/config/certs/peer-'+node+'.pfx',clientCertificatePassword:password,
       trustCertificatePath:'/svm/config/certs/root.pem',collectorCertificatePath:'/svm/config/certs/collector-'+node+'.pfx',collectorCertificatePassword:password,
-      downloadLogDirectory:'/svm/logs',limits:settings.packageLimits,execution:settings.packageExecution,nodes,peers});
+      downloadLogDirectory:'/svm/logs',limits:settings.packageLimits,execution:packageExecution,nodes,peers});
   }
   await mkdir(join(output,'packages',node),{recursive:true,mode:0o700});await mkdir(join(output,'logs',node),{recursive:true,mode:0o700});
 }
@@ -125,7 +129,7 @@ for (const name of ['root.pem',...['node-a','node-b'].flatMap(node=>['server-'+n
 const nginx = {workerUser:null,resolverAddress:'127.0.0.11',certificateDirectory:'/svm/gateway/certs',gatewayFingerprints:['node-a','node-b'].map(n=>certificates['gateway-'+n].sha1),
   nodes:['node-a','node-b'].map((node,index)=>({nodeId:node,generation:randomUUID(),publicPort:10443+1000*index,privatePort:20443+1000*index,
     apiHost:'api-'+node.at(-1),apiTlsName:'api-'+node.at(-1),gatewayTlsName:'gateway',apiPublicPort:7443,apiInternalPort:7444,
-    rootPath:'/svm/'+node+'/files',logDirectory:'/svm/'+node+'/logs',...settings.packageLimits}))};
+    rootPath:'/svm/'+node+'/files',logDirectory:'/svm/'+node+'/logs',...settings.packageLimits,downloadAuthorizationSeconds:packageExecution.downloadAuthorizationSeconds}))};
 await file('gateway/nginx.conf',renderNginx(nginx));
 await cp(release,join(output,'image/release'),{recursive:true});
 await cp(cert('root.pem'),join(output,'image/ca.crt'));await cp(join(root,'deploy/linux/Dockerfile'),join(output,'image/Dockerfile'));

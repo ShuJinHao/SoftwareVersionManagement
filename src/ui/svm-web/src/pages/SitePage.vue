@@ -6,126 +6,109 @@ import { categoryName, type Binding, type Device, type Inventory, type Page, typ
 import { useProtectedMutation } from '../protectedMutation'
 import { useSession } from '../session'
 import OperationStatus from '../components/OperationStatus.vue'
+import { useOwnedReads } from '../ownedReads'
 const session = useSession(), mutation = useProtectedMutation()
 const { busy, uncertain, blocked, error } = mutation
 const site = ref<Site | null>(null), processes = ref<Process[]>([]), devices = ref<Device[]>([]), inventory = ref<Inventory[]>([]), bindings = ref<Binding[]>([])
-const process = ref<Process | null>(null), device = ref<Device | null>(null), loading = ref(false), failure = ref(''), notice = ref('')
+const process = ref<Process | null>(null), device = ref<Device | null>(null), failure = ref(''), notice = ref('')
 const processSearch = ref(''), deviceSearch = ref(''), inventoryCategory = ref('')
 type PageKind = 'processes' | 'devices' | 'inventory' | 'bindings' | 'candidates'
 const cursors = ref<Record<PageKind, string[]>>({ processes: [''], devices: [''], inventory: [''], bindings: [''], candidates: [''] })
 const nextCursors = ref<Record<PageKind, string | null>>({ processes: null, devices: null, inventory: null, bindings: null, candidates: null })
 type Mode = 'createProcess' | 'editProcess' | 'createDevice' | 'editDevice' | 'bind' | 'revoke'
 const mode = ref<Mode | null>(null), dialog = ref<HTMLDialogElement | null>(null), code = ref(''), name = ref(''), reason = ref(''), targetId = ref('')
-const targetBinding = ref<Binding | null>(null), candidates = ref<(Process | Software)[]>([]), candidateSearch = ref(''), candidateFailure = ref(''), candidateLoading = ref(false)
+const targetBinding = ref<Binding | null>(null), candidates = ref<(Process | Software)[]>([]), candidateSearch = ref(''), candidateFailure = ref('')
 const softwareNames = ref<Record<string, string>>({})
 const titles: Record<Mode, string> = { createProcess: '创建工序', editProcess: '修改工序', createDevice: '创建设备', editDevice: '修改设备', bind: '建立设备软件映射', revoke: '撤销设备软件映射' }
 const canMaintain = computed(() => session.can('asset.manage'))
 const isDeviceMode = computed(() => mode.value === 'createDevice' || mode.value === 'editDevice')
 const names = computed(() => ({ ...softwareNames.value, ...Object.fromEntries([...inventory.value.map(x => [x.software.id, `${x.software.name} · ${x.software.code}`]), ...candidates.value.filter(x => 'category' in x).map(x => [x.id, `${x.name} · ${x.code}`])]) }))
 function reset(kind: PageKind) { cursors.value[kind] = ['']; nextCursors.value[kind] = null }
-function query(kind: PageKind, filters: Record<string, string> = {}) {
-  const result = new URLSearchParams({ pageSize: '50' }); for (const [key, value] of Object.entries(filters)) if (value) result.set(key, value)
-  const cursor = cursors.value[kind][cursors.value[kind].length - 1]; if (cursor) result.set('cursor', cursor); return result
+const applied=ref<Record<PageKind,Record<string,string>>>({processes:{},devices:{},inventory:{},bindings:{},candidates:{}})
+const reads=useOwnedReads(()=>{site.value=null; processes.value=[]; process.value=null; devices.value=[]; device.value=null; inventory.value=[]; bindings.value=[]; candidates.value=[]; softwareNames.value={}; for(const key of Object.keys(cursors.value) as PageKind[]) reset(key)})
+const loading=computed(()=>reads.pending('scene')), candidateLoading=computed(()=>reads.pending('candidates'))
+const draft=ref<{process:Process|null; device:Device|null; epoch:number}|null>(null)
+const draftValid=computed(()=>!!draft.value && draft.value.epoch===reads.epoch.value && canMaintain.value)
+let returnFocus:HTMLElement|null=null
+const get=<T,>(path:string,signal:AbortSignal)=>request<T>('/api/v1/manage/'+path,'GET',undefined,undefined,undefined,{signal})
+function query(filters:Record<string,string>,stack:string[]) {const result=new URLSearchParams({pageSize:'50'}); for(const [key,value] of Object.entries(filters)) if(value) result.set(key,value); const cursor=stack[stack.length-1]; if(cursor) result.set('cursor',cursor); return result}
+async function failed(e:unknown) {failure.value=e instanceof ApiError ? e.message : '现场台账读取失败，已保留原结果，请重试。'; if(e instanceof ApiError && [401,403,404].includes(e.status)) await session.load()}
+function read<T>(path:string,filters:Record<string,string>,stack:string[],signal:AbortSignal) {return get<Page<T>>(path+'?'+query(filters,stack),signal)}
+function commit<T>(kind:PageKind,p:Page<T>,filters:Record<string,string>,stack:string[]) {nextCursors.value[kind]=p.nextCursor; cursors.value[kind]=stack; applied.value[kind]=filters; return p.items}
+function clearDevice() {device.value=null; inventory.value=[]; bindings.value=[]; reset('inventory'); reset('bindings')}
+async function loadProcesses(refresh=false,stack=cursors.value.processes) {
+  if(blocked.value || !session.canAssets) return
+  const filters=refresh ? {name:processSearch.value} : {...applied.value.processes}, proposed=refresh ? [''] : [...stack]; failure.value=''
+  await reads.run('scene',refresh,async signal=>{const [s,p]=await Promise.all([get<Site>('site',signal),read<Process>('processes',filters,proposed,signal)]); return {s,p}},({s,p})=>{site.value=s; processes.value=commit('processes',p,filters,proposed); if(refresh) {process.value=null; devices.value=[]; reset('devices'); clearDevice()}},failed)
 }
-async function failed(e: unknown) {
-  failure.value = e instanceof ApiError ? e.message : '现场台账读取失败。'
-  if (e instanceof ApiError && [401, 403, 404].includes(e.status)) await session.load()
+async function selectProcess(id:string) {
+  if(blocked.value || !session.canAssets) return
+  failure.value=''
+  await reads.run('scene',true,async signal=>{const [p,d]=await Promise.all([get<Process>('processes/'+id,signal),read<Device>('devices',{processId:id},[''],signal)]); return {p,d}},({p,d})=>{process.value=p; devices.value=commit('devices',d,{processId:id},['']); deviceSearch.value=''; clearDevice()},failed)
 }
-async function read<T>(kind: PageKind, path: string, filters: Record<string, string> = {}) {
-  const page = await request<Page<T>>('/api/v1/manage/' + path + '?' + query(kind, filters)); nextCursors.value[kind] = page.nextCursor; return page.items
+async function loadDevices(refresh=false,stack=cursors.value.devices) {
+  if(!process.value || blocked.value || !session.canAssets) return
+  const filters=refresh ? {processId:process.value.id,name:deviceSearch.value} : {...applied.value.devices}, proposed=refresh ? [''] : [...stack]; failure.value=''
+  await reads.run('scene',refresh,signal=>read<Device>('devices',filters,proposed,signal),p=>{devices.value=commit('devices',p,filters,proposed); if(refresh) clearDevice()},failed)
 }
-async function loadProcesses(refresh = false) {
-  if (refresh) { reset('processes'); process.value = null; device.value = null; devices.value = []; inventory.value = []; bindings.value = [] }
-  loading.value = true; failure.value = ''
-  try { site.value = await request<Site>('/api/v1/manage/site'); processes.value = await read<Process>('processes', 'processes', { name: processSearch.value }) }
-  catch (e) { site.value = null; processes.value = []; await failed(e) }
-  finally { loading.value = false }
+async function selectDevice(id:string) {
+  if(blocked.value || !session.canAssets) return
+  failure.value=''
+  await reads.run('scene',true,async signal=>{
+    const [d,i,b]=await Promise.all([get<Device>('devices/'+id,signal),read<Inventory>(`devices/${id}/software-inventory`,{},[''],signal),read<Binding>(`devices/${id}/software-bindings`,{},[''],signal)])
+    const labels=b.items.some(binding=>!i.items.some(x=>x.software.id===binding.softwareId) && !names.value[binding.softwareId]) ? await get<Page<Software>>('software?pageSize=50',signal) : {items:[]}
+    return {d,i,b,labels}
+  },({d,i,b,labels})=>{device.value=d; inventory.value=commit('inventory',i,{},['']); bindings.value=commit('bindings',b,{},['']); inventoryCategory.value=''; softwareNames.value={...softwareNames.value,...Object.fromEntries(labels.items.map(x=>[x.id,`${x.name} · ${x.code}`]))}},failed)
 }
-async function selectProcess(id: string) {
-  loading.value = true; failure.value = ''; device.value = null; inventory.value = []; bindings.value = []; reset('devices'); deviceSearch.value = ''
-  try { process.value = await request<Process>('/api/v1/manage/processes/' + id); devices.value = await read<Device>('devices', 'devices', { processId: id }) }
-  catch (e) { process.value = null; devices.value = []; await failed(e) }
-  finally { loading.value = false }
+async function loadInventory(refresh=false,stack=cursors.value.inventory) {
+  if(!device.value || blocked.value || !session.canAssets) return
+  const id=device.value.id, filters=refresh ? {category:inventoryCategory.value} : {...applied.value.inventory}, proposed=refresh ? [''] : [...stack]; failure.value=''
+  await reads.run('scene',refresh,signal=>read<Inventory>(`devices/${id}/software-inventory`,filters,proposed,signal),p=>{if(device.value?.id===id) inventory.value=commit('inventory',p,filters,proposed)},failed)
 }
-async function loadDevices(refresh = false) {
-  if (!process.value) return
-  if (refresh) { reset('devices'); device.value = null; inventory.value = []; bindings.value = [] }
-  loading.value = true; failure.value = ''
-  try { devices.value = await read<Device>('devices', 'devices', { processId: process.value.id, name: deviceSearch.value }) }
-  catch (e) { devices.value = []; await failed(e) }
-  finally { loading.value = false }
+async function loadBindings(stack=cursors.value.bindings) {
+  if(!device.value || blocked.value || !session.canAssets) return
+  const id=device.value.id,proposed=[...stack]; failure.value=''
+  await reads.run('scene',false,signal=>read<Binding>(`devices/${id}/software-bindings`,{},proposed,signal),p=>{if(device.value?.id===id) bindings.value=commit('bindings',p,{},proposed)},failed)
 }
-async function selectDevice(id: string) {
-  loading.value = true; failure.value = ''; reset('inventory'); reset('bindings'); inventoryCategory.value = ''
-  try {
-    device.value = await request<Device>('/api/v1/manage/devices/' + id); inventory.value = await read<Inventory>('inventory', `devices/${id}/software-inventory`); bindings.value = await read<Binding>('bindings', `devices/${id}/software-bindings`)
-    // One bounded catalog page supplies labels without querying once for each mapping.
-    // A user can open an uncached software's detail through the auxiliary catalog.
-    if (bindings.value.some(b => !names.value[b.softwareId])) {
-      const page = await request<Page<Software>>('/api/v1/manage/software?pageSize=50')
-      softwareNames.value = { ...softwareNames.value, ...Object.fromEntries(page.items.map(s => [s.id, `${s.name} · ${s.code}`])) }
-    }
-  }
-  catch (e) { device.value = null; inventory.value = []; bindings.value = []; await failed(e) }
-  finally { loading.value = false }
+async function loadCandidates(refresh=false,stack=cursors.value.candidates) {
+  if(!mode.value || !draftValid.value || blocked.value) return
+  const filters=refresh ? {name:candidateSearch.value} : {...applied.value.candidates}, proposed=refresh ? [''] : [...stack], path=mode.value==='bind' ? 'software' : 'processes'; candidateFailure.value=''
+  await reads.run('candidates',refresh,signal=>read<Process|Software>(path,filters,proposed,signal),p=>{candidates.value=commit('candidates',p,filters,proposed)},e=>{candidateFailure.value=e instanceof ApiError ? e.message : '候选读取失败，已保留原结果。'})
 }
-async function loadInventory(refresh = false) {
-  if (!device.value) return
-  if (refresh) reset('inventory')
-  loading.value = true; failure.value = ''
-  try { inventory.value = await read<Inventory>('inventory', `devices/${device.value.id}/software-inventory`, { category: inventoryCategory.value }) }
-  catch (e) { inventory.value = []; await failed(e) }
-  finally { loading.value = false }
-}
-async function loadBindings() {
-  if (!device.value) return
-  loading.value = true; failure.value = ''
-  try { bindings.value = await read<Binding>('bindings', `devices/${device.value.id}/software-bindings`) }
-  catch (e) { bindings.value = []; await failed(e) }
-  finally { loading.value = false }
-}
-async function loadCandidates(refresh = false) {
-  if (refresh) reset('candidates')
-  candidateLoading.value = true; candidateFailure.value = ''
-  try { candidates.value = await read<Process | Software>('candidates', mode.value === 'bind' ? 'software' : 'processes', { name: candidateSearch.value }) }
-  catch (e) { candidates.value = []; candidateFailure.value = e instanceof ApiError ? e.message : '候选读取失败。' }
-  finally { candidateLoading.value = false }
-}
-async function page(kind: PageKind, forward: boolean) {
-  if (forward) { const next = nextCursors.value[kind]; if (!next) return; cursors.value[kind].push(next) }
-  else { if (cursors.value[kind].length <= 1) return; cursors.value[kind].pop() }
-  if (kind === 'processes') await loadProcesses(); else if (kind === 'devices') await loadDevices(); else if (kind === 'inventory') await loadInventory(); else if (kind === 'bindings') await loadBindings(); else await loadCandidates()
+async function page(kind:PageKind,forward:boolean) {
+  const stack=cursors.value[kind], cursor=nextCursors.value[kind]
+  if(forward && !cursor || !forward && stack.length<=1 || blocked.value) return
+  const proposed=forward ? [...stack,cursor!] : stack.slice(0,-1)
+  if(kind==='processes') await loadProcesses(false,proposed); else if(kind==='devices') await loadDevices(false,proposed); else if(kind==='inventory') await loadInventory(false,proposed); else if(kind==='bindings') await loadBindings(proposed); else await loadCandidates(false,proposed)
 }
 async function open(nextMode: Mode, binding?: Binding) {
   if (blocked.value || loading.value) return
-  if (nextMode === 'editProcess' && process.value) process.value = await request<Process>('/api/v1/manage/processes/' + process.value.id).catch(e => { void failed(e); return null })
-  if (nextMode === 'editDevice' && device.value) device.value = await request<Device>('/api/v1/manage/devices/' + device.value.id).catch(e => { void failed(e); return null })
   if (nextMode === 'editProcess' && !process.value || nextMode === 'editDevice' && !device.value) return
-  mode.value = nextMode; targetBinding.value = binding ?? null; code.value = ''; reason.value = ''; error.value = ''
+  draft.value={process:process.value ? {...process.value} : null,device:device.value ? {...device.value} : null,epoch:reads.epoch.value}; mode.value = nextMode; targetBinding.value = binding ? {...binding} : null; code.value = ''; reason.value = ''; error.value = ''
   name.value = nextMode === 'editProcess' ? process.value!.name : nextMode === 'editDevice' ? device.value!.name : ''
   targetId.value = isDeviceMode.value ? device.value?.processId ?? process.value?.id ?? '' : ''
   candidateSearch.value = ''; candidates.value = []; reset('candidates')
-  await nextTick(); dialog.value?.showModal()
-  if (isDeviceMode.value || nextMode === 'bind') await loadCandidates()
+  returnFocus=document.activeElement as HTMLElement|null; await nextTick(); dialog.value?.showModal()
+  if (isDeviceMode.value || nextMode === 'bind') await loadCandidates(true)
 }
-function close() { if (!blocked.value) { dialog.value?.close(); mode.value = null; error.value = '' } }
+function close() {if(!blocked.value) {reads.invalidate('candidates','draft'); dialog.value?.close(); mode.value=null; draft.value=null; error.value=''; returnFocus?.focus()}}
 async function refreshDraft() {
-  if (blocked.value) return
-  if (mode.value === 'editProcess' && process.value) { await selectProcess(process.value.id); if (process.value) name.value = process.value.name }
-  else if (mode.value === 'editDevice' && device.value) { const id = device.value.id; await selectDevice(id); if (device.value) { name.value = device.value.name; targetId.value = device.value.processId } }
-  else if (mode.value === 'revoke' && device.value) { reset('bindings'); await loadBindings(); targetBinding.value = bindings.value.find(b => b.softwareId === targetBinding.value?.softwareId) ?? null }
-  reason.value = ''; error.value = ''
+  const d=draft.value; if(blocked.value || !d || !draftValid.value) return
+  if(mode.value==='editProcess' && d.process) await reads.run('draft',true,signal=>get<Process>('processes/'+d.process!.id,signal),p=>{d.process=p; name.value=p.name; reason.value=''; error.value=''},failed)
+  else if(mode.value==='editDevice' && d.device) await reads.run('draft',true,signal=>get<Device>('devices/'+d.device!.id,signal),v=>{d.device=v; name.value=v.name; targetId.value=v.processId; reason.value=''; error.value=''},failed)
+  else {error.value='请关闭表单，重新读取关联后再操作。'}
 }
 async function save() {
+  const d=draft.value; if(!d || !uncertain.value && !draftValid.value) {error.value='人员或权限已变化，请关闭表单并重新核对。'; return}
   let path = '/api/v1/manage/', method = 'POST', body: object
   if (mode.value === 'createProcess') { path += 'processes'; body = { code: code.value, name: name.value } }
-  else if (mode.value === 'editProcess') { path += 'processes/' + process.value!.id; method = 'PATCH'; body = { name: name.value, expectedRevision: process.value!.revision, reason: reason.value } }
+  else if (mode.value === 'editProcess') { path += 'processes/' + d.process!.id; method = 'PATCH'; body = { name: name.value, expectedRevision: d.process!.revision, reason: reason.value } }
   else if (mode.value === 'createDevice') { path += 'devices'; body = { deviceNo: code.value, name: name.value, processId: targetId.value } }
-  else if (mode.value === 'editDevice') { path += 'devices/' + device.value!.id; method = 'PATCH'; body = { name: name.value, processId: targetId.value, expectedRevision: device.value!.revision, reason: reason.value } }
-  else if (mode.value === 'bind') { path += `devices/${device.value!.id}/software-bindings`; body = { softwareId: targetId.value, reason: reason.value } }
-  else { if (!targetBinding.value) { error.value = '关联已变化，请关闭表单并重新读取。'; return }; path += `devices/${device.value!.id}/software-bindings/${targetBinding.value.softwareId}`; method = 'DELETE'; body = { expectedRevision: targetBinding.value.revision, reason: reason.value } }
-  const currentMode = mode.value, currentProcess = process.value?.id, currentDevice = device.value?.id
-  const result = await mutation.perform<Process | Device | Binding>(path, method, body, session.current!.csrfToken)
+  else if (mode.value === 'editDevice') { path += 'devices/' + d.device!.id; method = 'PATCH'; body = { name: name.value, processId: targetId.value, expectedRevision: d.device!.revision, reason: reason.value } }
+  else if (mode.value === 'bind') { path += `devices/${d.device!.id}/software-bindings`; body = { softwareId: targetId.value, reason: reason.value } }
+  else { if (!targetBinding.value) { error.value = '关联已变化，请关闭表单并重新读取。'; return }; path += `devices/${d.device!.id}/software-bindings/${targetBinding.value.softwareId}`; method = 'DELETE'; body = { expectedRevision: targetBinding.value.revision, reason: reason.value } }
+  const currentMode = mode.value, currentProcess = d.process?.id, currentDevice = d.device?.id
+  const result = await mutation.perform<Process | Device | Binding>(path, method, body, session.current?.csrfToken ?? '')
   if (mutation.completed.value) {
     dialog.value?.close(); mode.value = null; notice.value = '台账操作已完成。'; await session.load()
     if (!session.canAssets) return
@@ -135,7 +118,7 @@ async function save() {
     else if (currentProcess) await selectProcess(currentProcess)
   } else if (!uncertain.value) await session.load()
 }
-onMounted(() => loadProcesses())
+onMounted(() => loadProcesses(true))
 </script>
 <template>
   <section class="workspace">
@@ -160,10 +143,10 @@ onMounted(() => loadProcesses())
         </template><div v-else class="empty">选择设备，查看对应软件。</div></section>
       </div>
     </template>
-    <dialog v-if="mode" ref="dialog" @cancel.prevent="close" aria-labelledby="site-dialog-title"><div class="dialog-heading"><h2 id="site-dialog-title">{{ titles[mode] }}</h2><button :disabled="blocked" @click="close" aria-label="关闭">×</button></div><form @submit.prevent="save"><fieldset :disabled="blocked">
+    <dialog v-if="mode" ref="dialog" @cancel.prevent="close" aria-labelledby="site-dialog-title"><div class="dialog-heading"><h2 id="site-dialog-title">{{ titles[mode] }}</h2><button :disabled="blocked" @click="close" aria-label="关闭">×</button></div><form @submit.prevent="save"><p v-if="draft" class="muted">操作对象：{{ draft.device?.name ?? draft.process?.name ?? site?.siteName }} · {{ draft.device?.id ?? draft.process?.id ?? site?.siteId }}</p><p v-if="!draftValid" class="error">人员或权限已变化，请关闭表单并重新核对。</p><fieldset :disabled="blocked || !draftValid">
       <label v-if="mode === 'createProcess' || mode === 'createDevice'">{{ mode === 'createProcess' ? '工序代码' : '设备编号' }}<input v-model="code" required maxlength="64" /></label><label v-if="mode !== 'bind' && mode !== 'revoke'">{{ isDeviceMode ? '设备名称' : '工序名称' }}<input v-model="name" required maxlength="128" /></label>
       <template v-if="isDeviceMode || mode === 'bind'"><div class="compact-filters"><label>候选名称<input v-model="candidateSearch" maxlength="128" /></label><button type="button" :disabled="candidateLoading" @click="loadCandidates(true)">查找候选</button></div><p v-if="candidateFailure" class="error" role="alert">{{ candidateFailure }}</p><label>{{ mode === 'bind' ? '选择关联软件' : '所属工序' }}<select v-model="targetId" :aria-label="mode === 'bind' ? '选择关联软件' : '所属工序'" required><option value="">请选择</option><option v-if="isDeviceMode && targetId && !candidates.some(c => c.id === targetId)" :value="targetId">{{ device?.processName ?? process?.name }}（当前工序）</option><option v-for="candidate in candidates" :key="candidate.id" :value="candidate.id" :disabled="mode === 'bind' && !session.can('instance.manage', candidate.id)">{{ candidate.name }} · {{ candidate.code }}{{ 'category' in candidate ? ' · ' + categoryName(candidate.category) : '' }}</option></select></label><div class="pager-inline"><button type="button" :disabled="candidateLoading || cursors.candidates.length <= 1" @click="page('candidates', false)">上一页候选</button><button type="button" :disabled="candidateLoading || !nextCursors.candidates" @click="page('candidates', true)">下一页候选</button></div><p v-if="mode === 'bind'" class="muted">需具备此软件的查看与映射维护权限。关联后，设备软件仍显示“尚未登记”。</p></template>
       <p v-if="mode === 'revoke'" class="muted">{{ device?.name }} · {{ targetBinding ? names[targetBinding.softwareId] ?? targetBinding.softwareId : '关联已变化' }}。已确认实例引用的关联不可撤销。</p><label v-if="mode !== 'createProcess' && mode !== 'createDevice'">操作原因<textarea v-model="reason" required maxlength="256" rows="2" /></label>
-      </fieldset><p v-if="error" class="error" role="alert">{{ error }}</p><OperationStatus :mutation="mutation" /><p v-if="uncertain" class="muted">结果待核实。原请求与操作键已保留，请手动核实。</p><div class="dialog-actions"><button v-if="error && !uncertain && mode !== 'createProcess' && mode !== 'createDevice' && mode !== 'bind'" type="button" @click="refreshDraft">加载最新详情</button><button v-if="!uncertain" type="button" :disabled="busy" @click="close">取消</button><button class="primary" :disabled="busy">{{ busy ? '正在提交…' : uncertain ? '核实原操作' : mode === 'revoke' ? '确认撤销' : '保存' }}</button></div></form></dialog>
+      </fieldset><p v-if="error" class="error" role="alert">{{ error }}</p><OperationStatus :mutation="mutation" /><p v-if="uncertain" class="muted">结果待核实。原请求与操作键已保留，请手动核实。</p><div class="dialog-actions"><button v-if="error && !uncertain && mode !== 'createProcess' && mode !== 'createDevice' && mode !== 'bind'" type="button" @click="refreshDraft">加载最新详情</button><button v-if="!uncertain" type="button" :disabled="busy" @click="close">取消</button><button class="primary" :disabled="busy || (!uncertain && !draftValid)">{{ busy ? '正在提交…' : uncertain ? '核实原操作' : mode === 'revoke' ? '确认撤销' : '保存' }}</button></div></form></dialog>
   </section>
 </template>

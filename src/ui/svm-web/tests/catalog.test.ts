@@ -55,7 +55,8 @@ describe('catalog interactions', () => {
     let created = false
     const fetch = vi.fn(async (path: string, input?: RequestInit) => {
       if (input?.method === 'POST') { created = true; return Response.json(product) }
-      if (path.includes('/session')) return Response.json(snapshot)
+      if (path.includes('/session')) return Response.json({...snapshot, permissions:[...snapshot.permissions,{softwareId:software,operation:'software.read'}]})
+      if (path.endsWith('/software/'+software)) return Response.json(product)
       const query = new URL(path, 'https://fixture.invalid').searchParams
       if (created && query.has('cursor')) return Response.json({ code: 'INVALID_REQUEST' }, { status: 400 })
       return Response.json({ items: created ? [product] : [], nextCursor: created ? null : 'old-permission-cursor' })

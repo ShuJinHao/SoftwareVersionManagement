@@ -101,7 +101,7 @@ public sealed record GetPackageAuthorityQuery(Guid WorkId) : IQuery<PackageWorkA
 
 [RequestPolicy("packages.AuthorizeDownloadCommand", ModuleOwner.Packages, RequestKind.Internal, RequestScope.InternalWork,
     TransactionMode.DatabaseAtomic, IdempotencyMode.None, ValidationMode.Required, ActorKind.Service, Permission = "package.execute")]
-public sealed record AuthorizeDownloadCommand(Guid PackageId, Guid RequestId, string NodeId, Guid WorkerGeneration, bool Head) : ICommand<DownloadAuthorization>;
+public sealed record AuthorizeDownloadCommand(Guid PackageId, Guid RequestId, string NodeId, Guid WorkerGeneration, bool Head, string? VerifiedNode = null) : ICommand<DownloadAuthorization>;
 
 [RequestPolicy("packages.RecordDownloadEndCommand", ModuleOwner.Packages, RequestKind.Internal, RequestScope.InternalWork,
     TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Service, Permission = "package.execute")]

@@ -165,3 +165,20 @@ eng/node deploy/linux/verify-ui.mjs --deployment artifacts/linux-demo/ui-demo --
 ~~~
 
 准备成功后，私有 ui-fixture.json 保存安全恢复所需的工作标识。尚未进入后续写入阶段可加 `--resume-browser`；冻结阶段尚未写入且前序三任务事实满足时可加 `--resume-freeze`；原键核实和两任务关闭已完成时可加 `--resume-viewport` 仅复验读取与布局。验证器检查对应检查点，拒绝跳过未知写入；不得重建未知业务或更换原操作键。200% 场景记录为等效 CSS 视口/DPR 验证，不能称为人工浏览器菜单缩放验收。
+
+
+## 包恢复与本批页面展示
+
+私有包配置 execution 增加可省略的 peerResponseSeconds（默认 15，1～28）和 downloadAuthorizationSeconds（默认 20，2～29），要求前者小于后者。prepare.mjs 同步生成节点和网关参数；授权预算必须低于网关 30 秒等待。前者用于复制建连/响应等待，字节流继续使用 limits.uploadIdleSeconds 的空闲预算，正常大包不设短总时长。复制、健康扫描和下载日志分别运行；首次就绪仍核对双副本，下载可以使用本次已经核验的一个健康副本。企业证书角色增强不在本批。
+
+本批使用干净完整 Release、新的 full 演示目录及明确虚构数据，运行：
+
+~~~sh
+eng/node deploy/linux/verify-audit.mjs --deployment artifacts/linux-demo/audit-correctness-20261018 --results artifacts/test-results/audit-correctness/linux-demo
+~~~
+
+验证器通过真实 HTTPS/API 准备台账、双副本、Formal 和 Update，再检查页面固定对象、分页、迟到响应和丢响应后的原键人工核实。浏览器故障注入与真实接口分别记录；安装上报来自测试夹具，不代表厂家安装。私有 audit-fixture.json 保存工作标识，已有夹具拒绝重复准备；全部操作已验证后可使用 --display-only 重新截图，只执行读页面。不要删除检查点后重做尚未核实的写操作。
+
+用户查看用的演示单独保留。operator.json 包含本机演示登录材料，不上传仓库；svm.sh stop 暂停容器，svm.sh down 删除该演示的容器/网络并保留绑定目录数据。故障测试资源与这个保留演示分开清理，不能把保留演示记录成资源残留为零。
+
+2026-10-18 实际展示使用 Release 5e8b272（dirty=false），宿主 macOS arm64、服务 Linux arm64，专属项目 svm-demo-35dbe7795749。七阶段局部走查完成；初次键盘断言将 Tab 进入浏览器界面误判，修正验证器后仅以 --display-only 重查页面和焦点，原写入不重跑。完整截图在 artifacts/test-results/audit-correctness/pages.md，测试与资源汇总在同目录 test-selection-results.json。七容器演示保留，故障测试用的一次性 PG/RabbitMQ 已删除；开发库容器保持停止。

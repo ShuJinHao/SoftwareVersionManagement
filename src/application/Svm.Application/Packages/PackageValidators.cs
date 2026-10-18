@@ -11,7 +11,7 @@ internal abstract class PackageValidator<T> : AbstractValidator<T>
     protected static bool Size(int x) => x is >=1 and <=200;
     protected static bool List(ReleaseListInput? x) => x is not null && x.SoftwareId!=Guid.Empty && Size(x.PageSize) && x.State is null or "Staging" or "Test" or "Formal" or "Disabled" && x.Channel is null or "Test" or "Formal";
     protected static bool Lease(PackageLease? x) => x is not null && x.Work is not null && x.Work.WorkId!=Guid.Empty && x.LeaseToken!=Guid.Empty && x.LeaseGeneration>0;
-    protected static bool Facts(IReadOnlyList<ReplicaFact>? x) => x is {Count:2} && x.All(f=>f is not null && Text(f.NodeId,64) && f.State is "Healthy" or "Missing" or "Suspect");
+    protected static bool Facts(IReadOnlyList<ReplicaFact>? x) => x is {Count:>=1 and <=2} && x.All(f=>f is not null && Text(f.NodeId,64) && f.State is "Healthy" or "Missing" or "Suspect") && x.Select(f=>f.NodeId).Distinct(StringComparer.Ordinal).Count()==x.Count;
 }
 
 internal sealed class CreateReleaseCommandValidator : PackageValidator<CreateReleaseCommand>
@@ -117,7 +117,7 @@ internal sealed class RenewPackageWorkCommandValidator : PackageValidator<RenewP
 
 internal sealed class CompletePackageWorkCommandValidator : PackageValidator<CompletePackageWorkCommand>
 {
-    public CompletePackageWorkCommandValidator() => RuleFor(x=>x).Must(x=>Lease(x.Lease) && Facts(x.Facts)).WithErrorCode("VALIDATION_FAILED");
+    public CompletePackageWorkCommandValidator() => RuleFor(x=>x).Must(x=>Lease(x.Lease) && Facts(x.Facts) && x.Facts.Count==2).WithErrorCode("VALIDATION_FAILED");
 }
 
 internal sealed class FailPackageWorkCommandValidator : PackageValidator<FailPackageWorkCommand>
@@ -137,7 +137,7 @@ internal sealed class GetPackageAuthorityQueryValidator : PackageValidator<GetPa
 
 internal sealed class AuthorizeDownloadCommandValidator : PackageValidator<AuthorizeDownloadCommand>
 {
-    public AuthorizeDownloadCommandValidator() => RuleFor(x=>x).Must(x=>x.PackageId!=Guid.Empty && x.RequestId!=Guid.Empty && x.WorkerGeneration!=Guid.Empty && Text(x.NodeId,64)).WithErrorCode("VALIDATION_FAILED");
+    public AuthorizeDownloadCommandValidator() => RuleFor(x=>x).Must(x=>x.PackageId!=Guid.Empty && x.RequestId!=Guid.Empty && x.WorkerGeneration!=Guid.Empty && Text(x.NodeId,64) && (x.VerifiedNode is null ? x.Head : Text(x.VerifiedNode,64))).WithErrorCode("VALIDATION_FAILED");
 }
 
 internal sealed class RecordDownloadEndCommandValidator : PackageValidator<RecordDownloadEndCommand>

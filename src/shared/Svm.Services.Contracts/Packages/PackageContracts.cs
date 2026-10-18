@@ -104,7 +104,7 @@ public interface IPackages
     Task<PackageWorkAuthority?> CheckReplicasAsync(Guid packageId, IReadOnlyList<ReplicaFact> facts, CancellationToken token);
     Task<IReadOnlyList<Guid>> ReadyAsync(int take, Guid? after, CancellationToken token);
     Task<DownloadAuthorization> AuthorizeDownloadAsync(Guid packageId, Guid requestId, string nodeId,
-        Guid workerGeneration, bool head, Guid subjectId, string actorKind, string? employeeNo, CancellationToken token);
+        Guid workerGeneration, bool head, Guid subjectId, string actorKind, string? employeeNo, CancellationToken token, string? verifiedNode = null);
     Task<bool> EndDownloadAsync(DownloadEnd end, CancellationToken token);
     Task<DownloadEnd?> FindDownloadEndAsync(Guid id, string nodeId, Guid workerGeneration, CancellationToken token);
 }
@@ -157,6 +157,7 @@ public interface IPackageFiles
     Task<IReadOnlyList<ReplicaFact>> PrepareReplicasAsync(PackageLease lease,
         Func<CancellationToken, Task> renew, CancellationToken token);
     Task<IReadOnlyList<ReplicaFact>> InspectAsync(Guid packageId, long size, string sha256, CancellationToken token);
+    Task<ReplicaFact> InspectNodeAsync(string nodeId, Guid packageId, long size, string sha256, CancellationToken token);
     Task<Stream> OpenReplicaAsync(Guid packageId, CancellationToken token);
     Task ReceiveReplicaAsync(PackageWorkAuthority work, Stream content, Func<CancellationToken, Task> verifyCurrent, CancellationToken token);
     Task<Stream> OpenSourceAsync(PackageWorkAuthority work, CancellationToken token);
@@ -170,12 +171,13 @@ public interface ICommandScopeExecutor
     Task<T> QueryAsync<T>(IQuery<T> query, CancellationToken token);
 }
 public sealed record PackageExecutionOptions(int LeaseSeconds = 60, int PollSeconds = 5,
-    int ReplicaCheckSeconds = 60, int WorkBatchSize = 20)
+    int ReplicaCheckSeconds = 60, int WorkBatchSize = 20, int PeerResponseSeconds = 15, int DownloadAuthorizationSeconds = 20)
 {
     public void Validate()
     {
         if (LeaseSeconds is < 15 or > 600 || PollSeconds is < 1 or > 60 || ReplicaCheckSeconds is < 5 or > 3600 ||
-            WorkBatchSize is < 1 or > 100) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+            WorkBatchSize is < 1 or > 100 || PeerResponseSeconds is < 1 or > 28 ||
+            DownloadAuthorizationSeconds is < 2 or > 29 || PeerResponseSeconds >= DownloadAuthorizationSeconds) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
     }
 }
 public sealed record PackageLimits(long MaxPackageBytes, int UploadIdleSeconds)

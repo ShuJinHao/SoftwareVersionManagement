@@ -78,6 +78,7 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
         public Task<(long Size, string Sha256)> ReceiveAsync(UploadReceipt r, Stream s, long? l, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();
         public Task<IReadOnlyList<ReplicaFact>> PrepareReplicasAsync(PackageLease l, Func<CancellationToken, Task> r, CancellationToken t) => throw new NotSupportedException();
         public Task<IReadOnlyList<ReplicaFact>> InspectAsync(Guid id, long s, string h, CancellationToken t) => throw new NotSupportedException();
+        public Task<ReplicaFact> InspectNodeAsync(string node, Guid id, long s, string h, CancellationToken t) => throw new NotSupportedException();
         public Task<Stream> OpenReplicaAsync(Guid id, CancellationToken t) => throw new NotSupportedException();
         public Task<ReplicaFact> InspectLocalAsync(Guid id, long s, string h, CancellationToken t) => throw new NotSupportedException();
         public Task ReceiveReplicaAsync(PackageWorkAuthority w, Stream s, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();
