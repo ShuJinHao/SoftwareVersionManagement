@@ -24,7 +24,7 @@ input:not([type=checkbox]), select, textarea { display: block; width: 100%; marg
 input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 3px solid #c6d9ff; outline-offset: 2px; border-color: #4380e0; }
 label { display: block; margin-bottom: 20px; font-size: 14px; font-weight: 500; }
 input[type=checkbox] { accent-color: #245dc9; width: 17px; height: 17px; margin-right: 10px; }
-fieldset { margin: 0; padding: 0; border: 0; }
+fieldset { min-width: 0; min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 h1 { font-size: 28px; margin: 7px 0 12px; font-weight: 650; letter-spacing: -.5px; }
 h2 { font-size: 21px; margin: 10px 0; font-weight: 600; }
 h3 { font-size: 14px; font-weight: 600; margin: 24px 0 12px; }
@@ -48,7 +48,7 @@ main { padding: 36px 5% 70px; }
 .error { padding: 12px 14px; background: #fff2f0; border: 1px solid #f3c9c4; color: #aa3931; border-radius: 8px; font-size: 14px; }
 .success { padding: 12px 14px; background: #edf8f2; border: 1px solid #cee8da; color: #247451; border-radius: 8px; font-size: 14px; }
 .state-card { margin: 70px auto; padding: 30px; max-width: 500px; text-align: center; }
-.workspace { max-width: 1400px; margin: auto; }
+.workspace { max-width: 1400px; min-width: 0; margin: auto; }
 .page-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
 .page-heading p { margin: 0; }
 .account-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; align-items: start; gap: 24px; }
@@ -56,7 +56,8 @@ main { padding: 36px 5% 70px; }
 .filters { display: flex; align-items: flex-end; gap: 14px; padding: 22px 24px; border-bottom: 1px solid #eef1f5; }
 .filters label { margin: 0; flex: 1; }
 .filters select { min-width: 110px; }
-.table-scroll { overflow-x: auto; }
+.table-scroll, .table-wrap { max-width: 100%; min-width: 0; overflow: auto; overscroll-behavior-inline: contain; }
+.table-scroll:focus-visible, .table-wrap:focus-visible { outline: 3px solid #c6d9ff; outline-offset: -3px; }
 table { border-collapse: collapse; width: 100%; white-space: nowrap; font-size: 14px; }
 th { padding: 14px 22px; text-align: left; font-size: 12px; color: #66798f; background: #fbfcfe; font-weight: 500; }
 td { padding: 18px 22px; border-top: 1px solid #eef1f5; }
@@ -76,13 +77,20 @@ dd { margin: 0; }
 .permission-list li { padding: 9px 0; border-bottom: 1px solid #eef1f5; overflow-wrap: anywhere; }
 .detail-actions { display: grid; gap: 10px; margin-top: 26px; }
 .detail-actions .text-button { text-align: center; margin-top: 4px; }
-dialog { max-width: 560px; width: calc(100vw - 40px); max-height: 85vh; border: 1px solid #dbe4ef; border-radius: 14px; padding: 30px; color: #172c47; }
+dialog { max-width: 560px; width: calc(100vw - 40px); max-height: 85vh; overflow: auto; border: 1px solid #dbe4ef; border-radius: 14px; padding: 30px; color: #172c47; }
 dialog::backdrop { background: #11243e66; backdrop-filter: blur(2px); }
 dialog { margin: auto; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
 .dialog-heading h2 { margin: 0; }
 .dialog-heading button { border: 0; font-size: 20px; padding: 0 6px; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 14px 20px; }
+.form-grid label { min-width: 0; margin-bottom: 8px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 16px 0; }
+.dialog-form { min-width: 0; }
+.dialog-form legend { margin-bottom: 16px; }
+.operation-status { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0; font-size: 12px; color: #516883; overflow-wrap: anywhere; }
+.operation-status code { user-select: all; white-space: normal; }
 .check { display: flex; align-items: center; }
 .grant-options { padding: 10px 0; }
 .breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0 0 24px; font-size: 14px; color: #516883; }

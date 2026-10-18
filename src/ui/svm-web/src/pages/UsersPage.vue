@@ -3,7 +3,9 @@ import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from '
 import { onBeforeRouteLeave } from 'vue-router'
 import { ApiError, request, type User, type UserPage, type Permission } from '../api'
 import { useSession } from '../session'
-import { pendingWriteKey, useMutation } from '../mutation'
+import OperationStatus from '../components/OperationStatus.vue'
+import { pendingWriteKey } from '../mutation'
+import { useProtectedMutation } from '../protectedMutation'
 import SoftwareGrantEditor from '../components/SoftwareGrantEditor.vue'
 const softwareGrants = ref<Permission[]>([])
 const session = useSession()
@@ -14,7 +16,7 @@ const mode = ref<'create' | 'edit' | 'permissions' | 'reset' | null>(null), dial
 const employeeNo = ref(''), displayName = ref(''), temporaryPassword = ref(''), isEnabled = ref(true), reason = ref(''), grants = ref<string[]>([])
 const labels: Record<string, string> = { 'identity.manage': '管理人员与身份', 'software.create': '登记软件', 'asset.read': '查看现场台账', 'asset.manage': '维护现场台账' }
 const title = computed(() => ({ create: '创建人员账号', edit: '修改账号资料', permissions: '维护人员授权', reset: '重置账号密码' }[mode.value ?? 'create']))
-const mutation = useMutation(), { perform, busy, uncertain, error } = mutation
+const mutation = useProtectedMutation(), { perform, busy, uncertain, error } = mutation
 const pendingWrite = inject(pendingWriteKey, ref(false))
 watch([busy, uncertain], () => { pendingWrite.value = busy.value || uncertain.value }, { flush: 'sync' })
 async function load() {
@@ -113,7 +115,7 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); pe
         <div v-if="loading" class="empty" role="status">正在读取账号…</div>
         <div v-else-if="readError && !users.length" class="empty"><p>账号列表暂不可用</p><button @click="load">重试读取</button></div>
         <div v-else-if="!users.length" class="empty">没有符合条件的账号。</div>
-        <div v-else class="table-scroll"><table><thead><tr><th>人员</th><th>工号</th><th>账号状态</th><th>密码状态</th></tr></thead><tbody>
+        <div v-else class="table-scroll" tabindex="0" role="region" aria-label="可横向滚动的数据表格"><table><thead><tr><th>人员</th><th>工号</th><th>账号状态</th><th>密码状态</th></tr></thead><tbody>
           <tr v-for="user in users" :key="user.id" :class="{ selected: selected?.id === user.id }"><td><button class="text-button" :disabled="detailLoading" @click="select(user.id)">{{ user.displayName }}</button></td><td class="mono">{{ user.employeeNo }}</td><td><span :class="['badge', user.isEnabled ? 'enabled' : 'disabled']">{{ user.isEnabled ? '启用' : '停用' }}</span></td><td>{{ user.mustChangePassword ? '待首次改密' : '已设置' }}</td></tr>
         </tbody></table></div>
         <footer class="pagination"><span>本页 {{ users.length }} 人<span v-if="readAt" class="read-time"> · 读取于 {{ new Date(readAt).toLocaleTimeString() }}</span></span><div><button :disabled="loading || cursors.length <= 1" @click="previous">上一页</button><button :disabled="loading || !nextCursor" @click="next">下一页</button></div></footer>
@@ -141,7 +143,7 @@ onUnmounted(() => { window.removeEventListener('beforeunload', beforeUnload); pe
           <label v-if="mode !== 'create'">操作原因<textarea v-model="reason" required maxlength="256" rows="3"></textarea></label>
         </fieldset>
         <p v-if="error" class="error" role="alert">{{ error }}</p>
-        <p v-if="uncertain" class="muted">原请求已保留，结果仍待核实。请保持此页，手动核实原操作。</p>
+        <OperationStatus :mutation="mutation" /><p v-if="uncertain" class="muted">原请求已保留，结果仍待核实。请保持此页，手动核实原操作。</p>
         <div class="dialog-actions"><button v-if="!uncertain" type="button" :disabled="busy" @click="close">取消</button><button v-if="error && !uncertain && selected && mode !== 'create'" type="button" @click="refreshDraft">加载最新详情</button><button class="primary" type="submit" :disabled="busy">{{ busy ? '正在提交…' : uncertain ? '核实原操作' : '保存' }}</button></div>
       </form>
     </dialog>
