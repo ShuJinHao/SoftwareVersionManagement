@@ -1,15 +1,17 @@
 // Deliberately isolated product prototype. No API, storage, credentials or production imports.
 export const roles = {
-  admin: { name: '平台管理员', scope: '全部演示工序', actions: ['asset.create', 'software.add', 'source.manage', 'plc.upload', 'plc.publish', 'deployment.create', 'deployment.control', 'access.manage', 'identity.manage'] },
-  engineer: { name: '程序工程师', scope: '装配工序 · 全部演示设备', actions: ['software.add', 'plc.upload', 'plc.publish', 'access.manage'] },
-  operator: { name: '现场运维', scope: '装配工序 · 演示装配设备 01', actions: ['deployment.create', 'deployment.control'] },
+  admin: { name: '平台管理员', scope: '全部演示工序', actions: ['asset.create', 'software.add', 'source.manage', 'plc.upload', 'plc.publish', 'plc.confirm', 'deployment.create', 'deployment.control', 'access.manage', 'identity.manage'] },
+  engineer: { name: '程序工程师', scope: '装配工序 · 全部演示设备', actions: ['software.add', 'plc.upload', 'plc.publish', 'plc.confirm', 'access.manage'] },
+  operator: { name: '现场运维', scope: '装配工序 · 演示装配设备 01', actions: ['plc.confirm', 'deployment.create', 'deployment.control'] },
   viewer: { name: '只读人员', scope: '检测工序 · 全部演示设备', actions: [] },
 };
 
 export function initialState() {
   const state = {
     role: 'admin', page: 'workbench', view: 'process', processId: 'assembly', deviceId: null, productId: null,
-    previousScope: null, selectedTargets: [], expanded: [], query: '', category: 'all', listPage: 1,
+    previousScope: null, hardwareId: null, selectedTargets: [], expanded: [], query: '', category: 'all', listPage: 1,
+    archiveDownloads: [],
+    connection: { id: 'gitlab-demo', name: '厂内 GitLab', address: 'https://gitlab.example.invalid', enabled: true },
     sequence: 5, catalog: { query: '', kind: 'all', page: 1 },
     processes: [{ id: 'assembly', name: '装配工序' }, { id: 'inspection', name: '检测工序' }],
     devices: [
@@ -94,11 +96,11 @@ export function rowsForDevice(state, deviceId) {
   return [
     ...state.installations.filter(x => x.deviceId === deviceId).map(x => {
       const product = state.products.find(p => p.id === x.productId), host = device.hosts.find(h => h.id === x.hostId);
-      return { ...x, name: product.name, kind: product.kind, product, host: host?.name ?? '待补充归属', ip: host?.ip ?? '—', latest: product.version, source: 'GitLab', update: !!product.version && product.version !== x.version };
+      return { ...x, hardwareId: x.hostId, bound: !!host, name: product.name, kind: product.kind, product, host: host?.name ?? '待补充归属', ip: host?.ip ?? '—', latest: product.version, source: 'GitLab', update: !!product.version && product.version !== x.version };
     }),
     ...state.archives.filter(x => x.deviceId === deviceId).map(x => {
       const plc = device.controllers.find(p => p.id === x.controllerId), product = state.products.find(p => p.id === x.productId);
-      return { ...x, name: product.name, product, kind: 'PLC', host: plc?.name ?? '待补充归属', ip: plc?.ip ?? '—', version: x.confirmed, latest: latestVersion(product), source: '程序归档', report: '人工确认', running: '未采集', update: false };
+      return { ...x, hardwareId: x.controllerId, bound: !!plc, name: product.name, product, kind: 'PLC', host: plc?.name ?? '待补充归属', ip: plc?.ip ?? '—', version: x.confirmed, latest: latestVersion(product), source: '程序归档', report: '人工确认', running: '未采集', update: false };
     }),
   ];
 }
@@ -109,10 +111,73 @@ export function createDevice(state, { processId, name, assetNumber = '' }) {
   state.devices.push(device); selectScope(state, { deviceId: device.id });
   return device;
 }
+export function deviceHardware(device) {
+  return [...device.hosts.map(h => ({ ...h, type: 'IPC' })), ...device.controllers.map(h => ({ ...h, type: 'PLC' }))];
+}
+export function addHardware(state, { deviceId, type, name, ip = '' }) {
+  const d = visibleDevices(state).find(d => d.id === deviceId);
+  if (!d || !can(state, 'software.add', deviceId)) throw new Error('无权维护此设备');
+  if (!['IPC', 'PLC'].includes(type) || !name.trim()) throw new Error('请选择硬件类型并填写名称');
+  const hardware = { id: `prototype-hardware-${state.sequence++}`, name: name.trim(), ip: ip.trim() };
+  (type === 'PLC' ? d.controllers : d.hosts).push(hardware);
+  return hardware;
+}
+export function bindSoftware(state, { deviceId, hardwareId, kind, productId, name = '', role }) {
+  if (state.role !== role) throw new Error('人员已变化，请重新选择');
+  const d = visibleDevices(state).find(d => d.id === deviceId);
+  if (!d || !can(state, 'software.add', deviceId)) throw new Error('无权维护此设备');
+  if (!Object.hasOwn(kindNames, kind)) throw new Error('软件类型无效');
+  const plc = kind === 'PLC', hardware = (plc ? d.controllers : d.hosts).find(h => h.id === hardwareId);
+  if (!hardware) throw new Error('必须绑定当前设备下类型匹配的具体硬件');
+  let p = catalogProducts(state).find(p => p.id === productId && p.kind === kind);
+  if (productId && !p) throw new Error('所选软件不存在、类型不匹配或无权使用');
+  if (!p && !name.trim()) throw new Error('请填写软件或程序名称');
+  const records = plc ? state.archives : state.installations, field = plc ? 'controllerId' : 'hostId';
+  if (p && records.some(r => r.deviceId === deviceId && r[field] === hardwareId && r.productId === p.id)) throw new Error('该硬件已关联此软件');
+  const n = state.sequence++;
+  if (!p) {
+    p = { id: `product-new-${n}`, name: name.trim(), kind, source: plc ? '程序归档' : 'GitLab', versions: [], project: '', package: '', state: 'unbound', version: null, tag: null, revision: 1 };
+    state.products.push(p);
+  }
+  const record = plc
+    ? { id: `archive-new-${n}`, deviceId, controllerId: hardwareId, productId: p.id, confirmed: null, revision: 0 }
+    : { id: `installation-new-${n}`, deviceId, hostId: hardwareId, productId: p.id, version: null, running: '—', report: '尚未接入', reported: '—', elapsed: '—', access: false };
+  records.push(record);
+  return record;
+}
+function boundArchive(state, archiveId) {
+  const archive = state.archives.find(a => a.id === archiveId);
+  const d = visibleDevices(state).find(d => d.id === archive?.deviceId);
+  if (!d?.controllers.some(c => c.id === archive.controllerId)) throw new Error('PLC 归属无效或无权查看');
+  return archive;
+}
+export function downloadArchive(state, { archiveId, version, role }) {
+  if (state.role !== role) throw new Error('人员已变化');
+  const archive = boundArchive(state, archiveId);
+  const record = state.products.find(p => p.id === archive.productId)?.versions.find(v => v.version === version);
+  if (!record) throw new Error('归档版本不存在');
+  const download = { id: `download-${state.sequence++}`, archiveId, controllerId: archive.controllerId, version, file: record.file, time: new Date().toISOString() };
+  state.archiveDownloads.push(download);
+  return download;
+}
+export function confirmPlcUsage(state, { archiveId, controllerId, version, revision, role, usedAt, evidence, confirmed }) {
+  if (state.role !== role) throw new Error('人员已变化');
+  const archive = boundArchive(state, archiveId);
+  if (!can(state, 'plc.confirm', archive.deviceId)) throw new Error('无现场使用登记权限');
+  if (controllerId !== archive.controllerId || revision !== (archive.revision ?? 0)) throw new Error('控制器或记录已变化，请重新核实');
+  const record = state.products.find(p => p.id === archive.productId)?.versions.find(v => v.version === version);
+  if (!record) throw new Error('归档版本不存在');
+  if (!confirmed || !evidence.trim() || !Number.isFinite(Date.parse(usedAt))) throw new Error('请填写现场时间、说明并确认已完成现场操作');
+  const entry = { version, previousVersion: archive.confirmed ?? null, controllerId, usedAt, evidence: evidence.trim(), operator: `演示人员（${roles[state.role].name}）`, recordedAt: new Date().toISOString() };
+  archive.history = [...(archive.history ?? []), entry];
+  archive.confirmed = version; archive.confirmedBy = entry.operator; archive.confirmedAt = usedAt; archive.revision = revision + 1;
+  return entry;
+}
 export function publishArchive(state, { archiveId, version, conclusion, verification, confirmed }) {
   const archive = state.archives.find(a => a.id === archiveId);
   const program = state.products.find(p => p.id === archive?.productId);
   if (!archive || !can(state, 'plc.publish', archive.deviceId) || !canManageProgram(state, program.id, 'plc.publish')) throw new Error('无权发布该 PLC 程序');
+  boundArchive(state, archiveId);
   const record = program.versions.find(v => v.version === version);
   if (!record || record.state !== 'Test') throw new Error('测试版本已变化，请重新核实');
   if (!confirmed || !conclusion.trim() || !verification.trim()) throw new Error('请填写现场验证记录、结论并确认对象');
@@ -124,6 +189,7 @@ export function importRelease(state, productId) {
   if (!can(state, 'source.manage')) throw new Error('无权管理发布来源');
   const product = state.products.find(p => p.id === productId);
   if (!product?.project) throw new Error('请先关联 GitLab 项目');
+  if (!state.connection.enabled) throw new Error('演示连接已停用，已有版本仍保留');
   product.state = 'ready'; product.version = product.kind === 'Vision' ? '2.1.1' : '1.3.1'; product.tag = 'v' + product.version; product.time = '本次原型操作'; product.revision++;
   return product;
 }
@@ -159,6 +225,7 @@ export function canManageProgram(state, productId, action) {
 export function updateEligibility(state, target, version) {
   if (target.kind === 'PLC') return 'PLC 使用程序归档，不下发更新';
   if (!can(state, 'deployment.create', target.deviceId)) return '无此机台更新权限';
+  if (!target.bound) return '工控机归属待补充';
   if (!target.access || !target.version) return '尚未接入或版本待核实';
   if (!version) return '尚无正式版本';
   if (state.tasks.some(t => t.installationId === target.id && t.state !== '已完成')) return '已有进行中任务';
@@ -166,14 +233,15 @@ export function updateEligibility(state, target, version) {
   const direction = a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
   return direction === 0 ? '已是此版本' : direction < 0 ? '需要回退，当前未开放' : '';
 }
-export function createUpdates(state, { productId, version, installationIds, reason, role }) {
+export function createUpdates(state, { productId, version, installationIds, reason, role, bindings }) {
   if (state.role !== role) throw new Error('人员已变化，请重新选择目标');
   const product = state.products.find(p => p.id === productId);
   if (!product || product.kind === 'PLC' || latestVersion(product) !== version) throw new Error('目标正式版本已变化，请重新核实');
   const targets = relatedTargets(state, productId), ids = [...new Set(installationIds)];
   if (!ids.length || !reason.trim()) throw new Error('请选择机台并填写更新原因');
   const chosen = ids.map(id => { const target = targets.find(t => t.id === id); if (!target || updateEligibility(state, target, version)) throw new Error('目标不可更新，请重新核实'); return target; });
-  const tasks = chosen.map(t => ({ id: `prototype-task-${state.sequence++}`, installationId: t.id, deviceId: t.deviceId, host: t.host, productId, version, reason: reason.trim(), state: '等待领取', progress: '0 / 1', time: '本次原型操作' }));
+  if (bindings && chosen.some(t => !bindings.some(b => b.id === t.id && b.deviceId === t.deviceId && b.hostId === t.hostId))) throw new Error('安装硬件归属已变化，请重新核实');
+  const tasks = chosen.map(t => ({ id: `prototype-task-${state.sequence++}`, installationId: t.id, deviceId: t.deviceId, hostId: t.hostId, host: t.host, productId, version, reason: reason.trim(), state: '等待领取', progress: '0 / 1', time: '本次原型操作' }));
   state.tasks.unshift(...tasks);
   return tasks;
 }
@@ -182,18 +250,21 @@ export function createUpdates(state, { productId, version, installationIds, reas
 // Software focus always covers all authorized related devices, never a hidden old device filter.
 export function selectScope(state, scope) {
   const old = { processId: state.processId, deviceId: state.deviceId };
+  if (state.hardwareId) old.hardwareId = state.hardwareId;
   if (scope.productId) {
     if (!catalogProducts(state).some(p => p.id === scope.productId)) throw new Error('无权查看此软件');
     if (state.view !== 'software') state.previousScope = old;
-    state.view = 'software'; state.productId = scope.productId; state.processId = null; state.deviceId = null;
+    state.view = 'software'; state.productId = scope.productId; state.processId = null; state.deviceId = null; state.hardwareId = null;
   } else if (scope.deviceId) {
     const d = visibleDevices(state).find(d => d.id === scope.deviceId);
     if (!d) throw new Error('无权查看此设备');
+    if (scope.hardwareId && !deviceHardware(d).some(h => h.id === scope.hardwareId)) throw new Error('硬件不属于此设备');
     state.view = 'device'; state.deviceId = d.id; state.processId = d.processId; state.productId = null; state.previousScope = null;
+    state.hardwareId = scope.hardwareId ?? null;
   } else {
     const id = scope.processId ?? null;
     if (id && !state.processes.some(p => p.id === id && (state.role === 'admin' || visibleDevices(state).some(d => d.processId === id)))) throw new Error('无权查看此工序');
-    state.view = 'process'; state.processId = id; state.deviceId = null; state.productId = null; state.previousScope = null;
+    state.view = 'process'; state.processId = id; state.deviceId = null; state.productId = null; state.previousScope = null; state.hardwareId = null;
   }
   state.page = 'workbench'; state.selectedTargets = []; state.expanded = []; state.query = ''; state.category = 'all'; state.listPage = 1;
 }
@@ -202,7 +273,7 @@ export function workspaceDevices(state) {
   return visibleDevices(state).filter(d => state.view === 'device' ? d.id === state.deviceId : !state.processId || d.processId === state.processId);
 }
 export function workspaceRows(state) {
-  return workspaceDevices(state).flatMap(d => rowsForDevice(state, d.id).filter(r => state.view !== 'software' || r.productId === state.productId).map(r => ({ ...r, device: d })));
+  return workspaceDevices(state).flatMap(d => rowsForDevice(state, d.id).filter(r => (state.view !== 'software' || r.productId === state.productId) && (!state.hardwareId || r.hardwareId === state.hardwareId)).map(r => ({ ...r, device: d })));
 }
 export function workspaceTasks(state) {
   const ids = new Set(workspaceRows(state).map(r => r.id));

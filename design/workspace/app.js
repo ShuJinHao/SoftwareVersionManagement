@@ -1,4 +1,4 @@
-import { initialState, roles, kindNames, sourceStates, visibleDevices, can, selectRole, rowsForDevice, createDevice, publishArchive, importRelease, latestVersion, relatedTargets, relatedDevices, catalogProducts, catalogPage, canManageProgram, updateEligibility, createUpdates, selectScope, workspaceDevices, workspaceRows, workspaceTasks, selectTarget } from './model.js';
+import { initialState, roles, kindNames, sourceStates, visibleDevices, can, selectRole, rowsForDevice, createDevice, publishArchive, importRelease, latestVersion, relatedTargets, relatedDevices, catalogProducts, catalogPage, canManageProgram, updateEligibility, createUpdates, selectScope, workspaceDevices, workspaceRows, workspaceTasks, selectTarget, deviceHardware, addHardware, bindSoftware, downloadArchive, confirmPlcUsage } from './model.js';
 
 let state = initialState(), dialogReturnFocus = null, selectedRole = 'engineer', toastTimer, catalogInput = { query: '', kind: 'all' };
 const root = document.querySelector('#app'), overlay = document.querySelector('#overlay');
@@ -33,6 +33,7 @@ const processName = id => state.processes.find(p => p.id === id)?.name ?? '未�
 const kindIcon = kind => icon(kind === 'PLC' ? 'cpu' : kind === 'Vision' ? 'eye' : 'monitor');
 const pageNames = { workbench: '软件工作台', settings: '系统管理' };
 const fact = (name, value) => `<div class="fact-line"><span>${e(name)}</span><strong>${e(value)}</strong></div>`;
+const displayTime = value => /^\d{4}-\d{2}-\d{2}T/.test(value ?? '') ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) + '（厂区时间）' : value;
 function toast(message) { clearTimeout(toastTimer); document.querySelector('#notice').textContent = message; toastTimer = setTimeout(() => document.querySelector('#notice').textContent = '', 6500); }
 function roleOptions(value) { return Object.entries(roles).map(([id, role]) => `<option value="${id}" ${id === value ? 'selected' : ''}>${role.name}</option>`).join(''); }
 function empty(title, description, action = '') { return `<div class="empty">${icon('empty')}<h3>${e(title)}</h3><p>${e(description)}</p>${action}</div>`; }
@@ -49,14 +50,18 @@ function render() {
 }
 function pageHeading(title, subtitle, actions = '') { return `<div class="page-heading"><div><div class="eyebrow">${state.page === 'workbench' ? 'SOFTWARE WORKSPACE' : 'SYSTEM MANAGEMENT'}</div><h1>${title}</h1><p>${subtitle}</p></div><div class="heading-actions">${actions}</div></div>`; }
 function focusScope(scope) { closeDialog(); selectScope(state,scope); render(); }
+function hardwareTree(d) {
+  if(state.deviceId!==d.id)return '';
+  return `<div class="hardware-tree">${deviceHardware(d).map(h=>button(h.name,'hardware-scope',d.id+'|'+h.id,'hardware-choice '+(state.hardwareId===h.id?'active':''),h.type==='PLC'?'cpu':'monitor')).join('')}</div>`;
+}
 function workbenchView() {
   const devices = visibleDevices(state), processes = state.processes.filter(p => devices.some(d => d.processId === p.id) || state.role === 'admin');
-  const selected = state.view==='device' ? 'device|'+state.deviceId : state.view==='process' ? 'process|'+(state.processId??'') : '';
+  const selected = state.view==='device' ? (state.hardwareId?'hardware|'+state.deviceId+'|'+state.hardwareId:'device|'+state.deviceId) : state.view==='process' ? 'process|'+(state.processId??'') : '';
   return `${pageHeading('软件工作台','按工序、设备或软件，找到现场。',button('查找软件','find-software','','primary','search'))}
-  <div class="mobile-device-picker"><label>工序 / 设备<select id="scope-picker"><option value="" ${!selected?'selected':''} disabled>当前正在查看软件的全部关联机台</option><option value="process|" ${selected==='process|'?'selected':''}>全部工序</option>${processes.map(p=>`<option value="process|${p.id}" ${selected==='process|'+p.id?'selected':''}>${e(p.name)}</option>${devices.filter(d=>d.processId===p.id).map(d=>`<option value="device|${d.id}" ${selected==='device|'+d.id?'selected':''}>　${e(d.name)}</option>`).join('')}`).join('')}</select></label></div>
+  <div class="mobile-device-picker"><label>工序 / 设备 / 硬件<select id="scope-picker"><option value="" ${!selected?'selected':''} disabled>当前正在查看软件的全部关联机台</option><option value="process|" ${selected==='process|'?'selected':''}>全部工序</option>${processes.map(p=>`<option value="process|${p.id}" ${selected==='process|'+p.id?'selected':''}>${e(p.name)}</option>${devices.filter(d=>d.processId===p.id).map(d=>`<option value="device|${d.id}" ${selected==='device|'+d.id?'selected':''}>　${e(d.name)}</option>${state.deviceId===d.id?deviceHardware(d).map(h=>`<option value="hardware|${d.id}|${h.id}" ${state.hardwareId===h.id?'selected':''}>　　${e(h.name)}</option>`).join(''):''}`).join('')}`).join('')}</select></label></div>
   <div class="workspace"><aside class="device-nav" aria-label="工序与设备"><div class="device-nav-head"><h2>工序与设备</h2>${can(state,'asset.create')?button('新增','create-process','','ghost small','plus'):''}</div>
   ${button('全部工序','process','','tree-all '+(state.view==='process'&&!state.processId?'active':''),'factory')}
-  ${processes.map(p=>`<button type="button" class="process-choice ${state.view==='process'&&state.processId===p.id?'active':''}" data-action="process" data-id="${p.id}"><span>${icon('down')}${e(p.name)}</span><small>${devices.filter(d=>d.processId===p.id).length}</small></button>${devices.filter(d=>d.processId===p.id).map(d=>`<button class="device-choice ${state.deviceId===d.id?'active':''}" type="button" data-action="device" data-id="${d.id}" ${state.deviceId===d.id?'aria-current="true"':''}>${icon('grid')}<span class="device-mini"><strong>${e(d.name)}</strong><small>${e(d.number)}</small></span></button>`).join('')}`).join('')}
+  ${processes.map(p=>`<button type="button" class="process-choice ${state.view==='process'&&state.processId===p.id?'active':''}" data-action="process" data-id="${p.id}"><span>${icon('down')}${e(p.name)}</span><small>${devices.filter(d=>d.processId===p.id).length}</small></button>${devices.filter(d=>d.processId===p.id).map(d=>`<button class="device-choice ${state.deviceId===d.id?'active':''}" type="button" data-action="device" data-id="${d.id}" ${state.deviceId===d.id?'aria-current="true"':''}>${icon('grid')}<span class="device-mini"><strong>${e(d.name)}</strong><small>${e(d.number)}</small></span></button>${hardwareTree(d)}`).join('')}`).join('')}
   <div class="tree-foot">${icon('shield')} ${e(roles[state.role].scope)}</div></aside>
   <section class="device-main" aria-label="软件工作台内容">${state.view==='process'?processView():state.view==='device'?deviceView(device()):softwareFocusView()}</section></div>`;
 }
@@ -64,7 +69,7 @@ function contextHeader(title, subtitle, actions='', back='') {
   return `<div class="context-header">${back?`<div class="context-back">${back}</div>`:''}<div class="context-heading"><div><h2>${e(title)}</h2><p>${e(subtitle)}</p></div><div class="context-actions">${actions}</div></div></div>`;
 }
 function queryBar(extra='') {
-  return `<form id="workspace-search" class="toolbar"><div class="filters"><label class="search-box">${icon('search')}<input name="query" aria-label="筛选当前列表" placeholder="${state.view==='device'?'软件名称':'设备名称或编号'}" value="${e(state.query)}"></label><button type="submit" class="small">查询</button>${state.view==='device'?`<select name="category" aria-label="软件类型">${[['all','全部类型'],...Object.entries(kindNames)].map(([id,name])=>`<option value="${id}" ${state.category===id?'selected':''}>${name}</option>`).join('')}</select>`:''}</div>${extra}</form>`;
+  return `<form id="workspace-search" class="toolbar"><div class="filters"><label class="search-box">${icon('search')}<input name="query" aria-label="筛选当前列表" placeholder="${state.view==='device'?'软件或硬件名称':'设备、编号或硬件'}" value="${e(state.query)}"></label><button type="submit" class="small">查询</button>${state.view==='device'?`<select name="category" aria-label="软件类型">${[['all','全部类型'],...Object.entries(kindNames)].map(([id,name])=>`<option value="${id}" ${state.category===id?'selected':''}>${name}</option>`).join('')}</select>`:''}</div>${extra}</form>`;
 }
 function paginate(items) {
   const pages=Math.max(1,Math.ceil(items.length/20)), page=Math.max(1,Math.min(state.listPage,pages));
@@ -79,6 +84,7 @@ function taskCell(row) {
   return t?`<button type="button" class="task-link ${t.state==='已完成'?'complete':''}" data-action="task" data-id="${t.id}">${icon(t.state==='已完成'?'check':'clock')}${e(t.state)}</button><span class="sub">目标 ${e(t.version)}</span>`:'<span class="muted">—</span>';
 }
 function fieldStatus(row) {
+  if(!row.bound)return pill('归属待补充','amber');
   return row.kind==='PLC'?pill(row.version?'已人工确认':'待人工确认',row.version?'neutral':'amber'):pill(row.report==='正常上报'?row.running:row.report,row.report==='正常上报'?'green':row.report==='状态未知'?'amber':'neutral',true);
 }
 function processView() {
@@ -91,37 +97,32 @@ function processView() {
 }
 function deviceView(d) {
   if(!d)return empty('无可查看设备','请选择有权查看的工序或设备。');
-  const grouped=new Map();
-  for(const r of workspaceRows(state).filter(r=>(state.category==='all'||r.kind===state.category)&&matchesQuery(r.name))) {if(!grouped.has(r.productId))grouped.set(r.productId,[]);grouped.get(r.productId).push(r);}
-  const result=paginate([...grouped.values()]);
-  return `<section class="surface">${contextHeader(d.name,processName(d.processId)+' · '+d.number,
-    button('设备资料','hardware',d.id,'small')+button('更新记录','context-tasks','','small')+(can(state,'software.add',d.id)?button('添加软件 / PLC','add-software',d.id,'primary small','plus'):''),button(processName(d.processId),'process',d.processId,'link'))}
-  ${queryBar()}${result.items.length?`<div class="table-scroll" tabindex="0" role="region" aria-label="设备软件状态"><table><thead><tr><th>软件</th><th>当前版本</th><th>最新正式版</th><th>现场状态</th><th>更新进度</th><th></th></tr></thead><tbody>${result.items.map(rows=>{
-    const r=rows[0],multi=rows.length>1,open=state.expanded.includes(r.productId);
-    const identity=`<div class="software-cell"><span class="software-icon ${r.kind}">${kindIcon(r.kind)}</span><div>${button(r.name,'focus-software',r.productId,'link object-name')}<span class="sub">${kindNames[r.kind]}${multi?' · '+rows.length+' 个安装位置':''}</span></div></div>`;
-    if(!multi)return `<tr><td>${identity}</td>${targetFacts(r)}<td>${button('详情','detail',r.id,'link')}</td></tr>`;
-    return `<tr class="group-row"><td>${identity}</td><td colspan="3">${button((open?'收起':'展开')+rows.length+' 个安装位置','expand',r.productId,'link','down')}</td><td>${groupTasks(rows)}</td><td></td></tr>${open?rows.map(t=>`<tr class="child-row"><td>${e(t.host)}</td>${targetFacts(t)}<td>${button('详情','detail',t.id,'link')}</td></tr>`).join(''):''}`;
-  }).join('')}</tbody></table></div>${listFooter(result,'款软件')}`:empty('当前没有对应软件','添加时自动关联到本设备，可复用已有软件或 PLC 程序库。',can(state,'software.add',d.id)?button('添加软件 / PLC','add-software',d.id,'primary','plus'):'')}</section>`;
+  const rows=workspaceRows(state).filter(r=>(state.category==='all'||r.kind===state.category)&&matchesQuery(r.name+' '+r.host));
+  const hardware=deviceHardware(d).filter(h=>!state.hardwareId||h.id===state.hardwareId), selected=hardware.find(h=>h.id===state.hardwareId);
+  const groups=hardware.map(h=>({hardware:h,rows:rows.filter(r=>r.hardwareId===h.id&&r.bound)})).filter(g=>g.rows.length||!state.query&&state.category==='all');
+  const unbound=rows.filter(r=>!r.bound);if(unbound.length)groups.push({hardware:{id:'',name:'待补充硬件归属',type:'Unknown'},rows:unbound});
+  const result=paginate(groups);
+  return `<section class="surface">${contextHeader(selected?selected.name:d.name,selected?processName(d.processId)+' / '+d.name:processName(d.processId)+' · '+d.number,
+    button('设备资料','hardware',d.id,'small')+button('更新记录','context-tasks','','small')+(can(state,'software.add',d.id)?button('添加工控机 / PLC','new-hardware',d.id,'primary small','plus'):''),selected?button(d.name+' · 全部硬件','device',d.id,'link'):button(processName(d.processId),'process',d.processId,'link'))}
+  ${queryBar()}${result.items.length?`<div class="table-scroll" tabindex="0" role="region" aria-label="设备硬件与软件"><table class="hardware-software-table"><thead><tr><th>软件 / 程序</th><th>现场版本</th><th>最新正式版</th><th>现场记录</th><th>更新进度</th><th></th></tr></thead><tbody>${result.items.map(({hardware:h,rows:items})=>`
+    <tr class="hardware-group"><th colspan="6"><div><span>${icon(h.type==='PLC'?'cpu':'monitor')}<strong>${e(h.name)}</strong><small>${h.type==='PLC'?'PLC 控制器 · 人工维护':h.type==='IPC'?'工控机':''}</small></span>${h.id&&can(state,'software.add',d.id)?button(h.type==='PLC'?'关联程序':'关联软件','bind-hardware',d.id+'|'+h.id,'small link','plus'):''}</div></th></tr>
+    ${items.map(r=>`<tr><td><div class="software-cell"><span class="software-icon ${r.kind}">${kindIcon(r.kind)}</span><div>${button(r.name,'focus-software',r.productId,'link object-name')}<span class="sub">${kindNames[r.kind]}</span></div></div></td>${targetFacts(r)}<td>${button(r.kind==='PLC'?'下载 / 现场登记':'详情','detail',r.id,'link')}</td></tr>`).join('')||`<tr><td colspan="6" class="hardware-empty">尚未关联${h.type==='PLC'?'程序库':'软件'}，可从此${h.type==='PLC'?'控制器':'工控机'}直接添加。</td></tr>`}`).join('')}</tbody></table></div>${listFooter(result,'个硬件分组')}`:empty('当前没有匹配的硬件或软件',deviceHardware(d).length?'可调整查询条件。':'先登记工控机或 PLC，再关联对应程序。',can(state,'software.add',d.id)&&!deviceHardware(d).length?button('添加工控机 / PLC','new-hardware',d.id,'primary','plus'):'')}</section>`;
 }
 function targetFacts(r) {
   return `<td><strong>${e(r.version??'—')}</strong>${r.kind==='PLC'?'<span class="sub">人工确认使用</span>':''}</td><td>${e(r.latest??'—')}${r.update?'<span class="new-badge">有新版</span>':''}</td><td>${fieldStatus(r)}</td><td>${r.kind==='PLC'?'<span class="muted">—</span>':taskCell(r)}</td>`;
 }
 function softwareFocusView() {
   const p=visibleProducts().find(p=>p.id===state.productId);if(!p)return empty('无权查看该软件','请选择当前范围内的软件。');
-  const all=workspaceRows(state), grouped=workspaceDevices(state).filter(d=>matchesQuery(d.name+' '+d.number)).map(d=>({device:d,targets:all.filter(t=>t.deviceId===d.id)})), result=paginate(grouped), selectable=p.kind!=='PLC'&&can(state,'deployment.create');
-  return `<section class="surface">${contextHeader(p.name,`${kindNames[p.kind]} · 全部有权查看的关联机台 · ${workspaceDevices(state).length} 台 / ${all.length} 个位置`,button('版本与来源','source',p.id,'small','box')+(p.kind!=='PLC'?button('更新记录','context-tasks','','small'):''),state.previousScope?button('返回刚才的现场','back-scope','','link'):button('全部工序','process','','link'))}
-  ${queryBar(`<span class="list-hint">${p.kind==='PLC'?'当前版本为人工确认使用版本':'实际版本以现场上报为准'}</span>`)}
+  const all=workspaceRows(state), result=paginate(all.filter(t=>matchesQuery(t.device.name+' '+t.device.number+' '+t.host))), selectable=p.kind!=='PLC'&&can(state,'deployment.create');
+  return `<section class="surface">${contextHeader(p.name,`${kindNames[p.kind]} · 全部有权查看的关联机台 · ${workspaceDevices(state).length} 台 / ${all.length} 个${p.kind==='PLC'?'控制器关联':'安装位置'}`,button('版本与来源','source',p.id,'small','box')+(p.kind!=='PLC'?button('更新记录','context-tasks','','small'):''),state.previousScope?button('返回刚才的现场','back-scope','','link'):button('全部工序','process','','link'))}
+  ${queryBar(`<span class="list-hint">${p.kind==='PLC'?'下载后由人员现场更新，再登记使用版本':'实际版本以现场上报为准'}</span>`)}
   ${selectable?`<div class="selection-bar"><label>目标正式版<select id="update-version" aria-label="目标正式版" ${!p.version?'disabled':''}><option>${e(p.version??'暂无可用正式版')}</option></select></label><span id="selected-count" aria-live="polite">已选 ${state.selectedTargets.length} 个安装位置</span>${button('更新所选','confirm-update',p.id,'primary small','',!state.selectedTargets.length)}</div>`:''}
-  ${result.items.length?`<div class="table-scroll" tabindex="0" role="region" aria-label="软件关联机台"><table><thead><tr>${selectable?'<th aria-label="选择安装位置"></th>':''}<th>关联设备</th><th>${p.kind==='PLC'?'确认使用版本':'当前版本'}</th><th>现场状态</th>${p.kind!=='PLC'?'<th>更新进度</th>':''}<th></th></tr></thead><tbody>${result.items.map(({device:d,targets})=>{
-    if(targets.length===1)return softwareTargetRow(targets[0],selectable,false);
-    const open=state.expanded.includes(d.id);
-    return `<tr class="group-row">${selectable?'<td></td>':''}<td>${button(d.name,'device',d.id,'link object-name')}<span class="sub">${e(d.number)} · ${e(processName(d.processId))}</span></td><td colspan="${p.kind==='PLC'?3:2}">${button((open?'收起':'展开')+targets.length+' 个安装位置','expand',d.id,'link','down')}<span class="sub">每个位置分别选择</span></td>${p.kind!=='PLC'?`<td>${groupTasks(targets)}</td><td></td>`:''}</tr>${open?targets.map(t=>softwareTargetRow(t,selectable,true)).join(''):''}`;
-  }).join('')}</tbody></table></div>${listFooter(result,'台关联设备')}`:empty('暂无匹配的关联设备',state.query?'调整查询条件后重试。':'可从设备内添加此软件，已有版本仍可查看。')}</section>`;
+  ${result.items.length?`<div class="table-scroll" tabindex="0" role="region" aria-label="软件关联硬件"><table><thead><tr>${selectable?'<th aria-label="选择安装位置"></th>':''}<th>关联设备</th><th>${p.kind==='PLC'?'PLC 控制器':'所在工控机'}</th><th>${p.kind==='PLC'?'人工确认版本':'当前版本'}</th><th>${p.kind==='PLC'?'现场记录':'现场状态'}</th>${p.kind!=='PLC'?'<th>更新进度</th>':''}<th></th></tr></thead><tbody>${result.items.map(t=>softwareTargetRow(t,selectable)).join('')}</tbody></table></div>${listFooter(result,p.kind==='PLC'?'个控制器关联':'个安装位置')}`:empty('暂无匹配的关联设备',state.query?'调整查询条件后重试。':'可从设备的具体工控机或 PLC 关联此程序，已有版本仍可查看。')}</section>`;
 }
-function softwareTargetRow(t,selectable,child) {
+function softwareTargetRow(t,selectable) {
   const reason=updateEligibility(state,t,t.latest);
-  return `<tr class="${child?'child-row':''}">${selectable?`<td><input type="checkbox" name="workspace-target" value="${t.id}" aria-label="选择 ${e(t.device.name)} ${e(t.host)}" ${state.selectedTargets.includes(t.id)?'checked':''} ${reason?'disabled':''} ${reason?`title="${e(reason)}"`:''}></td>`:''}
-  <td>${child?`<strong>${e(t.host)}</strong>`:button(t.device.name,'device',t.deviceId,'link object-name')}<span class="sub">${child?e(t.device.number):e(t.device.number)+' · '+e(processName(t.device.processId))}</span></td><td><strong>${e(t.version??'—')}</strong>${selectable&&reason?`<span class="sub">${e(reason)}</span>`:''}</td><td>${fieldStatus(t)}</td>${t.kind!=='PLC'?`<td>${taskCell(t)}</td>`:''}<td>${button('详情','detail',t.id,'link')}</td></tr>`;
+  return `<tr>${selectable?`<td><input type="checkbox" name="workspace-target" value="${t.id}" aria-label="选择 ${e(t.device.name)} ${e(t.host)}" ${state.selectedTargets.includes(t.id)?'checked':''} ${reason?'disabled':''} ${reason?`title="${e(reason)}"`:''}></td>`:''}
+  <td>${button(t.device.name,'device',t.deviceId,'link object-name')}<span class="sub">${e(t.device.number)} · ${e(processName(t.device.processId))}</span></td><td><strong>${e(t.host)}</strong></td><td><strong>${e(t.version??'—')}</strong>${selectable&&reason?`<span class="sub">${e(reason)}</span>`:''}</td><td>${fieldStatus(t)}</td>${t.kind!=='PLC'?`<td>${taskCell(t)}</td>`:''}<td>${button(t.kind==='PLC'?'下载 / 现场登记':'详情','detail',t.id,'link')}</td></tr>`;
 }
 function catalogDialog() {
   const result=catalogPage(state);
@@ -145,12 +146,12 @@ function hardwareView(d) {
 function accessView(d) {
   return `<section class="panel"><div class="panel-head"><h3>当前设备的接入配置</h3>${pill('身份与凭据')}</div><div class="notice-inline">接入材料会固定设备、工控机及软件，现场程序首次登记后取得独立身份。接入暂停只限制 API，不控制现场进程。</div>${state.installations.filter(i=>i.deviceId===d.id).map(i => `<div class="version-record"><div class="version-record-head"><strong>${e(product(i.productId).name)}</strong>${pill(i.access?'已接入':'待接入',i.access?'green':'neutral')}</div><p>${e(d.hosts.find(h=>h.id===i.hostId)?.name ?? '待补充归属')} · ${e(d.name)}</p>${can(state,'access.manage',d.id) ? button(i.access?'查看身份与恢复方式':'生成接入材料','access',i.id,'small','key') : '<small>当前角色可查看状态，无接入管理权限。</small>'}</div>`).join('') || empty('尚无软件接入对象','先在当前设备添加软件和所属工控机。')}<div class="muted-box">PLC 上传凭据在对应 PLC 程序内管理，只有上传归档权限，不具备发布或在线下装能力。</div></section>`;
 }
-const actionRows = [['查看设备、版本和记录','read'],['创建设备和工序','asset.create'],['添加设备软件 / PLC','software.add'],['关联 GitLab 来源','source.manage'],['上传 PLC 测试归档','plc.upload'],['PLC 人工验证转正式','plc.publish'],['创建更新任务','deployment.create'],['暂停和继续更新','deployment.control'],['管理软件接入','access.manage'],['管理人员与授权','identity.manage']];
+const actionRows = [['查看设备、版本和记录','read'],['创建设备和工序','asset.create'],['添加设备软件 / PLC','software.add'],['关联 GitLab 来源','source.manage'],['上传 PLC 测试归档','plc.upload'],['PLC 人工验证转正式','plc.publish'],['登记 PLC 现场使用','plc.confirm'],['创建更新任务','deployment.create'],['暂停和继续更新','deployment.control'],['管理软件接入','access.manage'],['管理人员与授权','identity.manage']];
 function permissionsView() {
   if(!can(state,'identity.manage')) return empty('无权管理人员','当前账号的权限仅覆盖已显示的现场范围。');
   const role=roles[selectedRole];
   return `${pageHeading('系统管理','人员权限与厂内连接。')}<div class="management-tabs">${button('人员与权限','settings-people','','active')}${button('GitLab 连接','connections')}</div>
-  <div class="role-grid"><aside class="panel role-list"><div class="panel-head"><h3>角色模板</h3></div>${Object.entries(roles).map(([id,r])=>`<button class="role-choice ${id===selectedRole?'active':''}" data-action="role-detail" data-id="${id}">${r.name}<small>${r.scope}</small></button>`).join('')}</aside><section class="surface"><div class="toolbar"><div><h2>${role.name}</h2><span class="scope-chip">${role.scope}</span></div>${button('预览此人员的页面','preview-role',selectedRole,'small','user')}</div><div class="table-scroll" tabindex="0"><table class="permissions-table"><thead><tr><th>操作</th><th>此角色的有效权限</th><th>授权范围</th></tr></thead><tbody>${actionRows.map(([label,action])=>{const allowed=action==='read'||role.actions.includes(action);return `<tr><td>${label}</td><td>${allowed?`<span class="checkmark">${icon('check')} 允许</span>`:'<span class="denied">— 未授予</span>'}</td><td>${allowed?e(action==='source.manage'||action==='identity.manage'?'显式平台管理权限':action.startsWith('plc.')?'显式授权的 PLC 程序库':role.scope):'—'}</td></tr>`;}).join('')}</tbody></table></div><div class="table-foot"><span>此处是待实施权限模型的预览，不修改当前系统账号或授权。</span></div></section></div><div class="notice-inline source-detail">创建是一项独立权限。现场范围不会自动带来共享版本的发布或停用权限；未实现的 PLC 下装、回退等操作不出现在授权目录。</div>`;
+  <div class="role-grid"><aside class="panel role-list"><div class="panel-head"><h3>角色模板</h3></div>${Object.entries(roles).map(([id,r])=>`<button class="role-choice ${id===selectedRole?'active':''}" data-action="role-detail" data-id="${id}">${r.name}<small>${r.scope}</small></button>`).join('')}</aside><section class="surface"><div class="toolbar"><div><h2>${role.name}</h2><span class="scope-chip">${role.scope}</span></div>${button('预览此人员的页面','preview-role',selectedRole,'small','user')}</div><div class="table-scroll" tabindex="0"><table class="permissions-table"><thead><tr><th>操作</th><th>此角色的有效权限</th><th>授权范围</th></tr></thead><tbody>${actionRows.map(([label,action])=>{const allowed=action==='read'||role.actions.includes(action);return `<tr><td>${label}</td><td>${allowed?`<span class="checkmark">${icon('check')} 允许</span>`:'<span class="denied">— 未授予</span>'}</td><td>${allowed?e(action==='source.manage'||action==='identity.manage'?'显式平台管理权限':['plc.upload','plc.publish'].includes(action)?'显式授权的 PLC 程序库':role.scope):'—'}</td></tr>`;}).join('')}</tbody></table></div><div class="table-foot"><span>此处是待实施权限模型的预览，不修改当前系统账号或授权。</span></div></section></div><div class="notice-inline source-detail">创建是一项独立权限。现场范围不会自动带来共享版本的发布或停用权限；未实现的 PLC 下装、回退等操作不出现在授权目录。</div>`;
 }
 
 function closeDialog() { const d=overlay.querySelector('dialog'); if(d?.open)d.close(); overlay.innerHTML=''; if(dialogReturnFocus?.isConnected)dialogReturnFocus.focus(); }
@@ -167,21 +168,34 @@ function detail(id) {
   const p=row.product, status=sourceStates[p.state];
   showDialog(row.name,`${processName(d.processId)} / ${d.name} / ${row.host}`,`<div class="detail-banner"><span class="software-icon ${row.kind}">${kindIcon(row.kind)}</span><div><h3>${e(row.name)}</h3><small>${kindNames[row.kind]} · ${e(row.host)} · ${e(row.ip)}</small></div></div>
   <div class="notice-inline ${row.report==='状态未知'?'amber':''}">${row.report==='状态未知'?'超过五分钟未收到新报告，当前运行状态未知。下方保留最后上报事实。':row.report==='尚未接入'?'软件已关联此设备，等待现场程序完成接入。':'现场事实来自当前软件安装身份的有效上报。'}</div>
-  ${fact('实际安装版本',row.version??'尚未上报')}${fact('最近运行记录',row.running)}${fact('最后上报时间',row.reported)}${fact('未上报时长',row.elapsed)}${fact('接入状态',row.access?'允许 API 接入':'尚未接入')}<hr><div class="panel-head"><h3>可用正式版本</h3>${pill(status.label,status.tone)}</div>${fact('最新版本',p.version??'暂无')}${fact('正式 Tag',p.tag??'暂无')}${fact('GitLab 项目',p.project||'待关联')}<p class="muted">${e(p.note||'配置 GitLab 来源后查看正式版本。')}</p><div class="action-links">${button('查看发布来源','source',p.id,'link')}${can(state,'access.manage',d.id)?button('接入配置','access',row.id,'link'):''}</div>`,`${button('关闭','close')}${row.update&&can(state,'deployment.create',d.id)?button('选择此设备更新','update',row.id,'primary'):''}`,true);
+  ${fact('实际安装版本',row.version??'尚未上报')}${fact('最近运行记录',row.running)}${fact('最后上报时间',row.reported)}${fact('未上报时长',row.elapsed)}${fact('接入状态',row.access?'允许 API 接入':'尚未接入')}<hr><div class="panel-head"><h3>可用正式版本</h3>${pill(status.label,status.tone)}</div>${fact('最新版本',p.version??'暂无')}${fact('正式 Tag',p.tag??'暂无')}${fact('GitLab 项目',p.project||'待关联')}<p class="muted">${e(p.note||'配置 GitLab 来源后查看正式版本。')}</p><div class="action-links">${button('查看发布来源','source',p.id,'link')}${can(state,'access.manage',d.id)?button('接入配置','access',row.id,'link'):''}</div>`,`${button('关闭','close')}${row.update&&can(state,'deployment.create',d.id)?button('更新此工控机上的软件','update',row.id,'primary'):''}`,true);
 }
-function plcDetail(id, channel='Test') {
+function plcDetail(id, channel='Formal') {
   const archive=state.archives.find(a=>a.id===id);
   if(archive&&visibleDevices(state).some(d=>d.id===archive.deviceId)) plcLibrary(archive.productId,id,channel);
 }
-function plcLibrary(productId, archiveId='', channel='Test') {
+function plcLibrary(productId, archiveId='', channel='Formal') {
   const p=visibleProducts().find(x=>x.id===productId), archive=state.archives.find(a=>a.id===archiveId&&a.productId===productId), d=visibleDevices(state).find(d=>d.id===archive?.deviceId);if(!p||p.kind!=='PLC')return;
   const versions=p.versions.filter(v=>v.state===channel), context=d?`${d.name} / ${d.controllers.find(c=>c.id===archive.controllerId)?.name}`:'共享程序版本库';
   const key=p.id+'|'+(d?archiveId:'');
-  showDialog(p.name,context,`<div class="detail-banner"><span class="software-icon PLC">${icon('cpu')}</span><div><h3>${e(p.name)}</h3><small>PLC 程序 · ${relatedDevices(state,p.id).length} 台关联机台</small></div></div><div class="notice-inline">同一程序库可用于多台 PLC，各台控制器分别保留现场确认版本。转正式不会自动下装。</div>${d?fact('当前控制器确认使用',archive.confirmed??'尚未确认'):''}<div class="action-links">${button('查看全部关联机台','source-devices',p.id,'link')}</div><div class="detail-tabs">${button('测试版本','library-test',key,channel==='Test'?'active':'')}${button('正式版本','library-formal',key,channel==='Formal'?'active':'')}</div>
-  ${versions.map(v=>`<article class="version-record"><div class="version-record-head"><strong>${e(v.version)} ${pill(v.state==='Test'?'待现场验证':'正式归档',v.state==='Test'?'amber':'green')}</strong>${v.state==='Test'&&d&&canManageProgram(state,p.id,'plc.publish')?button('验证并转正式','publish',archiveId+'|'+v.version,'small'):''}</div><p>${e(v.summary)}</p><small>${e(v.file)} · ${e(v.size)} · ${e(v.time)}</small>${v.conclusion?`<div class="muted-box source-detail">验证结论：${e(v.conclusion)}<br>发布人：${e(v.publisher??'演示工程师')} · ${e(v.publishedAt??v.time)}</div>`:''}<div class="action-links">${button('下载归档','prototype-download','','link')}</div></article>`).join('')||empty(channel==='Test'?'暂无测试版本':'暂无正式版本',channel==='Test'?'上传归档后，程序进入测试版本。':'人员验证并转正式后在此显示。')}
-  ${!d&&versions.some(v=>v.state==='Test')?'<p class="page-caption">从关联机台选择实际验证的 PLC，再填写现场验证记录。</p>':''}<div class="action-links">${d&&can(state,'access.manage',d.id)?button('API 上传接入方式','plc-api',archiveId,'link','key'):''}</div>`,`${button('关闭','close')}${d&&canManageProgram(state,p.id,'plc.upload')?button('上传测试归档','upload-plc',archiveId,'primary','upload'):''}`,true);
+  showDialog(p.name,context,`<div class="detail-banner"><span class="software-icon PLC">${icon('cpu')}</span><div><h3>${e(p.name)}</h3><small>PLC 程序 · ${relatedDevices(state,p.id).length} 台关联机台</small></div></div><div class="notice-inline">同一程序库可用于多台 PLC，各台控制器分别保留现场确认版本。转正式不会自动下装。</div>${d?`${fact('绑定控制器',d.name+' / '+d.controllers.find(c=>c.id===archive.controllerId)?.name)}${fact('人工确认使用版本',archive.confirmed??'尚未确认')}${fact('确认人 / 现场时间',archive.confirmedBy?archive.confirmedBy+' / '+displayTime(archive.confirmedAt):'尚未登记')}<p class="page-caption">无需平台连接 PLC。人员下载后使用工程软件现场更新，再登记使用记录。</p>`:''}<div class="action-links">${button('查看全部关联机台','source-devices',p.id,'link')}</div><div class="detail-tabs">${button('测试版本','library-test',key,channel==='Test'?'active':'')}${button('正式版本','library-formal',key,channel==='Formal'?'active':'')}</div>
+  ${versions.map(v=>`<article class="version-record"><div class="version-record-head"><strong>${e(v.version)} ${pill(v.state==='Test'?'待现场验证':'正式归档',v.state==='Test'?'amber':'green')}</strong>${v.state==='Test'&&d&&canManageProgram(state,p.id,'plc.publish')?button('验证并转正式','publish',archiveId+'|'+v.version,'small'):''}</div><p>${e(v.summary)}</p><small>${e(v.file)} · ${e(v.size)} · ${e(v.time)}</small>${v.conclusion?`<div class="muted-box source-detail">验证结论：${e(v.conclusion)}<br>发布人：${e(v.publisher??'演示工程师')} · ${e(v.publishedAt??v.time)}</div>`:''}<div class="action-links">${button('下载归档',d?'plc-download':'prototype-download',d?archiveId+'|'+v.version:'','link')}${d&&can(state,'plc.confirm',d.id)?button('登记现场使用','plc-confirm',archiveId+'|'+v.version,'link'):''}</div></article>`).join('')||empty(channel==='Test'?'暂无测试版本':'暂无正式版本',channel==='Test'?'上传归档后，程序进入测试版本。':'人员验证并转正式后在此显示。')}
+  ${d?`<details class="source-fold"><summary>此控制器的下载与使用记录</summary>${(archive.history??[]).slice().reverse().map(h=>`<div class="version-record"><strong>人工确认 ${e(h.previousVersion??'尚未确认')} → ${e(h.version)}</strong><p>${e(h.operator)} · ${e(displayTime(h.usedAt))}</p><small>${e(h.evidence)}</small></div>`).join('')||'<p class="muted">暂无新增现场使用记录。</p>'}${state.archiveDownloads.filter(x=>x.archiveId===archiveId).slice().reverse().map(x=>`<p class="page-caption">演示下载 ${e(x.version)} · ${e(x.file)} · 未证明现场更新</p>`).join('')}</details>`:''}${!d&&versions.some(v=>v.state==='Test')?'<p class="page-caption">从关联机台选择实际验证的 PLC，再填写现场验证记录。</p>':''}<div class="action-links">${d&&can(state,'access.manage',d.id)?button('API 上传接入方式','plc-api',archiveId,'link','key'):''}</div>`,`${button('关闭','close')}${d&&canManageProgram(state,p.id,'plc.upload')?button('上传测试归档','upload-plc',archiveId,'primary','upload'):''}`,true);
 }
 
+function plcDownload(value) {
+  const [archiveId,version]=value.split('|');
+  try {downloadArchive(state,{archiveId,version,role:state.role});plcDetail(archiveId,product(state.archives.find(a=>a.id===archiveId).productId).versions.find(v=>v.version===version).state);toast('原型：已记录演示下载；没有真实文件，现场使用版本保持不变。');}catch(error){toast(error.message);}
+}
+function confirmPlcDialog(value) {
+  const [archiveId,version]=value.split('|'),archive=state.archives.find(a=>a.id===archiveId),d=visibleDevices(state).find(d=>d.id===archive?.deviceId),controller=d?.controllers.find(c=>c.id===archive.controllerId);
+  if(!controller||!can(state,'plc.confirm',d.id))return;
+  const p=product(archive.productId),record=p.versions.find(v=>v.version===version);if(!record)return;
+  const fixed={archiveId,version,controllerId:controller.id,revision:archive.revision??0,role:state.role},now=new Date(),localTime=new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+  showDialog('登记 PLC 现场使用',d.name+' / '+controller.name,`<div class="notice-inline">仅记录人员现场确认，不连接 PLC、不执行下装，也不改变程序的测试 / 正式状态。</div><div class="field-group"><label>固定对象<div class="readonly-field">${e(d.name)} / ${e(controller.name)} / ${e(p.name)}</div></label><label>现场使用版本<div class="readonly-field">${e(version)} · ${record.state==='Test'?'测试版':'正式版'}</div></label><label>现场操作时间<input type="datetime-local" name="usedAt" value="${localTime}" required /></label><label>现场记录<textarea name="evidence" required placeholder="说明手动更新及核实情况"></textarea></label><label class="checkbox"><input type="checkbox" name="confirmed" required>我已在上述 PLC 完成现场操作，并核对实际使用版本。</label></div>`,`${button('取消','close')}${submitButton('保存人工确认记录')}`,false,form=>{
+    confirmPlcUsage(state,{...fixed,usedAt:new Date(String(form.get('usedAt'))).toISOString(),evidence:String(form.get('evidence')),confirmed:form.has('confirmed')});closeDialog();render();plcDetail(archiveId,record.state);toast('原型：仅更新此 PLC 的人工确认记录，其他控制器不变。');
+  });
+}
 function publishDialog(value) {
   const [id,version]=value.split('|'),archive=state.archives.find(a=>a.id===id),d=visibleDevices(state).find(d=>d.id===archive?.deviceId);if(!d||!canManageProgram(state,archive.productId,'plc.publish'))return;
   const fixed={archiveId:id,version,role:state.role};
@@ -191,32 +205,37 @@ function sourceDialog(id) {
   const p=visibleProducts().find(p=>p.id===id);if(!p)return;if(p.kind==='PLC')return plcLibrary(id);const status=sourceStates[p.state];
   showDialog(p.name+' · 版本',kindNames[p.kind]+' / 共享版本库',
   `<div class="panel-head"><h3>正式版本</h3>${pill(status.label,status.tone)}</div>${p.version?`<article class="version-record"><div class="version-record-head"><strong>${e(p.version)}</strong>${pill('可用正式版','green')}</div><p>${e(p.note||'本演示版本暂无变更说明。')}</p><small>${e(p.tag)} · ${e(p.time||'演示版本')}</small><div class="action-links">${button('下载程序包','prototype-download','','link')}${button('查看关联机台','focus-software',id,'link')}</div></article>`:empty('暂无可用正式版本',status.description)}
-  ${p.state==='failed'?`<div class="notice-inline amber source-detail">${e(status.description)}</div>`:''}<details class="source-fold"><summary>GitLab 来源</summary>${fact('配置连接','厂内 GitLab（演示占位）')}${fact('项目',p.project||'待关联')}${fact('产物',p.package||'待选择')}${fact('最近核对',p.time||'尚未同步')}<p class="page-caption">受保护正式 Tag、成功流水线及发布清单核验通过，包副本就绪后显示为正式版。</p></details>
+  ${p.state==='failed'?`<div class="notice-inline amber source-detail">${e(status.description)}</div>`:''}<details class="source-fold"><summary>GitLab 来源</summary>${fact('配置连接',state.connection.name+' · '+(state.connection.enabled?'演示已启用':'演示已停用'))}${fact('项目',p.project||'待关联')}${fact('产物',p.package||'待选择')}${fact('最近核对',p.time||'尚未同步')}<p class="page-caption">受保护正式 Tag、成功流水线及发布清单核验通过，包副本就绪后显示为正式版。</p></details>
   <p class="page-caption">原型只提供当前版本示例；完整发布历史在正式实现中按需查询。</p><details class="prototype-controls"><summary>原型状态演示</summary><div class="detail-tabs">${Object.entries(sourceStates).filter(([key])=>key!=='unbound').map(([key,v])=>button(v.label,'source-state',id+'|'+key,'small')).join('')}</div></details>`,`${button('关闭','close')}${can(state,'source.manage')?(p.project?button('演示导入新 Tag','import',id,'primary','refresh'):button('关联 GitLab 项目','bind-source',id,'primary','git')):''}`,true);
+}
+function connectionDialog() {
+  if(!can(state,'identity.manage'))return;const role=state.role,c=state.connection;
+  showDialog('GitLab 连接','系统管理 · 演示配置',`<div class="notice-inline">此页预览连接流程，不发起网络请求。真实服务地址及凭据仍由部署配置提供。</div>${fact('连接名称',c.name)}${fact('示例地址',c.address)}${fact('API / 下载凭据','部署私有配置引用 · 原型不读取秘密')}<div class="field-group"><label>同步开关<select name="enabled"><option value="on" ${c.enabled?'selected':''}>启用演示同步</option><option value="off" ${!c.enabled?'selected':''}>停用演示同步</option></select></label></div><div class="version-record"><h3>软件关联流程</h3><p>查找软件 → 版本与来源 → 选择项目和产物 → 等待正式 Tag</p><small>连接由多款软件复用。Tag 导入后只更新共享版本库，设备更新仍由人员选择具体工控机。</small></div><div class="page-caption">部署接入和真实 GitLab 连通性尚未在此页面实现或验证。</div>`,`${button('关闭','close')}${submitButton('保存演示设置')}`,true,form=>{if(state.role!==role||!can(state,'identity.manage'))throw new Error('人员或权限已变化');c.enabled=form.get('enabled')==='on';closeDialog();render();toast('原型：演示连接设置已保存，刷新后恢复；真实配置未改变。');});
 }
 function bindSource(id) {
   const p=product(id);if(!p||!can(state,'source.manage'))return;
-  showDialog('关联 GitLab 来源',p.name,`<div class="notice-inline">管理员配置服务器和凭据后，工程人员从允许的项目中选择。秘密不会进入此表单。</div><div class="field-group"><label>服务器连接<div class="readonly-field">厂内 GitLab · 演示占位</div></label><label>允许关联的项目<select name="project"><option value="demo / inspection-collector">demo / inspection-collector</option><option value="demo / assembly-control">demo / assembly-control</option><option value="demo / vision-inspection">demo / vision-inspection</option></select></label><label>产物名称<input name="package" required value="${e(p.package||'inspection-collector')}" /></label><label>当前软件<div class="readonly-field">${e(p.name)} · ${kindNames[p.kind]}</div></label></div><p class="page-caption">首次关联后进入等待正式发布状态；不会替设备安装。</p>`,`${button('取消','close')}${submitButton('关联并等待同步')}`,false,form=>{if(!can(state,'source.manage'))throw new Error('来源管理权限已变化');p.project=String(form.get('project'));p.package=String(form.get('package'));p.state='waiting';closeDialog();render();sourceDialog(id);});
+  if(!state.connection.enabled)return toast('演示连接已停用，请在系统管理查看。');const role=state.role;
+  showDialog('关联 GitLab 来源',p.name,`<div class="notice-inline">管理员配置服务器和凭据后，工程人员从允许的项目中选择。秘密不会进入此表单。</div><div class="field-group"><label>服务器连接<div class="readonly-field">厂内 GitLab · 演示占位</div></label><label>允许关联的项目<select name="project"><option value="demo / inspection-collector">demo / inspection-collector</option><option value="demo / assembly-control">demo / assembly-control</option><option value="demo / vision-inspection">demo / vision-inspection</option></select></label><label>产物名称<input name="package" required value="${e(p.package||'inspection-collector')}" /></label><label>当前软件<div class="readonly-field">${e(p.name)} · ${kindNames[p.kind]}</div></label></div><p class="page-caption">首次关联后进入等待正式发布状态；不会替设备安装。</p>`,`${button('取消','close')}${submitButton('关联并等待同步')}`,false,form=>{if(state.role!==role||!can(state,'source.manage')||!state.connection.enabled)throw new Error('人员、连接或来源管理权限已变化');p.project=String(form.get('project'));p.package=String(form.get('package'));p.state='waiting';closeDialog();render();sourceDialog(id);});
 }
-function addSoftware(deviceId, initialKind='UpperComputer') {
+function newHardware(deviceId, type='IPC') {
+  const d=visibleDevices(state).find(d=>d.id===deviceId);if(!d||!can(state,'software.add',deviceId))return;
+  const role=state.role;
+  showDialog('添加工控机 / PLC',processName(d.processId)+' / '+d.name,`<div class="field-group"><label>所属设备<div class="readonly-field">${e(d.name)} · ${e(d.number)}</div></label><label>硬件类型<select name="type"><option value="IPC" ${type==='IPC'?'selected':''}>工控机</option><option value="PLC" ${type==='PLC'?'selected':''}>PLC 控制器</option></select></label><label>硬件名称<input name="name" required maxlength="128" placeholder="例如：主控工控机、主控 PLC" /></label><label>IP 地址（可选）<input name="ip" placeholder="仅作资料，无需平台能访问" /></label></div>`,`${button('取消','close')}${submitButton('添加到当前设备')}`,false,form=>{
+    if(state.role!==role)throw new Error('人员已变化');const h=addHardware(state,{deviceId,type:String(form.get('type')),name:String(form.get('name')),ip:String(form.get('ip'))});focusScope({deviceId,hardwareId:h.id});toast('原型：硬件已登记，可在其下关联程序。');
+  });
+}
+function addSoftware(deviceId, initialKind='UpperComputer', fixedHardwareId='') {
   const d=visibleDevices(state).find(x=>x.id===deviceId);if(!d||!can(state,'software.add',d.id))return;
   const isPlc=initialKind==='PLC', candidates=visibleProducts().filter(p=>p.kind===initialKind), hardware=isPlc?d.controllers:d.hosts, fixedRole=state.role;
-  showDialog(isPlc?'添加 PLC 与程序':'添加设备软件',`${processName(d.processId)} / ${d.name}`,`<div class="form-grid"><label class="wide">当前设备<div class="readonly-field">${e(d.name)} · ${e(processName(d.processId))}</div></label><label class="wide">软件类型<select name="kind" id="add-kind" data-device="${d.id}">${Object.entries(kindNames).map(([id,name])=>`<option value="${id}" ${id===initialKind?'selected':''}>${name}</option>`).join('')}</select></label><label class="wide">${isPlc?'程序库':'软件'}<select name="product" id="product-choice"><option value="new">新建，并关联当前设备</option>${candidates.map(p=>`<option value="${p.id}">使用已有：${e(p.name)}</option>`).join('')}</select></label><label class="wide" data-new-product>新${isPlc?'程序':'软件'}名称<input name="name" placeholder="填写名称，内部编号自动生成" /></label><label class="wide">${isPlc?'所在 PLC':'所在工控机'}<select name="host" id="host-choice"><option value="new">同时添加${isPlc?' PLC':'工控机'}</option>${hardware.map(h=>`<option value="${h.id}">${e(h.name)} · ${e(h.ip)}</option>`).join('')}</select></label><label data-new-host>新${isPlc?' PLC':'工控机'}名称<input name="hostName" /></label><label data-new-host>IP 地址（可选）<input name="ip" placeholder="登记地址" /></label><p class="form-hint wide">${isPlc?'同一程序库可关联多台 PLC；每台分别记录确认使用版本。':'同一软件可关联多台设备，也可在一台设备的不同工控机安装。'}</p></div>`,`${button('取消','close')}${submitButton('添加并关联设备')}`,false,form=>{
-    if(state.role!==fixedRole||!can(state,'software.add',d.id))throw new Error('人员或权限已变化');
-    const selected=String(form.get('product')), selectedHost=String(form.get('host')), name=String(form.get('name')??'').trim(), hostName=String(form.get('hostName')??'').trim();
-    let p=candidates.find(p=>p.id===selected), h=hardware.find(h=>h.id===selectedHost);
-    if(selected!=='new'&&!p)throw new Error('所选软件已不在可用范围');
-    if(!p&&!name)throw new Error('请填写新软件或程序名称');
-    if(!h&&!hostName)throw new Error('请填写新硬件名称或选择已有硬件');
-    if(p&&h&&(isPlc?state.archives.some(a=>a.deviceId===d.id&&a.productId===p.id&&a.controllerId===h.id):state.installations.some(i=>i.deviceId===d.id&&i.productId===p.id&&i.hostId===h.id)))throw new Error('该位置已关联此软件，请查看现有记录');
-    const n=state.sequence++;
-    if(!p){p={id:`product-new-${n}`,name,kind:initialKind,source:isPlc?'程序归档':'GitLab',versions:[],project:'',package:'',state:'unbound',version:null,tag:null,revision:1};state.products.push(p);}
-    if(!h){h={id:`hardware-new-${n}`,name:hostName,ip:String(form.get('ip')||'—')};hardware.push(h);}
-    if(isPlc)state.archives.push({id:`archive-new-${n}`,deviceId:d.id,controllerId:h.id,productId:p.id,confirmed:null});
-    else state.installations.push({id:`installation-new-${n}`,deviceId:d.id,hostId:h.id,productId:p.id,version:null,running:'—',report:'尚未接入',reported:'—',elapsed:'—',access:false});
-    selectScope(state,{deviceId:d.id});closeDialog();render();toast('原型：已关联到当前设备，共用版本库，保留独立现场事实。');
-  });
-  refreshAddFields();
+  const fixedHardware=hardware.find(h=>h.id===fixedHardwareId);
+  if(fixedHardwareId&&!fixedHardware)return toast('硬件归属已变化，请重新选择。');
+  if(!hardware.length)return newHardware(deviceId,isPlc?'PLC':'IPC');
+  showDialog(isPlc?'关联 PLC 程序':'关联工控机软件',`${processName(d.processId)} / ${d.name}${fixedHardware?' / '+fixedHardware.name:''}`,`<div class="field-group"><label>绑定位置<div class="readonly-field">${e(d.name)}${fixedHardware?' / '+e(fixedHardware.name):''}</div></label>
+  ${fixedHardware?`<input type="hidden" name="host" value="${e(fixedHardware.id)}">`:`<label>${isPlc?'PLC 控制器':'所在工控机'}<select name="host" required><option value="">请选择具体硬件</option>${hardware.map(h=>`<option value="${h.id}">${e(h.name)}</option>`).join('')}</select></label>`}
+  ${isPlc?'<input type="hidden" name="kind" value="PLC">':`<label>软件类型<select name="kind" id="add-kind" data-device="${d.id}" data-hardware="${e(fixedHardwareId)}"><option value="UpperComputer" ${initialKind==='UpperComputer'?'selected':''}>上位机</option><option value="Vision" ${initialKind==='Vision'?'selected':''}>视觉</option></select></label>`}
+  <label>${isPlc?'程序库':'软件'}<select name="product" id="product-choice"><option value="new">新建并关联</option>${candidates.map(p=>`<option value="${p.id}">使用已有：${e(p.name)}</option>`).join('')}</select></label><label data-new-product>新${isPlc?'程序':'软件'}名称<input name="name" placeholder="内部编号自动生成" /></label></div><p class="page-caption">共用版本库，当前硬件保留独立的${isPlc?'现场使用记录':'安装身份'}。</p>`,`${button('取消','close')}${submitButton('确认关联')}`,false,form=>{
+    const selected=String(form.get('product'));bindSoftware(state,{deviceId,hardwareId:fixedHardwareId||String(form.get('host')),kind:initialKind,productId:selected==='new'?null:selected,name:String(form.get('name')??''),role:fixedRole});focusScope({deviceId,hardwareId:fixedHardwareId||String(form.get('host'))});toast('原型：已固定设备、具体硬件和程序关联。');
+  });refreshAddFields();
 }
 function refreshAddFields() {
   const productChoice=overlay.querySelector('#product-choice'),hostChoice=overlay.querySelector('#host-choice');
@@ -236,11 +255,12 @@ function updateDialog(id) {
 function confirmUpdate() {
   const p=visibleProducts().find(p=>p.id===state.productId);if(!p||p.kind==='PLC'||!state.selectedTargets.length)return;
   const fixed={productId:p.id,version:p.version,role:state.role,installationIds:[...state.selectedTargets]}, chosen=relatedTargets(state,p.id).filter(t=>fixed.installationIds.includes(t.id));
+  fixed.bindings=chosen.map(t=>({id:t.id,deviceId:t.deviceId,hostId:t.hostId}));
   showDialog('确认更新',p.name+' → '+p.version,`<div class="notice-inline">仅更新下面 ${new Set(chosen.map(t=>t.deviceId)).size} 台设备的 ${chosen.length} 个安装位置。</div><ul class="chosen-targets">${chosen.map(t=>`<li><strong>${e(t.device.name)}</strong><span>${e(t.host)} · ${e(t.version)} → ${e(p.version)}</span></li>`).join('')}</ul><label>更新原因<textarea name="reason" required placeholder="填写本次更新原因"></textarea></label><p class="page-caption">这是操作原型，不执行真实安装。正式实现沿用时段、批次及数据保护核验。</p>`,`${button('返回选择','close')}${submitButton('创建演示更新任务')}`,false,form=>{const tasks=createUpdates(state,{...fixed,reason:String(form.get('reason')??'')});state.selectedTargets=[];closeDialog();render();toast(`原型：${tasks.length} 个更新任务已创建，进度显示在原机台行。`);});
 }
 function taskDetail(id) {
   const t=state.tasks.find(t=>t.id===id),d=visibleDevices(state).find(d=>d.id===t?.deviceId);if(!d)return;
-  showDialog('设备更新任务',`${d.name} / ${product(t.productId).name}`,`${fact('目标设备',d.name)}${fact('所在工控机',t.host??'主控工控机')}${fact('目标正式版本',t.version)}${fact('当前状态',t.state)}${fact('完成数量',t.progress)}<div class="notice-inline source-detail">任务回执与现场安装上报分别记录。暂停不会停止已获许可的现场进程。</div>`,`${button('关闭','close')}${can(state,'deployment.control',d.id)&&t.state!=='已完成'?button(t.state==='已暂停'?'继续等待领取':'暂停后续执行','task-control',id,'primary'):''}`,true);
+  showDialog('设备更新任务',`${d.name} / ${product(t.productId).name}`,`${fact('目标设备',d.name)}${fact('所在工控机',t.host??'待核实工控机')}${fact('目标正式版本',t.version)}${fact('当前状态',t.state)}${fact('完成数量',t.progress)}<div class="notice-inline source-detail">任务回执与现场安装上报分别记录。暂停不会停止已获许可的现场进程。</div>`,`${button('关闭','close')}${can(state,'deployment.control',d.id)&&t.state!=='已完成'?button(t.state==='已暂停'?'继续等待领取':'暂停后续执行','task-control',id,'primary'):''}`,true);
 }
 function accessDialog(id) {
   const i=state.installations.find(i=>i.id===id),d=visibleDevices(state).find(d=>d.id===i?.deviceId);if(!d||!can(state,'access.manage',d.id))return;
@@ -249,7 +269,7 @@ function accessDialog(id) {
 function uploadPlc(id) {
   const a=state.archives.find(a=>a.id===id),d=visibleDevices(state).find(d=>d.id===a?.deviceId);if(!d||!can(state,'plc.upload',d.id))return;
   const program=product(a.productId);if(!canManageProgram(state,program.id,'plc.upload'))return;const next=program.versions.length?`${Number(program.versions[0].version.split('.')[0])}.${Number(program.versions[0].version.split('.')[1])+1}.0`:'1.0.0';
-  showDialog('上传 PLC 测试归档',`${d.name} / ${d.controllers.find(c=>c.id===a.controllerId)?.name} / ${program.name}`,`<div class="notice-inline">文件接收和摘要校验由后端实现。本原型只记录文件名和演示状态，不读取或上传文件内容。</div><div class="field-group"><label>归档对象<div class="readonly-field">${e(d.name)} / ${e(program.name)}</div></label><label>程序压缩包<input name="file" type="file" accept=".zip,.7z" required /></label><label>变更说明<textarea name="summary" required></textarea></label><label>演示生成版本<div class="readonly-field">${next} · 测试版</div></label></div>`,`${button('取消','close')}${submitButton('演示归档为测试版')}`,false,form=>{if(!can(state,'plc.upload',d.id))throw new Error('当前无上传权限');const file=form.get('file');if(!(file instanceof File)||!file.name)throw new Error('请选择归档文件');program.versions.unshift({version:next,state:'Test',file:file.name,size:(file.size/1024/1024).toFixed(2)+' MB',summary:String(form.get('summary')),time:'本次原型操作',conclusion:null});closeDialog();render();plcDetail(id);toast('原型：仅登记演示文件资料，未上传任何内容。');});
+  showDialog('上传 PLC 测试归档',`${d.name} / ${d.controllers.find(c=>c.id===a.controllerId)?.name} / ${program.name}`,`<div class="notice-inline">文件接收和摘要校验由后端实现。本原型只记录文件名和演示状态，不读取或上传文件内容。</div><div class="field-group"><label>归档对象<div class="readonly-field">${e(d.name)} / ${e(program.name)}</div></label><label>程序压缩包<input name="file" type="file" accept=".zip,.7z" required /></label><label>变更说明<textarea name="summary" required></textarea></label><label>演示生成版本<div class="readonly-field">${next} · 测试版</div></label></div>`,`${button('取消','close')}${submitButton('演示归档为测试版')}`,false,form=>{if(!can(state,'plc.upload',d.id))throw new Error('当前无上传权限');const file=form.get('file');if(!(file instanceof File)||!file.name)throw new Error('请选择归档文件');program.versions.unshift({version:next,state:'Test',file:file.name,size:(file.size/1024/1024).toFixed(2)+' MB',summary:String(form.get('summary')),time:'本次原型操作',conclusion:null});closeDialog();render();plcDetail(id,'Test');toast('原型：仅登记演示文件资料，未上传任何内容。');});
 }
 function accountMenu() {
   if(document.querySelector('.user-menu'))return document.querySelector('.user-menu').remove();
@@ -260,6 +280,9 @@ document.addEventListener('click',event=>{
   if(a==='close')return closeDialog();
   if(a==='page'){closeDialog();if(id==='settings'&&!can(state,'identity.manage'))return;state.page=id;render();}
   else if(a==='reset'){closeDialog();catalogInput={query:'',kind:'all'};state=initialState();render();toast('原型已重置。真实系统及数据未受影响。');}
+  else if(a==='hardware-scope'){const [deviceId,hardwareId]=id.split('|');focusScope({deviceId,hardwareId});}
+  else if(a==='bind-hardware'){const [deviceId,hardwareId]=id.split('|'),d=visibleDevices(state).find(d=>d.id===deviceId),h=d&&deviceHardware(d).find(h=>h.id===hardwareId);if(h)addSoftware(deviceId,h.type==='PLC'?'PLC':'UpperComputer',hardwareId);}
+  else if(a==='new-hardware')newHardware(id);
   else if(a==='device')focusScope({deviceId:id});
   else if(a==='process')focusScope({processId:id||null});
   else if(a==='focus-software'||a==='source-devices'||a==='update-product')focusScope({productId:id});
@@ -274,6 +297,8 @@ document.addEventListener('click',event=>{
   else if(a==='detail')detail(id);
   else if(a==='plc-test'||a==='plc-formal')plcDetail(id,a==='plc-test'?'Test':'Formal');
   else if(a==='publish')publishDialog(id);
+  else if(a==='plc-download')plcDownload(id);
+  else if(a==='plc-confirm')confirmPlcDialog(id);
   else if(a==='source')sourceDialog(id);
   else if(a==='bind-source')bindSource(id);
   else if(a==='source-state'){const [pid,next]=id.split('|'),p=visibleProducts().find(x=>x.id===pid);if(p){p.state=next;render();sourceDialog(pid);}}
@@ -281,8 +306,8 @@ document.addEventListener('click',event=>{
   else if(a==='catalog-page'){state.catalog.page=Number(id);catalogDialog();}
   else if(a==='library-test'||a==='library-formal'){const [pid,archiveId]=id.split('|');plcLibrary(pid,archiveId,a==='library-test'?'Test':'Formal');}
   else if(a==='add-software')addSoftware(id);
-  else if(a==='add-plc')addSoftware(id,'PLC');
-  else if(a==='add-host'){const d=visibleDevices(state).find(d=>d.id===id);if(!d||!can(state,'software.add',id))return;showDialog('添加工控机',d.name,`<div class="field-group"><label>工控机名称<input name="name" required /></label><label>IP 地址（可选）<input name="ip" /></label></div>`,`${button('取消','close')}${submitButton('添加到当前设备')}`,false,form=>{if(!can(state,'software.add',id))throw new Error('无操作权限');d.hosts.push({id:'prototype-host-'+state.sequence++,name:String(form.get('name')),ip:String(form.get('ip')||'—')});closeDialog();render();});}
+  else if(a==='add-plc')newHardware(id,'PLC');
+  else if(a==='add-host')newHardware(id);
   else if(a==='create-device')newDevice();
   else if(a==='create-process'){if(!can(state,'asset.create'))return;showDialog('新增工序','虚构演示厂区',`<div class="field-group"><label>工序名称<input name="name" required /></label><label>内部代码<div class="readonly-field">自动生成，无需人工填写</div></label></div>`,`${button('取消','close')}${submitButton('创建工序')}`,false,form=>{if(!can(state,'asset.create'))throw new Error('无操作权限');const id='prototype-process-'+state.sequence++;state.processes.push({id,name:String(form.get('name'))});selectScope(state,{processId:id});closeDialog();render();toast('原型：工序已创建，可在该工序下新增设备。');});}
   else if(a==='update')updateDialog(id);
@@ -293,7 +318,7 @@ document.addEventListener('click',event=>{
   else if(a==='plc-api'){const archive=state.archives.find(x=>x.id===id);if(!archive||!can(state,'access.manage',archive.deviceId))return;showDialog('PLC API 上传',product(archive.productId).name,`<div class="notice-inline">接口契约待实现；本原型没有可调用的上传端点。</div><div class="steps"><div class="step">创建受限上传凭据<span>固定程序库与允许的验证对象</span></div><div class="step">工具上传程序归档<span>登记资料、传输、摘要校验</span></div><div class="step">进入测试版<span>凭据无发布权限</span></div><div class="step">人员现场验证<span>在网页转为正式归档</span></div></div><div class="muted-box">不使用人员 Cookie 或现场软件的上报凭据。原型不显示或生成真实 Token。</div>`,button('关闭','close'),true);}
   else if(a==='prototype-download')toast('原型没有真实程序文件，正式实现后下载需当前授权并记录审计。');
   else if(a==='settings-people'){render();}
-  else if(a==='connections'){if(!can(state,'identity.manage'))return;showDialog('GitLab 连接','系统管理',`${fact('连接名称','厂内 GitLab（演示占位）')}${fact('服务地址','部署时配置')}${fact('凭据','不在原型中读取或保存')}<div class="notice-inline source-detail">真实连接由部署配置维护。网页连接管理尚待实现；软件关联从“版本与来源”进入。</div>`,button('关闭','close'),true);}
+  else if(a==='connections')connectionDialog();
   else if(a==='role-detail'){selectedRole=id;render();}
   else if(a==='preview-role'){closeDialog();catalogInput={query:'',kind:'all'};selectRole(state,id);state.page='workbench';render();}
   else if(a==='account')accountMenu();
@@ -303,8 +328,8 @@ document.addEventListener('click',event=>{
 document.addEventListener('change',event=>{
   const x=event.target;
   if(x.id==='role-select'){closeDialog();catalogInput={query:'',kind:'all'};selectRole(state,x.value);render();}
-  else if(x.id==='scope-picker'){const [type,id]=x.value.split('|');focusScope(type==='device'?{deviceId:id}:{processId:id||null});}
-  else if(x.id==='add-kind')addSoftware(x.dataset.device,x.value);
+  else if(x.id==='scope-picker'){const [type,id,hardwareId]=x.value.split('|');focusScope(type==='hardware'?{deviceId:id,hardwareId}:type==='device'?{deviceId:id}:{processId:id||null});}
+  else if(x.id==='add-kind')addSoftware(x.dataset.device,x.value,x.dataset.hardware);
   else if(x.name==='workspace-target'){
     try{selectTarget(state,x.value,x.checked);const count=document.querySelector('#selected-count');if(count)count.textContent=`已选 ${state.selectedTargets.length} 个安装位置（含其他页）`;document.querySelector('[data-action="confirm-update"]').disabled=!state.selectedTargets.length;}
     catch(error){toast(error.message);render();}
