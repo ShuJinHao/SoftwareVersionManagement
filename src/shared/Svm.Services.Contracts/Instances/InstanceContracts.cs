@@ -31,9 +31,9 @@ public sealed record AccessProof(ActorKind Kind, Guid Id, string Secret)
 { public override string ToString() => "AccessProof [redacted]"; }
 public interface IAccessProofSource { AccessProof? Proof { get; } }
 public sealed record AccessIdentity(ActorKind Kind, Guid SubjectId, Guid SoftwareId, Guid? InstanceId);
-public sealed record InstanceIdentity(Guid Id, Guid SoftwareId, Guid DeviceId, string Lifecycle, long Revision);
+public sealed record InstanceIdentity(Guid Id, Guid SoftwareId, Guid DeviceId, string Lifecycle, long Revision, Guid? HardwareBindingId = null);
 public sealed record GrantView(Guid Id, Guid SoftwareId, IReadOnlyList<Guid>? DeviceIds, Guid? InstanceId, string State,
-    DateTimeOffset ExpiresAt, int MaxInstances, int UsedCount, long Revision);
+    DateTimeOffset ExpiresAt, int MaxInstances, int UsedCount, long Revision, Guid? HardwareBindingId = null, long? HardwareBindingRevision = null);
 public sealed record CredentialView(Guid Id, Guid SubjectId, DateTimeOffset? ExpiresAt, DateTimeOffset? RevokedAt, long Revision);
 public sealed record RegistrationResult(Guid InstanceId, Guid CredentialId, Guid SoftwareId, long StreamEpoch);
 public sealed record StreamResult(long StreamEpoch, int NextReportSeq = 1);
@@ -49,7 +49,8 @@ public sealed record ClientContext(Guid InstanceId, Guid SoftwareId, Guid SiteId
 public sealed record InstanceLocation(Guid SiteId, string SiteName, Guid ProcessId, string ProcessCode, string ProcessName);
 public sealed record InstanceView(Guid Id, Guid SoftwareId, Guid DeviceId, string DeviceNo, string DeviceName, InstanceLocation Location,
     string Lifecycle, StateReport? LastSnapshot, DateTimeOffset? LastAcceptedAt, long? UnreportedSeconds, string Freshness,
-    Guid? LatestAvailableFormalReleaseId, Guid? LatestTaskId, string? LatestTaskResult, long Revision);
+    Guid? LatestAvailableFormalReleaseId, Guid? LatestTaskId, string? LatestTaskResult, long Revision,
+    Guid? HardwareBindingId = null, Guid? HardwareId = null, string? HardwareName = null, string? ManagementIp = null);
 public sealed record InstallationHistoryView(Guid Id, Guid InstanceId, string InstallationState, Guid? InstalledReleaseId,
     string? InstalledVersion, DateTimeOffset? InstalledAt, DateTimeOffset ReceivedAt, string ReportedRunningState);
 public sealed record InstanceFilter(Guid SoftwareId, Guid? ProcessId = null, Guid? DeviceId = null, string? DeviceNo = null,
@@ -80,7 +81,8 @@ public interface IManagedInstances
 {
     Task VerifyInstallationEvidenceAsync(Guid evidenceId, Guid softwareId, Guid releaseId, string version, CancellationToken token);
     Task<InstanceIdentity?> GetIdentityAsync(Guid id, bool protect, CancellationToken token);
-    Task CreateAsync(Guid id, Guid softwareId, Guid deviceId, Guid installationKey, CancellationToken token);
+    Task CreateAsync(Guid id, Guid softwareId, Guid deviceId, Guid installationKey, CancellationToken token, Guid? hardwareBindingId = null);
+    Task<InstanceIdentity> BindHardwareAsync(Guid id, long revision, Guid hardwareBindingId, CancellationToken token);
     Task<long> InvalidateStreamAsync(Guid instanceId, CancellationToken token);
     Task<InstanceIdentity> LifecycleAsync(Guid id, long revision, string lifecycle, CancellationToken token);
     Task<ClientContext> ContextAsync(Guid id, CancellationToken token);

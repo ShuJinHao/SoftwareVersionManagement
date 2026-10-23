@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Svm.Services.Contracts.Catalog;
@@ -50,11 +51,11 @@ public sealed class InstanceAccessTests
     [Fact]
     public async Task MappingRevocationAndRegistrationHaveOneConsistentWinner()
     {
-        await using var f=await InstanceFixture.CreateAsync(); var g=await f.GrantAsync(); var b=Assert.Single((await f.SendAsync(new ListBindingsQuery(f.Device.Id,new(new(),50)))).Items);
-        async Task<bool> Enroll() { try { await f.SendAsync(new RegisterInstanceCommand(Guid.NewGuid(),f.SoftwareId,Guid.NewGuid(),f.Device.Id,InstanceFixture.Secret()),g.Proof); return true; } catch(RequestRejectedException e) when(e.Failure is RequestFailure.InvalidState or RequestFailure.ResourceNotFound) { return false; } }
-        async Task<bool> Revoke() { try { await f.SendAsync(new RevokeBindingCommand(Guid.NewGuid(),f.Device.Id,f.SoftwareId,b.Revision,"并发撤销")); return true; } catch(RequestRejectedException e) when(e.Failure==RequestFailure.InvalidState) { return false; } }
+        await using var f=await InstanceFixture.CreateAsync(); var g=await f.GrantAsync(); await using var provider=f.Provider(); await using var scope=provider.CreateAsyncScope(); var b=await scope.ServiceProvider.GetRequiredService<IHardwareAssets>().BindingAsync(g.Grant.HardwareBindingId!.Value,false,default);
+        async Task<bool> Enroll() { try { await f.SendAsync(new RegisterInstanceCommand(Guid.NewGuid(),f.SoftwareId,Guid.NewGuid(),f.Device.Id,InstanceFixture.Secret()),g.Proof); return true; } catch(RequestRejectedException e) when(e.Failure is RequestFailure.InvalidState or RequestFailure.ResourceNotFound or RequestFailure.RevisionConflict) { return false; } }
+        async Task<bool> Revoke() { try { await f.SendAsync(new RevokeHardwareBindingCommand(Guid.NewGuid(),b.HardwareId,f.SoftwareId,b.Revision,"并发撤销")); return true; } catch(RequestRejectedException e) when(e.Failure is RequestFailure.InvalidState or RequestFailure.RevisionConflict) { return false; } }
         var results=await Task.WhenAll(Enroll(),Revoke()); Assert.Equal(1,results.Count(x=>x));
-        var count=await f.CountAsync("ins.instances"); Assert.Equal(results[0]?1:0,count); var bindings=await f.SendAsync(new ListBindingsQuery(f.Device.Id,new(new(),50))); Assert.Equal(count==1,bindings.Items.Count==1);
+        var count=await f.CountAsync("ins.instances"); Assert.Equal(results[0]?1:0,count); var bindings=await f.SendAsync(new ListHardwareBindingsQuery(b.HardwareId,new(new(),50))); Assert.Equal(count==1,bindings.Items.Count==1);
     }
     [Theory][InlineData("audit")][InlineData("save")][InlineData("cancel")]
     public async Task RegistrationFailureRollsBackQuotaBindingReferenceCredentialAuditAndResult(string stage)
@@ -64,6 +65,9 @@ public sealed class InstanceAccessTests
         await Assert.ThrowsAnyAsync<Exception>(()=>f.SendAsync(new RegisterInstanceCommand(Guid.NewGuid(),f.SoftwareId,Guid.NewGuid(),f.Device.Id,InstanceFixture.Secret()),g.Proof,interceptor:interceptor,auditFailure:stage=="audit",token:ct.Token));
         foreach(var table in new[] { "ins.instances","iam.instance_subjects","iam.instance_credentials","iam.registrations","ins.instance_snapshots" }) Assert.Equal(0,await f.CountAsync(table));
         Assert.Equal(audit,await f.CountAsync("aud.events")); Assert.Equal(0,Assert.Single((await f.SendAsync(new ListEnrollmentGrantsQuery(f.SoftwareId))).Items).UsedCount);
+        await using var provider=f.Provider(); await using var scope=provider.CreateAsyncScope();
+        var position=await scope.ServiceProvider.GetRequiredService<IHardwareAssets>().BindingAsync(g.Grant.HardwareBindingId!.Value,false,default);
+        Assert.Null(position.InstanceId); await f.SendAsync(new RevokeHardwareBindingCommand(Guid.NewGuid(),position.HardwareId,f.SoftwareId,position.Revision,"回滚后撤销空位置"));
         var b=Assert.Single((await f.SendAsync(new ListBindingsQuery(f.Device.Id,new(new(),50)))).Items); await f.SendAsync(new RevokeBindingCommand(Guid.NewGuid(),f.Device.Id,f.SoftwareId,b.Revision,"引用随回滚清除"));
     }
     [Fact]
@@ -119,7 +123,7 @@ public sealed class InstanceAccessTests
     public async Task CurrentHumanAuthorizationPrecedesReplayAndSecretsAreUnreadableToQueryRole()
     {
         await using var f=await InstanceFixture.CreateAsync(); var g=await f.GrantAsync();
-        var command=new CreateEnrollmentGrantCommand(Guid.NewGuid(),f.SoftwareId,[f.Device.Id],f.Clock.GetUtcNow().AddHours(1),1,InstanceFixture.Secret(),"授权重放夹具"); await f.SendAsync(command);
+        var position=await f.PositionAsync(); var command=new CreateEnrollmentGrantCommand(Guid.NewGuid(),f.SoftwareId,[f.Device.Id],f.Clock.GetUtcNow().AddHours(1),1,InstanceFixture.Secret(),"授权重放夹具",position.Id,position.Revision); await f.SendAsync(command);
         var count=await f.CountAsync("iam.enrollment_grants"); var u=await f.Site.UserAsync(f.Site.Proof.SubjectId);
         await f.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(),u.Id,u.Revision,u.Permissions.Where(p=>p.Operation!="enrollment.manage").ToArray(),"撤销夹具授权"));
         await Rejected(RequestFailure.ResourceNotFound,()=>f.SendAsync(new ListEnrollmentGrantsQuery(f.SoftwareId)));

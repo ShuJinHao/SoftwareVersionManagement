@@ -11,6 +11,8 @@ import { type Instance, formatTime } from '../instances'
 import { type Release } from '../packages'
 import { type Selection, type Deployment, type Batch, type InstanceTask, type Admission, type Receipt, type IntegrationMaterial, type DeploymentCapabilities, type TaskWork, type ControlItem, taskEnded, taskState, waitReason, admissionReason, utcInput, lines } from '../tasks'
 
+const props = defineProps<{ presetTargets?: Instance[] }>()
+const fixedTargets = ref(props.presetTargets?.length ? JSON.parse(JSON.stringify(props.presetTargets)) as Instance[] : null)
 const route = useRoute(), session = useSession(), mutation = useProtectedMutation()
 const { busy, uncertain, error } = mutation
 const softwareId = typeof route.query.softwareId === 'string' ? route.query.softwareId : ''
@@ -22,9 +24,9 @@ const caps = ref<DeploymentCapabilities | null>(null), releases = ref<Release[]>
 const selected = ref<Deployment | null>(null), batches = ref<Batch[]>([]), tasks = ref<InstanceTask[]>([]), admissions = ref<Admission[]>([]), receipts = ref<Receipt[]>([]), receiptTask = ref('')
 const batchNext = ref<string | null>(null), controlWork = ref<TaskWork | null>(null), controlItems = ref<ControlItem[]>([]), controlNext = ref<string | null>(null)
 const instanceNext = ref<string | null>(null), deploymentNext = ref<string | null>(null), taskNext = ref<string | null>(null), admissionNext = ref<string | null>(null), receiptNext = ref<string | null>(null), releaseNext = ref<string | null>(null)
-const loading = ref(false), detailLoading = ref(false), failure = ref(''), notice = ref(''), launchOpen = ref(false), mode = ref('Explicit')
+const loading = ref(false), detailLoading = ref(false), failure = ref(''), notice = ref(''), launchOpen = ref(!!fixedTargets.value), mode = ref('Explicit')
 const filter = ref({ processId: '', deviceId: typeof route.query.deviceId === 'string' ? route.query.deviceId : '', deviceNo: '', reportedIp: '', installedReleaseId: '', freshness: '', runningState: '', lifecycle: '' })
-const chosen = ref(new Set<string>()), reason = ref(''), useDefaultWindow = ref(true), start = ref(''), end = ref(''), retryOf = ref<string | null>(null)
+const chosen = ref(new Set<string>(fixedTargets.value?.map(x=>x.id))), reason = ref(''), useDefaultWindow = ref(true), start = ref(''), end = ref(''), retryOf = ref<string | null>(null)
 const selection = ref<Selection | null>(null), launchStage = ref<'selection' | 'chunks' | 'seal' | 'deployment'>('selection'), chunk = ref(0)
 interface LaunchDraft { ownerId: string | null; softwareId: string; mode: string; filter: Record<string, unknown> | null; ids: readonly string[]; targetReleaseId: string | null; window: { notBefore: string; latestStart: string } | null; reason: string; retryOfDeploymentId: string | null; chunkSize: number }
 const launchDraft = ref<Readonly<LaunchDraft> | null>(null), launchRunning = ref(false)
@@ -56,7 +58,7 @@ async function read<T>(name: string, reset: boolean, allowed: () => boolean, act
 const get = <T,>(path: string, signal: AbortSignal) => request<T>(path,'GET',undefined,undefined,undefined,{signal})
 const appliedInstanceFilter = ref({...filter.value})
 function query(filters = filter.value) { const q = new URLSearchParams({ softwareId, pageSize: '50' }); for (const [k,v] of Object.entries(filters)) if (v) q.set(k,v); return q }
-async function loadInstances(cursor?: string | null) { const applied = {...(cursor ? appliedInstanceFilter.value : filter.value)}; const q = query(applied); if (cursor) q.set('cursor',cursor)
+async function loadInstances(cursor?: string | null) { if(fixedTargets.value) { instances.value = fixedTargets.value; return }  const applied = {...(cursor ? appliedInstanceFilter.value : filter.value)}; const q = query(applied); if (cursor) q.set('cursor',cursor)
   await read('instances',!cursor,() => canRead.value,signal => get<Page<Instance>>('/api/v1/manage/instances?' + q,signal),p => { instances.value = cursor ? unique(instances.value,p.items,x=>x.id) : p.items; instanceNext.value = p.nextCursor; appliedInstanceFilter.value = applied }) }
 async function loadDeployments(cursor?: string | null) { const q = new URLSearchParams({ softwareId, pageSize: '50' }); if (cursor) q.set('cursor',cursor)
   await read('deployments',!cursor,() => canRead.value,signal => get<Page<Deployment>>('/api/v1/manage/deployments?' + q,signal),p => { deployments.value = cursor ? unique(deployments.value,p.items,x=>x.id) : p.items; deploymentNext.value = p.nextCursor; observe(p) }) }
@@ -89,7 +91,7 @@ async function more(kind: 'tasks' | 'targets' | 'batches') { const id=detailId; 
   })
 }
 function toggle(id: string) { const set = new Set(chosen.value); if (set.has(id)) set.delete(id); else set.add(id); chosen.value = set }
-const selectedNames = computed(() => instances.value.filter(x => chosen.value.has(x.id)).map(x => `${x.deviceName} / ${x.deviceNo} / ${x.id}`))
+const selectedNames = computed(() => instances.value.filter(x => chosen.value.has(x.id)).map(x => `${x.deviceName} / ${x.hardwareName ?? '待补充归属'} / ${x.deviceNo}`))
 function filterInput() { return Object.fromEntries([['softwareId',softwareId],...Object.entries(filter.value).map(([k,v]) => [k,v || null])]) }
 async function launch() {
   if (!canCreate.value || !caps.value || busy.value || launchRunning.value) return
@@ -189,7 +191,7 @@ async function showControlWork(id: string, cursor?: string | null) {
 async function refreshControlSummary() {const id=controlId,parent=detailId; if (!id) return; await read('controlSummary',false,() => canRead.value && detailId===parent && controlId===id,signal => get<TaskWork>('/api/v1/manage/deployment-work/'+id,signal),work => {controlWork.value=work})}
 function resetDraft() {if(locked.value) return; launchActive.value=false; launchDraft.value=null; selection.value=null; launchStage.value='selection'; chunk.value=0; notice.value='已解锁表单。先前未投放的目标集合仍保留，可重新核对后创建。'}
 function retry() {if(!selected.value || !canCreate.value) return; const ended=tasks.value.filter(x=>taskEnded(x.state)); if(!ended.length) {failure.value='当前已加载任务中没有可重试的已结束对象。'; return}
-  retryOf.value=selected.value.id; chosen.value=new Set(ended.map(x=>x.instanceId)); mode.value='Explicit'; selectedReleaseId.value=selected.value.targetReleaseId; launchOpen.value=true; notice.value='已选择当前加载的已结束任务对象。新投放保留原任务引用，仍会重新准入。'}
+  fixedTargets.value=null; retryOf.value=selected.value.id; chosen.value=new Set(ended.map(x=>x.instanceId)); mode.value='Explicit'; selectedReleaseId.value=selected.value.targetReleaseId; launchOpen.value=true; notice.value='已选择当前加载的已结束任务对象。新投放保留原任务引用，仍会重新准入。'}
 async function showReceipts(id: string, cursor?: string | null) {
   const parent=detailId
   if (!cursor) {invalidate('receipts'); receiptTask.value=id; receipts.value=[]; receiptNext.value=null}
@@ -220,11 +222,11 @@ onUnmounted(() => {disposed=true; for(const s of scopes.values()) s.invalidate()
   <section v-if="canCreate" class="panel"><div class="section-heading"><h2>目标投放</h2><button :disabled="locked || launchActive || !caps" @click="launchOpen = !launchOpen">选择更新目标</button></div>
     <p v-if="caps" class="muted">厂区时区 {{ caps.timeZone }} · 配置时段 {{ caps.defaultStartLocalTime }}—{{ caps.defaultLatestStartLocalTime }} · 每批 {{ caps.batchSize }} · 失败阈值 {{ caps.failureLimit }} · 等待 {{ caps.resultWaitSeconds }} 秒</p>
     <form v-if="launchOpen" @submit.prevent="launch"><fieldset :disabled="locked || launchActive"><label>正式目标版本<select v-model="selectedReleaseId"><option value="">创建时固定最新可用正式版</option><option v-for="r in releases.filter(x => x.state === 'Formal')" :key="r.id" :value="r.id">{{ r.version }} · {{ r.id }}</option></select></label><button v-if="releaseNext" type="button" @click="loadReleases(releaseNext)">更多正式版本</button>
-      <label>目标方式<select v-model="mode"><option value="Explicit">明确选择实例</option><option value="Filter">按筛选条件封存</option></select></label>
+      <template v-if="!fixedTargets"><label>目标方式<select v-model="mode"><option value="Explicit">明确选择实例</option><option value="Filter">按筛选条件封存</option></select></label>
       <div class="form-grid"><label>设备编号<input v-model="filter.deviceNo" /></label><label>工序标识<input v-model="filter.processId" placeholder="已有工序 ID，可留空" /></label><label>设备标识<input v-model="filter.deviceId" placeholder="已有设备 ID，可留空" /></label><label>上报 IP<input v-model="filter.reportedIp" /></label><label>已安装平台版本 ID<input v-model="filter.installedReleaseId" /></label><label>新鲜度<select v-model="filter.freshness"><option value="">全部</option><option value="Fresh">正常上报</option><option value="Unknown">状态未知</option><option value="NeverReported">尚未上报</option></select></label><label>运行状态<select v-model="filter.runningState"><option value="">全部</option><option value="Running">运行</option><option value="Stopped">停止</option><option value="Unknown">未知</option></select></label><label>接入状态<select v-model="filter.lifecycle"><option value="">全部</option><option value="Active">启用</option><option value="Suspended">暂停接入</option></select></label></div>
       <button v-if="canRead" type="button" @click="loadInstances().catch(fail)">查询目标实例</button><p v-if="mode === 'Filter'">提交后由服务器在同一个数据库快照内封存符合条件的成员。下方列表用于查看，不能代替封存结果。</p>
       <div v-if="canRead" class="table-wrap" tabindex="0" role="region" aria-label="可横向滚动的数据表格"><table><thead><tr><th>选择</th><th>设备名称 / 编号</th><th>实例</th><th>实际上报版本</th><th>接入</th></tr></thead><tbody><tr v-for="i in instances" :key="i.id"><td><input type="checkbox" :disabled="mode !== 'Explicit'" :checked="chosen.has(i.id)" @change="toggle(i.id)" :aria-label="'选择实例 '+i.id" /></td><td>{{ i.deviceName }} / {{ i.deviceNo }}</td><td>{{ i.id }}</td><td>{{ i.lastSnapshot?.installedVersion ?? '尚未上报' }}</td><td>{{ i.lifecycle }}</td></tr></tbody></table><p v-if="!instances.length">当前筛选没有可展示的实例。</p><button v-if="instanceNext" type="button" @click="loadInstances(instanceNext).catch(fail)">加载更多实例</button></div>
-      <p v-if="mode === 'Explicit'">已选择 {{ chosen.size }} 个实例</p><ul><li v-for="name in selectedNames" :key="name">{{ name }}</li></ul>
+      </template><p v-if="fixedTargets" class="success">已带入工作台勾选的安装位置，无需再次选择设备。返回工作台可重新选择。</p><p v-if="mode === 'Explicit'">已选择 {{ chosen.size }} 个实例</p><ul><li v-for="name in selectedNames" :key="name">{{ name }}</li></ul>
       <label><input type="checkbox" v-model="useDefaultWindow" />使用配置的下一时段</label><div v-if="!useDefaultWindow" class="form-grid"><label>UTC 开始<input type="datetime-local" v-model="start" required /></label><label>UTC 最晚开始<input type="datetime-local" v-model="end" required /></label></div>
       <label>投放原因<textarea v-model="reason" maxlength="256" required /></label><p v-if="retryOf">重试来源：{{ retryOf }}；新投放重新准入，不修改原任务。</p>
     </fieldset><p v-if="launchDraft" class="state-card">已冻结投放草稿：{{ launchDraft.targetReleaseId ?? '由服务器创建时固定最新可用正式版' }} · {{ launchDraft.mode === 'Explicit' ? '明确选择' : '筛选快照' }} · {{ launchDraft.reason }}。资料查询不会改变此草稿。</p><button type="submit" :disabled="locked || !caps">{{ launchActive ? '刷新封存结果并继续' : '封存目标并创建更新投放' }}</button><button v-if="launchActive && !uncertain" type="button" :disabled="busy" @click="resetDraft">重新核对目标表单</button><p v-if="selection">封存状态 {{ selection.state }} · {{ selection.memberCount }} 个成员</p></form>

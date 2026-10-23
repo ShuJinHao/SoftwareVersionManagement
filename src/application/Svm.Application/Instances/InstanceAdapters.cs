@@ -1,3 +1,4 @@
+using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.Contracts.Identity;
 using Svm.Services.Contracts.Instances;
@@ -7,7 +8,7 @@ namespace Svm.Application.Instances;
 
 internal sealed class CreateEnrollmentGrantCommandAdapter(IInstanceAccess access,IPersonnelCrypto crypto) : IIdempotencyRequestAdapter<CreateEnrollmentGrantCommand,OperationResult<GrantView>>
 {
-    public OperationRequestData Describe(CreateEnrollmentGrantCommand x) => new(x.Key,OperationValue.Object(),OperationValue.Object(new OperationField("SoftwareId",OperationValue.Identifier(x.SoftwareId)),new OperationField("DeviceIds",OperationValue.Array(x.DeviceIds.Select(OperationValue.Identifier).ToArray())),new OperationField("ExpiresAt",OperationValue.Timestamp(x.ExpiresAt)),new OperationField("MaxInstances",OperationValue.Integer(x.MaxInstances)),new OperationField("SecretMaterial",OperationValue.Text(crypto.HashSecret(x.SecretMaterial))),new OperationField("Reason",OperationValue.Text(x.Reason))));
+    public OperationRequestData Describe(CreateEnrollmentGrantCommand x) => new(x.Key,OperationValue.Object(),OperationValue.Object([..(x.HardwareBindingId is { } position ? new[] { new OperationField("HardwareBindingId", OperationValue.Identifier(position)), new OperationField("HardwareBindingRevision", x.HardwareBindingRevision is { } rev ? OperationValue.Integer(rev) : OperationValue.Null) } : Array.Empty<OperationField>()), new OperationField("SoftwareId",OperationValue.Identifier(x.SoftwareId)),new OperationField("DeviceIds",OperationValue.Array(x.DeviceIds.Select(OperationValue.Identifier).ToArray())),new OperationField("ExpiresAt",OperationValue.Timestamp(x.ExpiresAt)),new OperationField("MaxInstances",OperationValue.Integer(x.MaxInstances)),new OperationField("SecretMaterial",OperationValue.Text(crypto.HashSecret(x.SecretMaterial))),new OperationField("Reason",OperationValue.Text(x.Reason))]));
     public OperationResultReference GetReference(OperationResult<GrantView> x) => new(x.OperationId,x.Status,x.ResourceId);
     public async Task<OperationResult<GrantView>> RestoreAsync(OperationResultReference r,CancellationToken t)
     {
@@ -96,4 +97,18 @@ internal sealed class SubmitStatusReportCommandAdapter(IManagedInstances instanc
 {
     public async Task<ProtocolResult<OperationResult<ReportResult>>?> FindCommittedAsync(SubmitStatusReportCommand x,CancellationToken t)
     { if(x.Report.InstalledReleaseId is { } releaseId) { if(releases is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound); await releases.VerifyInstallationAsync(calls.Current!.Actor.SoftwareId!.Value,releaseId,x.Report.InstalledVersion,t); } var id=calls.Current!.Actor.InstanceId!.Value; var v=await instances.FindReportAsync(id,x.Report,t); return v is null ? null : new(OperationResult<ReportResult>.Completed(id,v,id)); }
+}
+
+internal sealed class BindInstanceHardwareCommandAdapter(IManagedInstances instances) : IIdempotencyRequestAdapter<BindInstanceHardwareCommand, OperationResult<InstanceIdentity>>
+{
+    public OperationRequestData Describe(BindInstanceHardwareCommand x) => new(x.Key,
+        OperationValue.Object(new OperationField("InstanceId", OperationValue.Identifier(x.InstanceId))),
+        OperationValue.Object(new OperationField("HardwareBindingId", OperationValue.Identifier(x.HardwareBindingId)), new OperationField("ExpectedRevision", OperationValue.Integer(x.ExpectedRevision)), new OperationField("ExpectedBindingRevision", OperationValue.Integer(x.ExpectedBindingRevision)), new OperationField("Reason", OperationValue.Text(x.Reason))));
+    public OperationResultReference GetReference(OperationResult<InstanceIdentity> x) => new(x.OperationId, x.Status, x.ResourceId);
+    public async Task<OperationResult<InstanceIdentity>> RestoreAsync(OperationResultReference r, CancellationToken token)
+    {
+        var id = r.ResourceId ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        var view = await instances.GetIdentityAsync(id, false, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        return OperationResult<InstanceIdentity>.Completed(r.OperationId, view, id);
+    }
 }

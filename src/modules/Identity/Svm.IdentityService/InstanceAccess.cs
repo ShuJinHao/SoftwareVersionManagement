@@ -78,6 +78,8 @@ internal sealed class InstanceAccess(IInstanceAccessRepository repository, IPers
         if (grant.SoftwareId != input.SoftwareId) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         var row = await repository.RegistrationAsync(input.SoftwareId, input.InstallationKey, grant.Id.Value, input.Key, protect, token);
         if (row is not null) { await VerifyOriginalAsync(row, grant.Id.Value, input, protect, token); return; }
+        // Historical broad grants may only verify a committed original registration above.
+        if (grant.HardwareBindingId is null || grant.HardwareBindingRevision is null) throw new RequestRejectedException(RequestFailure.InvalidState);
         RequireGrant(grant.State(Now));
         if (!grant.DeviceIds.Contains(input.DeviceId)) throw new RequestRejectedException(RequestFailure.PermissionDenied);
     }
@@ -145,7 +147,9 @@ internal sealed class InstanceAccess(IInstanceAccessRepository repository, IPers
     public Task<GrantView> CreateEnrollmentAsync(CreateEnrollmentGrantCommand x, CancellationToken token)
     {
         token.ThrowIfCancellationRequested(); RequireWrite(); options.CheckEnrollment(Now, x.ExpiresAt, x.MaxInstances);
-        var grant = new EnrollmentPermission(new(Guid.NewGuid()), x.SoftwareId, x.DeviceIds.ToArray(), crypto.HashSecret(x.SecretMaterial), x.ExpiresAt, x.MaxInstances);
+        if (x.HardwareBindingId is null || x.HardwareBindingRevision is null || x.MaxInstances != 1 || x.DeviceIds.Count != 1)
+            throw new RequestRejectedException(RequestFailure.ValidationFailed);
+        var grant = new EnrollmentPermission(new(Guid.NewGuid()), x.SoftwareId, x.DeviceIds.ToArray(), crypto.HashSecret(x.SecretMaterial), x.ExpiresAt, x.MaxInstances, x.HardwareBindingId, x.HardwareBindingRevision);
         repository.AddEnrollment(grant); return Task.FromResult(View(grant));
     }
     public async Task<GrantView> RevokeEnrollmentAsync(Guid id, long revision, CancellationToken token)
@@ -168,7 +172,7 @@ internal sealed class InstanceAccess(IInstanceAccessRepository repository, IPers
     }
     public async Task<GrantView> GrantAsync(Guid id, bool recovery, CancellationToken token) => recovery ? View(await repository.RecoveryAsync(id,false,token) ?? throw Missing()) : View(await repository.EnrollmentAsync(id,false,token) ?? throw Missing());
     public async Task<CredentialView> CredentialAsync(Guid id, CancellationToken token) => View(await repository.CredentialAsync(id,false,token) ?? throw Missing());
-    private GrantView View(EnrollmentPermission g) => new(g.Id.Value,g.SoftwareId,g.DeviceIds,null,g.State(Now),g.ExpiresAt,g.MaxInstances,g.UsedCount,g.Revision);
+    private GrantView View(EnrollmentPermission g) => new(g.Id.Value,g.SoftwareId,g.DeviceIds,null,g.State(Now),g.ExpiresAt,g.MaxInstances,g.UsedCount,g.Revision,g.HardwareBindingId,g.HardwareBindingRevision);
     private GrantView View(RecoveryPermission g) => new(g.Id.Value,g.SoftwareId,null,g.InstanceId.Value,g.State(Now),g.ExpiresAt,1,g.UsedKey is null ? 0 : 1,g.Revision);
     private static CredentialView View(InstanceCredential c) => new(c.Id,c.SubjectId.Value,c.ExpiresAt,c.RevokedAt,c.Revision);
     private string RegistrationDigest(RegisterInstanceCommand x) => Hash(JsonSerializer.Serialize(new { x.SoftwareId,x.InstallationKey,x.DeviceId,secretHash=crypto.HashSecret(x.SecretMaterial) }));

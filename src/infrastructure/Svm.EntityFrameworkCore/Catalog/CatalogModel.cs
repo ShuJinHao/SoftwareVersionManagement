@@ -24,6 +24,7 @@ internal static class CatalogModel
         var device = model.Entity<ProductionDevice>(); device.ToTable("devices", "ins"); device.HasKey(x => x.Id);
         device.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<ProductionDevice>(x)).ValueGeneratedNever(); device.Ignore(x => x.DomainEvents);
         device.Property(x => x.ProcessId).HasConversion(x => x.Value, x => new StrongId<ProductionProcess>(x));
+        device.Property(x => x.AssetNumber).HasMaxLength(128);
         device.Property(x => x.DeviceNo).HasMaxLength(64); device.Property(x => x.Name).HasMaxLength(128); device.HasIndex(x => x.DeviceNo).IsUnique();
         device.HasOne<ProductionProcess>().WithMany().HasForeignKey(x => x.ProcessId).OnDelete(DeleteBehavior.Restrict);
         var binding = model.Entity<DeviceSoftwareBinding>(); binding.ToTable("device_software_bindings", "ins"); binding.HasKey(x => x.Id);

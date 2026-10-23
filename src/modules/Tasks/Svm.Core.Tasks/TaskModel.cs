@@ -90,10 +90,11 @@ public sealed class InstanceTask : AggregateRoot<StrongId<InstanceTask>>
 {
     private InstanceTask(StrongId<InstanceTask> id) : base(id) { }
     public InstanceTask(Guid id, Guid deployment, Guid instance, Guid release, DateTimeOffset start,
-        DateTimeOffset end, Guid? retryOf, DateTimeOffset createdAt) : base(new(id))
-    { CreatedAt = createdAt; DeploymentId = new(deployment); InstanceId = instance; TargetReleaseId = release; NotBefore = start; LatestStart = end; RetryOfTaskId = retryOf; }
+        DateTimeOffset end, Guid? retryOf, DateTimeOffset createdAt, Guid? hardwareBindingId = null) : base(new(id))
+    { HardwareBindingId = hardwareBindingId; CreatedAt = createdAt; DeploymentId = new(deployment); InstanceId = instance; TargetReleaseId = release; NotBefore = start; LatestStart = end; RetryOfTaskId = retryOf; }
     public StrongId<Deployment> DeploymentId { get; private set; }
     public Guid InstanceId { get; private set; }
+    public Guid? HardwareBindingId { get; private set; }
     public Guid TargetReleaseId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public StrongId<TaskBatch>? BatchId { get; private set; }

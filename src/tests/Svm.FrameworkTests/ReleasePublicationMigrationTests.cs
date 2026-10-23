@@ -37,7 +37,7 @@ public sealed class ReleasePublicationMigrationTests
             var directory = Path.Combine(OutboxFixture.Root, "artifacts", "release-publication"); Directory.CreateDirectory(directory);
             await File.WriteAllTextAsync(Path.Combine(directory, "release-publication-upgrade.sql"), script);
             var result = await db.Runner.ApplyAsync(default);
-            Assert.Equal(11, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
+            Assert.Equal(12, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
             await using (var c = Context(db)) Assert.False(c.Database.HasPendingModelChanges());
             Assert.Equal(2, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM rel.releases WHERE \"PublishedAt\" IS NULL AND \"TestEvidenceId\" IS NULL"));
             Assert.Equal(1, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM rel.releases WHERE \"State\"='Disabled' AND \"PublishedAt\" IS NULL"));
@@ -53,6 +53,6 @@ public sealed class ReleasePublicationMigrationTests
           SELECT (to_jsonb(x)-ARRAY['PublishedBy','PublishedEmployeeNo','PublishedAt','TestEvidenceId','PublishReason','PublishConclusion','SourceKind','SourceBindingId','SourceTag','SourceFactsJson'])::text value FROM rel.releases x
           UNION ALL SELECT to_jsonb(x)::text FROM pkg.packages x
           UNION ALL SELECT to_jsonb(x)::text FROM ins.installation_evidence x
-          UNION ALL SELECT to_jsonb(x)::text FROM ins.instances x) facts
+          UNION ALL SELECT (to_jsonb(x)-'HardwareBindingId')::text FROM ins.instances x) facts
         """);
 }

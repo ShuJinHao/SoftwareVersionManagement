@@ -3,6 +3,8 @@ export interface StateReport { streamEpoch: number; reportSeq: number; reportedA
 export interface Instance { id: string; softwareId: string; deviceId: string; deviceNo: string; deviceName: string; location: { siteId: string; siteName: string; processId: string; processCode: string; processName: string }; lifecycle: 'Active' | 'Suspended'; lastSnapshot: StateReport | null; lastAcceptedAt: string | null; unreportedSeconds: number | null; freshness: 'NeverReported' | 'Fresh' | 'Unknown'; latestAvailableFormalReleaseId: string | null; latestTaskId: string | null; latestTaskResult: string | null; revision: number }
 export interface Grant { id: string; softwareId: string; deviceIds: string[] | null; instanceId: string | null; state: 'Active' | 'Expired' | 'Exhausted' | 'Revoked' | 'Consumed'; expiresAt: string; maxInstances: number; usedCount: number; revision: number }
 export interface Credential { id: string; subjectId: string; expiresAt: string | null; revokedAt: string | null; revision: number }
+export interface Instance { hardwareBindingId?: string | null; hardwareId?: string | null; hardwareName?: string | null; managementIp?: string | null }
+export interface Grant { hardwareBindingId?: string | null; hardwareBindingRevision?: number | null }
 export interface History { id: string; instanceId: string; installationState: string; installedReleaseId: string | null; installedVersion: string | null; installedAt: string | null; receivedAt: string; reportedRunningState: string }
 export const freshnessName = (x: string) => ({ NeverReported: '尚未上报', Fresh: '正常上报', Unknown: '状态未知' }[x] ?? x)
 export const runningName = (x?: string) => ({ Running: '运行', Stopped: '停止', Unknown: '未知' }[x ?? 'Unknown'] ?? x)

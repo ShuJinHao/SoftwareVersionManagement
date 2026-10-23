@@ -20,7 +20,7 @@ public sealed record SoftwareView(Guid Id, string Code, string Name, string Cate
     Guid? LatestAvailableFormalReleaseId, long Revision);
 public sealed record ProcessView(Guid Id, Guid SiteId, string Code, string Name, long Revision);
 public sealed record DeviceView(Guid Id, string DeviceNo, string Name, Guid ProcessId, string ProcessCode,
-    string ProcessName, Guid SiteId, string SiteName, long Revision);
+    string ProcessName, Guid SiteId, string SiteName, long Revision, string? AssetNumber = null);
 // Id and IsActive support safe internal result reconstruction; HTTP projects the documented public fields.
 public sealed record BindingView(Guid Id, Guid DeviceId, Guid SoftwareId, long Revision, bool IsActive);
 public sealed record DeviceSoftwareInventoryItem(SoftwareView Software, BindingView Binding, Svm.Services.Contracts.Instances.InstanceView? Instance = null);
@@ -34,7 +34,7 @@ public interface ISoftwareCatalog
 {
     Task<bool> ExistsAsync(Guid softwareId, bool protect, CancellationToken token);
     Task<SoftwareView> GetAsync(Guid softwareId, bool protect, CancellationToken token);
-    Task<SoftwareView> CreateAsync(string code, string name, string category, string? description, CancellationToken token);
+    Task<SoftwareView> CreateAsync(string? code, string name, string category, string? description, CancellationToken token);
     Task<SoftwareView> UpdateAsync(Guid softwareId, long revision, string name, string? description, CancellationToken token);
 }
 public interface ISiteAssets
@@ -42,10 +42,10 @@ public interface ISiteAssets
     Task EnsureDeploymentAsync(bool write, CancellationToken token);
     Task<ProcessView> ProcessAsync(Guid id, bool protect, CancellationToken token);
     Task<DeviceView> DeviceAsync(Guid id, bool protect, CancellationToken token);
-    Task<ProcessView> CreateProcessAsync(string code, string name, CancellationToken token);
+    Task<ProcessView> CreateProcessAsync(string? code, string name, CancellationToken token);
     Task<ProcessView> UpdateProcessAsync(Guid id, long revision, string name, CancellationToken token);
-    Task<DeviceView> CreateDeviceAsync(Guid processId, string deviceNo, string name, CancellationToken token);
-    Task<DeviceView> UpdateDeviceAsync(Guid id, long revision, Guid? processId, string? name, CancellationToken token);
+    Task<DeviceView> CreateDeviceAsync(Guid processId, string? deviceNo, string name, CancellationToken token, string? assetNumber = null);
+    Task<DeviceView> UpdateDeviceAsync(Guid id, long revision, Guid? processId, string? name, CancellationToken token, string? assetNumber = null, bool updateAssetNumber = false);
     Task<BindingView> CreateBindingAsync(Guid deviceId, Guid softwareId, CancellationToken token);
     Task<BindingView> RevokeBindingAsync(Guid deviceId, Guid softwareId, long revision, CancellationToken token);
     Task<BindingView> BindingResultAsync(Guid id, CancellationToken token);
@@ -74,10 +74,10 @@ public interface IPersonnelSoftwareAdministration
 }
 public static class CatalogCapabilities
 {
-    public static bool IsWrite(Type type) => type == typeof(CreateSoftwareCommand) || type == typeof(UpdateSoftwareCommand) ||
+    public static bool IsWrite(Type type) => HardwareCapabilities.IsWrite(type) || type == typeof(CreateSoftwareCommand) || type == typeof(UpdateSoftwareCommand) ||
         type == typeof(CreateProcessCommand) || type == typeof(UpdateProcessCommand) || type == typeof(CreateDeviceCommand) ||
         type == typeof(UpdateDeviceCommand) || type == typeof(CreateBindingCommand) || type == typeof(RevokeBindingCommand);
-    public static bool IsQuery(Type type) => type == typeof(GetSiteQuery) || type == typeof(ListSoftwareQuery) || type == typeof(GetSoftwareQuery) ||
+    public static bool IsQuery(Type type) => HardwareCapabilities.IsQuery(type) || type == typeof(GetSiteQuery) || type == typeof(ListSoftwareQuery) || type == typeof(GetSoftwareQuery) ||
         type == typeof(ListProcessesQuery) || type == typeof(GetProcessQuery) || type == typeof(ListDevicesQuery) || type == typeof(GetDeviceQuery) ||
         type == typeof(ListBindingsQuery) || type == typeof(GetDeviceInventoryQuery) || type == typeof(GetPermissionOptionsQuery);
     public static Guid? SoftwareTarget(object request) => request switch

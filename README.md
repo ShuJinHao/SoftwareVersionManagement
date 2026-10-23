@@ -2,11 +2,13 @@
 
 面向隔离厂区的制造业软件版本管控平台。目标交付为 Linux 上的 .NET 8 服务端、网页管理端、管理 API、接入 API 和厂家接入文档。
 
-现场入口按厂区、工序、设备组织；新工作台目标明确为“设备 → 工控机 / PLC 控制器 → 对应程序”，当前硬件强绑定仍为待实现契约；本平台独立维护台账及强制设备映射。上位机、视觉等可执行软件管理版本、EXE 或安装包、投放任务和上报事实；接入方通过 API 获取任务，负责本机安装、回退及数据库和日志保护。PLC 已确认通过共用程序库关联各设备的具体控制器，人工验证转正式并逐控制器保存确认使用记录，后台尚未实现。业务规则以[需求规格说明](docs/需求规格说明.md)为准。
+现场入口按厂区、工序、设备组织；真实工作台按“设备 → 工控机 / PLC 控制器 → 对应程序”展示，硬件强绑定已实现；本平台独立维护台账及强制设备映射。上位机、视觉等可执行软件管理版本、EXE 或安装包、投放任务和上报事实；接入方通过 API 获取任务，负责本机安装、回退及数据库和日志保护。PLC 已确认通过共用程序库关联各设备的具体控制器，人工验证转正式并逐控制器保存确认使用记录，后台尚未实现。业务规则以[需求规格说明](docs/需求规格说明.md)为准。
 
 ## 当前状态
 
-**设备工作区重整处于原型评审阶段。** 已提供[可点击原型及运行说明](design/workspace/README.md)，涵盖多工控机/PLC、上下文添加、自动编号、GitLab 来源和细化权限展示，并按最新反馈收敛为“软件工作台＋系统管理”：同页按工序、设备或软件定位，多对多关联可双向查看，任务进度留在具体安装行；设备页按硬件分组，选软件后明确展示设备和工控机/控制器，版本、来源、IP 和接入资料按需展开。120 款虚构软件通过搜索分页选择，更新只勾选具体安装位置；PLC 演示下载与人工使用登记独立，连接页预览启停与来源绑定流程。所有数据虚构、操作只留内存，不进行真实 GitLab 连通性检查或 PLC 文件下载。新业务规则见需求规格，契约演进见详细设计第 9.3 节。生产网页、API、权限、十一份迁移和开发库尚未改变，不能把原型页面视为新增功能已交付。
+**核心硬件工作台已接入真实 API。** 主导航为“软件工作台 / 系统管理”：按工序找设备，设备内按工控机/PLC 分组，按软件反查授权范围内的全部安装位置。上位机/视觉可在多个工控机复用，同一工控机可关联多个软件；更新直接带入勾选实例。工序/设备/软件内部编号自动生成，原显式编号继续兼容；管理 IP 与上报 IP 分开。许可从固定位置签发，旧实例可一次性补充归属；PLC 当前只交付控制器台账。账号菜单提供本人改密，系统管理展示真实有效权限。GitLab 来源查询、同步及工作查询沿用真实能力，绑定仍由部署配置管理；无绑定明确提示，不提供模拟连接按钮。
+
+设计阶段提供的[可点击原型及运行说明](design/workspace/README.md)，涵盖多工控机/PLC、上下文添加、自动编号、GitLab 来源和细化权限展示，并按最新反馈收敛为“软件工作台＋系统管理”：同页按工序、设备或软件定位，多对多关联可双向查看，任务进度留在具体安装行；设备页按硬件分组，选软件后明确展示设备和工控机/控制器，版本、来源、IP 和接入资料按需展开。120 款虚构软件通过搜索分页选择，更新只勾选具体安装位置；PLC 演示下载与人工使用登记独立，连接页预览启停与来源绑定流程。所有数据虚构、操作只留内存，不进行真实 GitLab 连通性检查或 PLC 文件下载。新业务规则见需求规格，契约演进见详细设计第 9.3 节。原型中的角色/现场范围、网页 GitLab 绑定、PLC 上传/发布/使用记录仍未进入生产能力，不能把演示按钮视为已交付。实际接口见详细设计第 8.3 节；新增第十二份迁移，开发库未升级。
 
 项目已有管理、接入、版本包及正式版更新业务，尚未完成系统验收或生产部署。已有人员管理、现场台账、上位机/视觉软件目录、人员软件授权、设备映射，以及实例登记/恢复、独立凭据和状态上报 API 及同源网页；进程内领域事件、PostgreSQL 工作单元和 RabbitMQ 发送/消费恢复基础保留。设备软件按真实接入事实区分“尚未登记”“尚未上报”和报告新鲜度，展示实际版本、IP、运行及接入状态；未绑定软件已有人工版本登记、包上传/双副本校验、测试下载、安装证据转正式及停用历史；GitLab 绑定软件已接通正式来源导入、双副本就绪后直接开放正式版，再由人员显式创建 Update 任务。本批实际验证见框架设计第 11.1 节，真实 GitLab 联调和完整验收仍待执行。
 
@@ -35,7 +37,7 @@
 
 接入管理路径为 `/api/v1/manage/enrollment-grants`、`instances`、实例下的 `credentials`、`recovery-grants`、`version-history`、`lifecycle`，以及凭据/许可的撤销路径；签发、查询和撤销凭据或许可需软件 enrollment.manage，仅人员，创建软件不会自动取得该权限。厂家使用 `/api/v1/enrollment/instances`、`recoveries` 登记及恢复，独立实例 Bearer 调用 `/api/v1/client/context`、`report-streams`、`status-reports`；正文不能改绑设备或冒充实例。恢复保留身份和安装履历，同事务吊销旧凭据、关闭旧流；接入暂停只拒绝 API，不控制现场软件。
 
-登记许可失效后禁止新增登记；原键、原请求与仍有效的原实例秘密可核实原成功结果，不重新创建或占名额。报告按实例/代次/序号去重，当前相同内容重放不刷新接收时间，同序号不同内容返回 REPORT_CONFLICT，旧序号或旧流 applied=false。快照每实例一行，首次安装事实和安装变化另存履历，不为每分钟心跳追加永久通用幂等记录。严格超过五分钟显示状态未知并保留最后事实，接入方至少每分钟调用一次。现场版本允许未关联平台记录，installedReleaseId 非空时核验真实版本的软件归属及精确版本号，安装履历可关联测试证据；latestAvailableFormalReleaseId 按数字版本选取当前可供包的正式版本，实际安装版本仍取上报；latestTaskId/latestTaskResult 从权限过滤后的有界查询取得，任务结果不自动改写安装事实。
+新登记许可固定一个 hardwareBindingId 及修订，只对应一个设备/软件和一个实例。旧宽范围许可即使尚未到期也禁止新增登记；旧实例持续报告与恢复，待补充归属者不能新建更新或重试。登记许可失效后禁止新增登记；原键、原请求与仍有效的原实例秘密可核实原成功结果，不重新创建或占名额。报告按实例/代次/序号去重，当前相同内容重放不刷新接收时间，同序号不同内容返回 REPORT_CONFLICT，旧序号或旧流 applied=false。快照每实例一行，首次安装事实和安装变化另存履历，不为每分钟心跳追加永久通用幂等记录。严格超过五分钟显示状态未知并保留最后事实，接入方至少每分钟调用一次。现场版本允许未关联平台记录，installedReleaseId 非空时核验真实版本的软件归属及精确版本号，安装履历可关联测试证据；latestAvailableFormalReleaseId 按数字版本选取当前可供包的正式版本，实际安装版本仍取上报；latestTaskId/latestTaskResult 从权限过滤后的有界查询取得，任务结果不自动改写安装事实。
 
 网页与 API 同源，通过 HTTPS 和现有 Cookie/CSRF 使用真实数据。管理写请求携带 `Idempotency-Key`，修改和撤销已有资源另带 `expectedRevision`；当前授权先于重放，合法重放先于旧修订比较。响应不明时页面仅在内存保留原请求及操作键，由人员手动核实，不自动换键或重发；核实时的授权拒绝不能证明原请求已回滚，仍保留原键。密码不写浏览器持久存储。分页默认 50、最大 200；人员按工号/ID，台账及软件按代码或设备编号/ID 固定排序。现场游标绑定主体、部署、筛选、页长和权限修订，默认有效 15 分钟，撤权后旧游标失效。
 
@@ -45,7 +47,9 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 网页操作与包恢复整改已实现：操作对话框固定实例/软件及修订，列表翻页固定已应用筛选；迟到响应不能改写当前详情。复制增加无进展预算，健康副本可及时供包，复制/健康扫描/下载日志独立推进。当前证据、精确选集和后续 R00—R18 台账见软件框架设计第 11.1 节；Linux 演示和最终交付结果单独记录，不把历史 CI 当成本批验证。
 
-本批本机验证：Architecture 79、定向后端31、网页20、网关工具3项通过；网页类型检查/构建及干净 Release 发布通过。Linux arm64 独立容器已完成七阶段 HTTPS/API/浏览器走查（六阶段业务、一次页面展示），截图索引保存在 artifacts/test-results/audit-correctness/pages.md。按需选集和失败/关联复验分别记录，未运行宽泛 Security/Framework、通用 MQ 或 SDK 矩阵。虚构演示为用户页面审阅保留，目录 artifacts/linux-demo/audit-correctness-20261018，停止方式见 RETAINED.md；不是生产部署或实际安装验收。
+2026-10-18 包恢复批次本机验证：Architecture 79、定向后端31、网页20、网关工具3项通过；网页类型检查/构建及干净 Release 发布通过。Linux arm64 独立容器已完成七阶段 HTTPS/API/浏览器走查（六阶段业务、一次页面展示），截图索引保存在 artifacts/test-results/audit-correctness/pages.md。按需选集和失败/关联复验分别记录，未运行宽泛 Security/Framework、通用 MQ 或 SDK 矩阵。虚构演示为用户页面审阅保留，目录 artifacts/linux-demo/audit-correctness-20261018，停止方式见 RETAINED.md；不是生产部署或实际安装验收。
+
+2026-10-24 硬件工作台批次：完整 Architecture 79、定向后端 31、网页 25、工具 2 项通过；编译、网页类型检查/构建、完整 Release 和独立 Linux arm64 HTTPS/API/浏览器流程通过。演示可查看真实硬件分组、共享软件反查及指定工控机更新事实，资料位于 artifacts/test-results/hardware-workspace/linux-demo/pages.md；资源保留和停止方式见 artifacts/linux-demo/hardware-workspace-20261023/RETAINED.md。新增迁移 SQL 位于 artifacts/hardware-workspace/hardware-workspace-upgrade.sql；开发库仍未升级。当前本机演示为明确标记的开发验证制品，非生产交付验收。
 
 验证覆盖、证据位置和待执行项统一见[软件框架设计第 11 节](docs/软件框架设计.md#11-审阅出口与当前验证状态)。本仓库不包含本机验证产物或真实环境配置。
 
@@ -161,7 +165,7 @@ eng/personnel serve
 
 `up` 创建项目独立的 PostgreSQL 容器、卷和角色，仅绑定本机地址。`migrate apply` 和 `seed` 均为显式操作，API/Worker 启动不会自动执行。重复播种不重置现有密码和授权。
 
-OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog、InstanceAccess、ReleasesAndPackages、ReleasePublication、TaskWorkflow 及本批 GitLabReleaseImport 仅在一次性测试库执行。InstanceAccess 建立九张 IAM/INS 表；ReleasesAndPackages 建立七张 REL/PKG 表。ReleasePublication 追加六项发布字段、证据/人员引用及不可变保护；GitLabReleaseImport 保留人工历史并区分两种来源。不生成默认实例、版本、许可或额外授权，十份旧迁移不改，快照同步。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
+OperationResults、BusOutbox、PersonnelAdministrationPermissions、SiteCatalog、InstanceAccess、ReleasesAndPackages、ReleasePublication、TaskWorkflow、GitLabReleaseImport 及 HardwareWorkspace 只在隔离测试库/明确虚构的演示库执行。InstanceAccess 建立九张 IAM/INS 表；ReleasesAndPackages 建立七张 REL/PKG 表。ReleasePublication 追加六项发布字段、证据/人员引用及不可变保护；GitLabReleaseImport 保留人工历史并区分两种来源。HardwareWorkspace 增加硬件、安装位置、编号序列及可空的存量引用；同根事务创建软件/映射的跨模块外键在提交时检查，不提前保存业务。没有默认硬件、设备、实例、版本或授权，十一份旧迁移及其冻结模型不改，快照同步。审阅 SQL：artifacts/hardware-workspace/hardware-workspace-upgrade.sql。开发库仍只应用 InitialSchemas、PersonnelSessions，升级须另行确认。编译 Migration 后生成包含待执行迁移和权限核对的幂等脚本：
 
 ```sh
 mkdir -p artifacts/releases-packages

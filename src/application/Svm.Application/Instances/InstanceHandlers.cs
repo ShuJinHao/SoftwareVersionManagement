@@ -20,12 +20,14 @@ internal sealed class InstanceCompletion(ICallContext calls,IUnitOfWork unitOfWo
         return OperationResult<T>.Completed(id,value,resource);
     }
 }
-internal sealed class CreateEnrollmentGrantCommandHandler(IInstanceAccess access,ISiteAssets assets,InstanceCompletion completion) : IRequestHandler<CreateEnrollmentGrantCommand,OperationResult<GrantView>>
+internal sealed class CreateEnrollmentGrantCommandHandler(IInstanceAccess access,IHardwareAssets hardware,InstanceCompletion completion) : IRequestHandler<CreateEnrollmentGrantCommand,OperationResult<GrantView>>
 {
     public async Task<OperationResult<GrantView>> Handle(CreateEnrollmentGrantCommand x,CancellationToken token)
     {
-        // Validate every fixed device against the active mapping without permanently marking a reference before registration.
-        foreach(var id in x.DeviceIds.Order()) { await assets.DeviceAsync(id,true,token); if(!await assets.HasActiveBindingAsync(id,x.SoftwareId,token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound); }
+        // New grants are fixed to one still vacant position; old successful requests can replay before this handler.
+        if (x.HardwareBindingId is not { } position || x.HardwareBindingRevision is not { } revision || x.DeviceIds.Count != 1 || x.MaxInstances != 1)
+            throw new RequestRejectedException(RequestFailure.ValidationFailed);
+        await hardware.VerifyPositionAsync(position, x.DeviceIds[0], x.SoftwareId, revision, true, token);
         var v=await access.CreateEnrollmentAsync(x,token); return await completion.CompleteAsync(v,v.Id,"iam.enrollment.create",x.Reason,token);
     }
 }
@@ -39,13 +41,16 @@ internal sealed class RevokeInstanceCredentialCommandHandler(IInstanceAccess acc
 { public async Task<OperationResult<CredentialView>> Handle(RevokeInstanceCredentialCommand x,CancellationToken t) { var v=await access.RevokeCredentialAsync(x.CredentialId,x.ExpectedRevision,t); return await c.CompleteAsync(v,v.Id,"iam.instance-credentials.revoke",x.Reason,t); } }
 internal sealed class UpdateInstanceLifecycleCommandHandler(IManagedInstances instances,InstanceCompletion c) : IRequestHandler<UpdateInstanceLifecycleCommand,OperationResult<InstanceIdentity>>
 { public async Task<OperationResult<InstanceIdentity>> Handle(UpdateInstanceLifecycleCommand x,CancellationToken t) { var v=await instances.LifecycleAsync(x.InstanceId,x.ExpectedRevision,x.Lifecycle,t); return await c.CompleteAsync(v,v.Id,"ins.lifecycle.update",x.Reason,t); } }
-internal sealed class RegisterInstanceCommandHandler(IInstanceAccess access,IManagedInstances instances,ISiteAssets assets,ISoftwareCatalog software,InstanceCompletion c) : IRequestHandler<RegisterInstanceCommand,OperationResult<RegistrationResult>>
+internal sealed class RegisterInstanceCommandHandler(IInstanceAccess access,IManagedInstances instances,IHardwareAssets hardware,ISoftwareCatalog software,ICallContext calls,InstanceCompletion c) : IRequestHandler<RegisterInstanceCommand,OperationResult<RegistrationResult>>
 {
     public async Task<OperationResult<RegistrationResult>> Handle(RegisterInstanceCommand x,CancellationToken t)
     {
         if(!await software.ExistsAsync(x.SoftwareId,true,t)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
-        await assets.ConfirmInstanceReferenceAsync(x.DeviceId,x.SoftwareId,t);
-        var id=Guid.NewGuid(); await instances.CreateAsync(id,x.SoftwareId,x.DeviceId,x.InstallationKey,t);
+        var grant = await access.GrantAsync(calls.Current!.Actor.ActorId!.Value, false, t);
+        if (grant.HardwareBindingId is not { } position) throw new RequestRejectedException(RequestFailure.InvalidState);
+        var id=Guid.NewGuid();
+        await hardware.ReferenceAsync(position,x.DeviceId,x.SoftwareId,id,grant.HardwareBindingRevision,t);
+        await instances.CreateAsync(id,x.SoftwareId,x.DeviceId,x.InstallationKey,t,position);
         var v=await access.RegisterAsync(x,id,t); return await c.CompleteAsync(v,v.InstanceId,"iam.instances.register","enrollment grant registration",t);
     }
 }
@@ -80,5 +85,19 @@ internal sealed class GetClientContextQueryHandler(IManagedInstances instances, 
         Guid? latest = null;
         if (availability is not null && (await availability.LatestAsync([context.SoftwareId], token)).TryGetValue(context.SoftwareId, out var id)) latest = id;
         return context with { LatestAvailableFormalReleaseId = latest };
+    }
+}
+
+internal sealed class BindInstanceHardwareCommandHandler(IManagedInstances instances, IHardwareAssets hardware, InstanceCompletion completion)
+    : IRequestHandler<BindInstanceHardwareCommand, OperationResult<InstanceIdentity>>
+{
+    public async Task<OperationResult<InstanceIdentity>> Handle(BindInstanceHardwareCommand x, CancellationToken token)
+    {
+        var i = await instances.GetIdentityAsync(x.InstanceId, false, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        if (i.Revision != x.ExpectedRevision) throw new RequestRejectedException(RequestFailure.RevisionConflict);
+        await hardware.VerifyPositionAsync(x.HardwareBindingId, i.DeviceId, i.SoftwareId, x.ExpectedBindingRevision, true, token);
+        var result = await instances.BindHardwareAsync(i.Id, x.ExpectedRevision, x.HardwareBindingId, token);
+        await hardware.ReferenceAsync(x.HardwareBindingId, i.DeviceId, i.SoftwareId, i.Id, x.ExpectedBindingRevision, token);
+        return await completion.CompleteAsync(result, i.Id, "ins.instances.bind-hardware", x.Reason, token);
     }
 }

@@ -8,7 +8,7 @@ namespace Svm.InstanceService;
 
 public static class SiteAssetRegistration
 {
-    public static IServiceCollection AddSvmSiteAssets(this IServiceCollection services) => services.AddScoped<ISiteAssets, SiteAssets>();
+    public static IServiceCollection AddSvmSiteAssets(this IServiceCollection services) => services.AddScoped<ISiteAssets, SiteAssets>().AddScoped<IHardwareAssets, HardwareAssets>();
 }
 internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork unitOfWork, SiteCatalogOptions options) : ISiteAssets
 {
@@ -16,21 +16,23 @@ internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork un
     { if (write) RequireWrite(); return repository.EnsureSiteAsync(options.Require().SiteId, write, token); }
     public async Task<ProcessView> ProcessAsync(Guid id, bool protect, CancellationToken token) => View(await ExistingProcess(id, protect, token));
     public async Task<DeviceView> DeviceAsync(Guid id, bool protect, CancellationToken token) => await View(await ExistingDevice(id, protect, token), token);
-    public async Task<ProcessView> CreateProcessAsync(string code, string name, CancellationToken token)
+    public async Task<ProcessView> CreateProcessAsync(string? code, string name, CancellationToken token)
     {
         RequireWrite(); var site = options.Require();
-        if (await repository.ProcessCodeExistsAsync(site.SiteId, code, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
+        if (code is null) { do { code = await repository.NextProcessCodeAsync(token); } while (await repository.ProcessCodeExistsAsync(site.SiteId, code, token)); }
+        else if (await repository.ProcessCodeExistsAsync(site.SiteId, code, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
         var value = new ProductionProcess(new(Guid.NewGuid()), site.SiteId, code, name); repository.AddProcess(value); return View(value);
     }
     public async Task<ProcessView> UpdateProcessAsync(Guid id, long revision, string name, CancellationToken token)
     { RequireWrite(); var value = await ExistingProcess(id, true, token); CheckRevision(value.Revision, revision); value.Rename(name); return View(value); }
-    public async Task<DeviceView> CreateDeviceAsync(Guid processId, string deviceNo, string name, CancellationToken token)
+    public async Task<DeviceView> CreateDeviceAsync(Guid processId, string? deviceNo, string name, CancellationToken token, string? assetNumber = null)
     {
         RequireWrite(); var process = await ExistingProcess(processId, true, token);
-        if (await repository.DeviceNoExistsAsync(deviceNo, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
-        var value = new ProductionDevice(new(Guid.NewGuid()), process.Id, deviceNo, name); repository.AddDevice(value); return await View(value, token);
+        if (deviceNo is null) { do { deviceNo = await repository.NextDeviceNoAsync(token); } while (await repository.DeviceNoExistsAsync(deviceNo, token)); }
+        else if (await repository.DeviceNoExistsAsync(deviceNo, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
+        var value = new ProductionDevice(new(Guid.NewGuid()), process.Id, deviceNo, name, assetNumber); repository.AddDevice(value); return await View(value, token);
     }
-    public async Task<DeviceView> UpdateDeviceAsync(Guid id, long revision, Guid? processId, string? name, CancellationToken token)
+    public async Task<DeviceView> UpdateDeviceAsync(Guid id, long revision, Guid? processId, string? name, CancellationToken token, string? assetNumber = null, bool updateAssetNumber = false)
     {
         RequireWrite();
         // Resolve before locks, then protect both old/new processes in ID order before the device.
@@ -40,7 +42,7 @@ internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork un
         var value = await ExistingDevice(id, true, token);
         CheckRevision(value.Revision, revision);
         if (value.ProcessId != snapshot.ProcessId) throw new RequestRejectedException(RequestFailure.RevisionConflict);
-        value.Update(processId is { } target ? new StrongId<ProductionProcess>(target) : null, name);
+        value.Update(processId is { } target ? new StrongId<ProductionProcess>(target) : null, name, assetNumber, updateAssetNumber);
         return await View(value, token);
     }
     public async Task<BindingView> CreateBindingAsync(Guid deviceId, Guid softwareId, CancellationToken token)
@@ -57,7 +59,7 @@ internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork un
         RequireWrite(); await ExistingDevice(deviceId, true, token);
         var value = await repository.BindingAsync(deviceId, softwareId, true, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         CheckRevision(value.Revision, revision);
-        if (!value.IsActive || value.HasInstanceReference) throw new RequestRejectedException(RequestFailure.InvalidState);
+        if (!value.IsActive || value.HasInstanceReference || await repository.HasActiveHardwareBindingsAsync(value.Id.Value, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
         value.Revoke(); return View(value);
     }
     public async Task<BindingView> BindingResultAsync(Guid id, CancellationToken token)
@@ -83,7 +85,7 @@ internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork un
     { var value = await repository.DeviceAsync(id, protect, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound); await ExistingProcess(value.ProcessId.Value, false, token); return value; }
     private ProcessView View(ProductionProcess x) => new(x.Id.Value, x.SiteId, x.Code, x.Name, x.Revision);
     private async Task<DeviceView> View(ProductionDevice x, CancellationToken token)
-    { var p = await ExistingProcess(x.ProcessId.Value, false, token); return new(x.Id.Value, x.DeviceNo, x.Name, p.Id.Value, p.Code, p.Name, p.SiteId, options.Require().SiteName, x.Revision); }
+    { var p = await ExistingProcess(x.ProcessId.Value, false, token); return new(x.Id.Value, x.DeviceNo, x.Name, p.Id.Value, p.Code, p.Name, p.SiteId, options.Require().SiteName, x.Revision, x.AssetNumber); }
     private static BindingView View(DeviceSoftwareBinding x) => new(x.Id.Value, x.DeviceId.Value, x.SoftwareId, x.Revision, x.IsActive);
     private static void CheckRevision(long actual, long expected) { if (actual != expected) throw new RequestRejectedException(RequestFailure.RevisionConflict); }
     private void RequireWrite() { options.Require(); if (unitOfWork.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }

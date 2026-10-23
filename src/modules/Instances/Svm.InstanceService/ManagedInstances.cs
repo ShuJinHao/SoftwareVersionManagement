@@ -24,8 +24,15 @@ internal sealed class ManagedInstances(IManagedInstanceRepository repository, IU
     }
     public async Task<InstanceIdentity?> GetIdentityAsync(Guid id,bool protect,CancellationToken token)
     { var i=await repository.GetAsync(id,protect,token); return i is null ? null : View(i); }
-    public Task CreateAsync(Guid id,Guid softwareId,Guid deviceId,Guid installationKey,CancellationToken token)
-    { token.ThrowIfCancellationRequested(); RequireWrite(); repository.Add(new(new(id),softwareId,deviceId,installationKey),new(new(id),softwareId)); return Task.CompletedTask; }
+    public Task CreateAsync(Guid id,Guid softwareId,Guid deviceId,Guid installationKey,CancellationToken token,Guid? hardwareBindingId = null)
+    { token.ThrowIfCancellationRequested(); RequireWrite(); repository.Add(new(new(id),softwareId,deviceId,installationKey,hardwareBindingId),new(new(id),softwareId)); return Task.CompletedTask; }
+    public async Task<InstanceIdentity> BindHardwareAsync(Guid id, long revision, Guid hardwareBindingId, CancellationToken token)
+    {
+        RequireWrite(); var i = await repository.GetAsync(id, true, token) ?? throw Missing();
+        if (i.Revision != revision) throw new RequestRejectedException(RequestFailure.RevisionConflict);
+        if (i.HardwareBindingId is not null) throw new RequestRejectedException(RequestFailure.InvalidState);
+        i.BindHardware(hardwareBindingId); return View(i);
+    }
     public async Task<long> InvalidateStreamAsync(Guid instanceId,CancellationToken token)
     { RequireWrite(); return (await repository.SnapshotAsync(instanceId,true,token)).Advance(false); }
     public async Task<InstanceIdentity> LifecycleAsync(Guid id,long revision,string lifecycle,CancellationToken token)
@@ -77,7 +84,7 @@ internal sealed class ManagedInstances(IManagedInstanceRepository repository, IU
     private static string Digest(StateReport report) => Hash(JsonSerializer.Serialize(Normalize(report)));
     private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
     private static ReportResult Result(InstanceSnapshot s,bool applied) => new(applied,s.StreamEpoch,s.ReportSeq,s.LastAcceptedAt,applied?s.EvidenceId:null);
-    private static InstanceIdentity View(ManagedInstance i) => new(i.Id.Value,i.SoftwareId,i.DeviceId,i.Lifecycle,i.Revision);
+    private static InstanceIdentity View(ManagedInstance i) => new(i.Id.Value,i.SoftwareId,i.DeviceId,i.Lifecycle,i.Revision,i.HardwareBindingId);
     private static RequestRejectedException Missing() => new(RequestFailure.ResourceNotFound);
     private void RequireWrite() { if(unitOfWork.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
 }

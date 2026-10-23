@@ -76,6 +76,11 @@ public static class ApplicationRegistration
         if (siteCatalog)
         {
             services.AddScoped<CatalogCompletion>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateHardwareCommand, OperationResult<HardwareView>>, CreateHardwareCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<UpdateHardwareCommand, OperationResult<HardwareView>>, UpdateHardwareCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateHardwareBindingCommand, OperationResult<HardwareBindingView>>, CreateHardwareBindingCommandAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RevokeHardwareBindingCommand, OperationResult<HardwareBindingView>>, RevokeHardwareBindingCommandAdapter>();
+
             services.AddScoped<IIdempotencyRequestAdapter<CreateSoftwareCommand, OperationResult<SoftwareView>>, CreateSoftwareCommandAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<UpdateSoftwareCommand, OperationResult<SoftwareView>>, UpdateSoftwareCommandAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateProcessCommand, OperationResult<ProcessView>>, CreateProcessCommandAdapter>();
@@ -87,6 +92,7 @@ public static class ApplicationRegistration
         }
         if (instanceAccess)
         {
+            services.AddScoped<IIdempotencyRequestAdapter<BindInstanceHardwareCommand, OperationResult<InstanceIdentity>>, BindInstanceHardwareCommandAdapter>();
             services.AddScoped<InstanceAuthorization>(); services.AddScoped<InstanceCompletion>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateEnrollmentGrantCommand,OperationResult<GrantView>>, CreateEnrollmentGrantCommandAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<RevokeEnrollmentGrantCommand,OperationResult<GrantView>>, RevokeEnrollmentGrantCommandAdapter>();

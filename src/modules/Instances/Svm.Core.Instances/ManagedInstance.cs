@@ -2,13 +2,19 @@ using Svm.SharedKernel.Domain;
 
 namespace Svm.Core.Instances;
 
-public sealed class ManagedInstance(StrongId<ManagedInstance> id, Guid softwareId, Guid deviceId, Guid installationKey) : AggregateRoot<StrongId<ManagedInstance>>(id)
+public sealed class ManagedInstance(StrongId<ManagedInstance> id, Guid softwareId, Guid deviceId, Guid installationKey, Guid? hardwareBindingId = null) : AggregateRoot<StrongId<ManagedInstance>>(id)
 {
     public Guid SoftwareId { get; private set; } = softwareId;
     public Guid DeviceId { get; private set; } = deviceId;
     public Guid InstallationKey { get; private set; } = installationKey;
+    public Guid? HardwareBindingId { get; private set; } = hardwareBindingId;
     public string Lifecycle { get; private set; } = "Active";
     public long Revision { get; private set; } = 1;
+    public void BindHardware(Guid bindingId)
+    {
+        if (HardwareBindingId is not null || bindingId == Guid.Empty) throw new InvalidOperationException("Instance already bound or invalid position.");
+        HardwareBindingId = bindingId; Revision++;
+    }
     public void SetLifecycle(string lifecycle) { if (lifecycle is not ("Active" or "Suspended")) throw new ArgumentException("Invalid lifecycle."); Lifecycle=lifecycle; Revision++; }
 }
 public sealed class InstanceSnapshot(StrongId<ManagedInstance> instanceId, Guid softwareId)

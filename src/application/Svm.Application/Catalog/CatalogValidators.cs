@@ -81,7 +81,7 @@ internal sealed class CreateSoftwareCommandValidator : AbstractValidator<CreateS
     public CreateSoftwareCommandValidator()
     {
         RuleFor(x => x.Key).NotEmpty();
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(64).Must(x => x is not null && !x.Any(char.IsControl) && x.Trim() == x);
+        RuleFor(x => x.Code).MaximumLength(64).Must(x => x is null || x.Length > 0 && !x.Any(char.IsControl) && x.Trim() == x);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(128);
         RuleFor(x => x.Category).Must(x => x is "UpperComputer" or "Vision");
         RuleFor(x => x.Description).MaximumLength(2000);
@@ -104,7 +104,7 @@ internal sealed class CreateProcessCommandValidator : AbstractValidator<CreatePr
     public CreateProcessCommandValidator()
     {
         RuleFor(x => x.Key).NotEmpty();
-        RuleFor(x => x.Code).NotEmpty().MaximumLength(64).Must(x => x is not null && !x.Any(char.IsControl) && x.Trim() == x);
+        RuleFor(x => x.Code).MaximumLength(64).Must(x => x is null || x.Length > 0 && !x.Any(char.IsControl) && x.Trim() == x);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(128);
     }
 }
@@ -125,8 +125,9 @@ internal sealed class CreateDeviceCommandValidator : AbstractValidator<CreateDev
     {
         RuleFor(x => x.Key).NotEmpty();
         RuleFor(x => x.ProcessId).NotEmpty();
-        RuleFor(x => x.DeviceNo).NotEmpty().MaximumLength(64).Must(x => x is not null && !x.Any(char.IsControl) && x.Trim() == x);
+        RuleFor(x => x.DeviceNo).MaximumLength(64).Must(x => x is null || x.Length > 0 && !x.Any(char.IsControl) && x.Trim() == x);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(128);
+        RuleFor(x => x.AssetNumber).MaximumLength(128);
     }
 }
 internal sealed class UpdateDeviceCommandValidator : AbstractValidator<UpdateDeviceCommand>
@@ -139,7 +140,8 @@ internal sealed class UpdateDeviceCommandValidator : AbstractValidator<UpdateDev
         RuleFor(x => x.ProcessId).Must(x => x is null || x != Guid.Empty);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(128).When(x => x.Name is not null);
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(256);
-        RuleFor(x => x).Must(x => x.ProcessId is not null || x.Name is not null);
+        RuleFor(x => x.AssetNumber).MaximumLength(128);
+        RuleFor(x => x).Must(x => x.ProcessId is not null || x.Name is not null || x.UpdateAssetNumber);
     }
 }
 internal sealed class CreateBindingCommandValidator : AbstractValidator<CreateBindingCommand>

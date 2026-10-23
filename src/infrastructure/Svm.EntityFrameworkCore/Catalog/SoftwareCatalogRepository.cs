@@ -19,6 +19,8 @@ internal sealed class SoftwareCatalogRepository(SvmDbContext context, IUnitOfWor
         await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({code}, 71001))", token);
         return await context.Set<SoftwareProduct>().AnyAsync(x => x.Code == code, token);
     }
+    public async Task<string> NextCodeAsync(CancellationToken token)
+    { RequireWrite(); var value = await context.Database.SqlQueryRaw<long>("SELECT nextval('rel.software_code_seq') AS \"Value\"").SingleAsync(token); return "SW-" + value.ToString("D6", System.Globalization.CultureInfo.InvariantCulture); }
     public void Add(SoftwareProduct software) { RequireWrite(); context.Add(software); }
     private void RequireWrite()
     { if (context.Database.CurrentTransaction is null || unitOfWork.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
