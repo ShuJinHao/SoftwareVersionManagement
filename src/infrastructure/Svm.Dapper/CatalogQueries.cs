@@ -13,6 +13,7 @@ public static class CatalogQueryRegistration
     {
         services.AddScoped<CatalogReadScope>();
         services.AddScoped<IInstanceQueries, InstanceQueries>();
+        services.AddScoped<IHardwareQueries, HardwareQueries>();
         services.AddScoped<ISoftwareCatalogQueries, SoftwareCatalogQueries>();
         services.AddScoped<ISiteAssetQueries, SiteAssetQueries>(); return services;
     }
@@ -82,7 +83,7 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
 {
     private const string ProcessProjection = "SELECT p.\"Id\",p.\"SiteId\",p.\"Code\",p.\"Name\",p.\"Revision\" FROM ins.processes p";
     private const string DeviceProjection = """
-        SELECT d."Id",d."DeviceNo",d."Name",d."ProcessId",p."Code" AS "ProcessCode",p."Name" AS "ProcessName",p."SiteId",@siteName AS "SiteName",d."Revision"
+        SELECT d."Id",d."DeviceNo",d."Name",d."ProcessId",p."Code" AS "ProcessCode",p."Name" AS "ProcessName",p."SiteId",@siteName AS "SiteName",d."Revision",d."AssetNumber"
         FROM ins.devices d JOIN ins.processes p ON p."Id"=d."ProcessId"
         """;
     public async Task<ProcessView?> ProcessAsync(Guid id, CancellationToken token)
@@ -145,10 +146,11 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
             SELECT COALESCE(i."Id",b."Id") AS "RowId",b."Id" AS "BindingId",b."DeviceId",b."SoftwareId",b."Revision" AS "BindingRevision",b."IsActive",
               s."Code",s."Name",s."Category",s."Description",s."Revision" AS "SoftwareRevision",i."Id",i."Lifecycle",i."Revision",
               d."DeviceNo",d."Name" AS "DeviceName",pr."Id" AS "ProcessId",pr."Code" AS "ProcessCode",pr."Name" AS "ProcessName",
-              ss."SnapshotJson"::text AS "SnapshotJson",ss."LastAcceptedAt"
+              ss."SnapshotJson"::text AS "SnapshotJson",ss."LastAcceptedAt",i."HardwareBindingId",h."Id" AS "HardwareId",h."Name" AS "HardwareName",h."ManagementIp"
             FROM ins.device_software_bindings b JOIN ins.devices d ON d."Id"=b."DeviceId" JOIN ins.processes pr ON pr."Id"=d."ProcessId"
             JOIN rel.software s ON s."Id"=b."SoftwareId" LEFT JOIN ins.instances i ON i."DeviceId"=b."DeviceId" AND i."SoftwareId"=b."SoftwareId"
             LEFT JOIN ins.instance_snapshots ss ON ss."InstanceId"=i."Id"
+            LEFT JOIN ins.hardware_software_bindings hb ON hb."Id"=i."HardwareBindingId" LEFT JOIN ins.hardware h ON h."Id"=hb."HardwareId"
             WHERE b."DeviceId"=@deviceId AND b."IsActive" AND pr."SiteId"=@siteId
             AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId" WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."Id"
               AND p."Operation"='software.read' AND u."IsEnabled" AND NOT u."MustChangePassword")

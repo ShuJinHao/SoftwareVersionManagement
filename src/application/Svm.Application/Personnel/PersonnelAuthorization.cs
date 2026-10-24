@@ -35,10 +35,10 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
                 AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
         if (request.Context.Actor.Kind != ActorKind.Human || proofSource.Proof is not { } proof || proof.SubjectId != request.Context.Actor.ActorId)
             return AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
-        if ((PersonnelManagementCapabilities.Contains(request.Request.GetType()) || request.Request is CreateSoftwareCommand) && unitOfWork.CurrentOperationId is not null)
+        if ((PersonnelManagementCapabilities.Contains(request.Request.GetType()) || request.Request is CreateSoftwareCommand or CreateHardwareBindingCommand { NewSoftware: not null }) && unitOfWork.CurrentOperationId is not null)
         {
             if (administration is null) return AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid);
-            await administration.ProtectAsync(proof.SubjectId, request.Request is CreateSoftwareCommand ? null : PersonnelManagementCapabilities.Target(request.Request), cancellationToken);
+            await administration.ProtectAsync(proof.SubjectId, request.Request is CreateSoftwareCommand or CreateHardwareBindingCommand ? null : PersonnelManagementCapabilities.Target(request.Request), cancellationToken);
         }
         var person = await personnel.AuthenticateAsync(proof, unitOfWork.CurrentOperationId is not null, cancellationToken);
         if (person is null) return AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
@@ -72,6 +72,21 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
             if (request.Request is not ListSoftwareQuery && !person.Permissions.Any(p => p.SoftwareId is null && p.Operation == request.Policy.Permission))
                 return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
             await assets.EnsureDeploymentAsync(unitOfWork.CurrentOperationId is not null, cancellationToken);
+            var bindingSoftware = request.Request switch {
+                CreateHardwareBindingCommand c => c.SoftwareId,
+                RevokeHardwareBindingCommand c => (Guid?)c.SoftwareId,
+                _ => null
+            };
+            if (bindingSoftware is { } boundSoftware)
+            {
+                if (!person.Permissions.Any(p => p.SoftwareId == boundSoftware && p.Operation == "instance.manage"))
+                    return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+                if (!await software.ExistsAsync(boundSoftware, unitOfWork.CurrentOperationId is not null, cancellationToken))
+                    return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+            }
+            if (request.Request is CreateHardwareBindingCommand { NewSoftware: not null } &&
+                !person.Permissions.Any(p => p.SoftwareId is null && p.Operation == "software.create"))
+                return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
             return AuthorizationDecision.Allow(AuthorizationTarget.Global());
         }
         if (request.Policy.Scope != RequestScope.Global) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);

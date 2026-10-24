@@ -18,7 +18,8 @@ public sealed class InstanceCredential(Guid id, StrongId<MachineSubject> subject
     public void Revoke(DateTimeOffset now) { if (RevokedAt is null) { RevokedAt = now; Revision++; } }
     public override string ToString() => "InstanceCredential [redacted]";
 }
-public sealed class EnrollmentPermission(StrongId<EnrollmentPermission> id, Guid softwareId, Guid[] deviceIds, string secretHash, DateTimeOffset expiresAt, int maxInstances)
+public sealed class EnrollmentPermission(StrongId<EnrollmentPermission> id, Guid softwareId, Guid[] deviceIds, string secretHash, DateTimeOffset expiresAt, int maxInstances,
+    Guid? hardwareBindingId = null, long? hardwareBindingRevision = null)
     : AggregateRoot<StrongId<EnrollmentPermission>>(id)
 {
     public Guid SoftwareId { get; private set; } = softwareId;
@@ -26,6 +27,8 @@ public sealed class EnrollmentPermission(StrongId<EnrollmentPermission> id, Guid
     public string SecretHash { get; private set; } = secretHash;
     public DateTimeOffset ExpiresAt { get; private set; } = expiresAt;
     public int MaxInstances { get; private set; } = maxInstances;
+    public Guid? HardwareBindingId { get; private set; } = hardwareBindingId;
+    public long? HardwareBindingRevision { get; private set; } = hardwareBindingRevision;
     public int UsedCount { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
     public long Revision { get; private set; } = 1;

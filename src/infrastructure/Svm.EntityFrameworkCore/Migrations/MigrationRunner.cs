@@ -142,7 +142,7 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         }
         foreach (var (table, columns) in new[] {
             ("instance_credentials", "\"Id\",\"SubjectId\",\"ExpiresAt\",\"RevokedAt\",\"Revision\""),
-            ("enrollment_grants", "\"Id\",\"SoftwareId\",\"DeviceIds\",\"ExpiresAt\",\"MaxInstances\",\"UsedCount\",\"RevokedAt\",\"Revision\""),
+            ("enrollment_grants", "\"Id\",\"SoftwareId\",\"DeviceIds\",\"ExpiresAt\",\"MaxInstances\",\"UsedCount\",\"RevokedAt\",\"Revision\",\"HardwareBindingId\",\"HardwareBindingRevision\""),
             ("recovery_grants", "\"Id\",\"SoftwareId\",\"InstanceId\",\"ExpiresAt\",\"UsedKey\",\"RevokedAt\",\"Revision\"") })
         {
             sql.AppendLine($"REVOKE SELECT ON TABLE iam.{table} FROM {reader};");
@@ -156,6 +156,7 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.integration_materials,tsk.target_selections,tsk.target_members,tsk.selection_chunks,tsk.deployments,tsk.admission_items,tsk.batches,tsk.tasks,tsk.attempts,tsk.receipts,tsk.works,tsk.dispatches,tsk.control_items FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE rel.integration_materials,tsk.target_members,tsk.selection_chunks,tsk.admission_items,tsk.receipts,tsk.dispatches,tsk.control_items FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.source_bindings,rel.sync_works FROM {writer};");
+        sql.AppendLine($"REVOKE DELETE ON TABLE ins.hardware,ins.hardware_software_bindings FROM {writer};");
         return sql.ToString();
     }
 }

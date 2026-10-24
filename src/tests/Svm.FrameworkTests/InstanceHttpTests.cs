@@ -56,20 +56,24 @@ public sealed class InstanceHttpTests
         var user=await Ok(await human.GetAsync(a.Url+"/api/v1/manage/users/"+session.GetProperty("subjectId").GetGuid()));
         await SiteCatalogHttpTests.Grant(human,a,session,user,Permissions(user).Append(new(sid,"enrollment.manage")).ToArray());
         await Ok(await Write(human,a.Url,$"devices/{did}/software-bindings",new { softwareId=sid,reason="夹具映射" },session),201);
-        var grantSecret=InstanceFixture.Secret(); var grant=await Ok(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {did},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=2,secretMaterial=grantSecret,reason="HTTP 登记许可" },session),201);
-        await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {did},expiresAt=DateTimeOffset.UtcNow.AddHours(49),maxInstances=2,secretMaterial=InstanceFixture.Secret(),reason="超出有效期上限" },session),422,"VALIDATION_FAILED");
+        var position=await Position(human,a.Url,session,did,sid,"接入工控机 A");
+        var grantSecret=InstanceFixture.Secret(); var grant=await Ok(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {did},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,hardwareBindingId=Id(position),hardwareBindingRevision=position.GetProperty("revision").GetInt64(),secretMaterial=grantSecret,reason="HTTP 登记许可" },session),201);
+        await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {did},expiresAt=DateTimeOffset.UtcNow.AddHours(49),maxInstances=1,hardwareBindingId=Id(position),hardwareBindingRevision=position.GetProperty("revision").GetInt64(),secretMaterial=InstanceFixture.Secret(),reason="超出有效期上限" },session),422,"VALIDATION_FAILED");
         var bearer=Id(grant)+"."+grantSecret; var instanceSecret=InstanceFixture.Secret(); var key=Guid.NewGuid(); var body=new { softwareId=sid,installationKey=Guid.NewGuid(),deviceId=did,secretMaterial=instanceSecret };
         await Code(await Machine(machine,a.Url,"/api/v1/enrollment/instances",bearer,body),400,"INVALID_REQUEST");
         await Code(await Machine(machine,a.Url,"/api/v1/enrollment/instances",bearer,new { body.softwareId,body.installationKey,deviceId=Guid.NewGuid(),body.secretMaterial },Guid.NewGuid()),404,"RESOURCE_NOT_FOUND");
         var outside=await Ok(await Write(human,a.Url,"devices",new { processId=Id(process),deviceNo="OUTSIDE-GRANT",name="授权范围外设备" },session),201);
         await Code(await Machine(machine,a.Url,"/api/v1/enrollment/instances",bearer,new { body.softwareId,body.installationKey,deviceId=Id(outside),body.secretMaterial },Guid.NewGuid()),403,"PERMISSION_DENIED");
         var registration=await Ok(await Machine(machine,a.Url,"/api/v1/enrollment/instances",bearer,body,key),201); var id=registration.GetProperty("instanceId").GetGuid(); var credential=registration.GetProperty("credentialId").GetGuid(); var instanceBearer=credential+"."+instanceSecret;
-        await Ok(await Machine(machine,a.Url,"/api/v1/enrollment/instances",bearer,new { body.softwareId,installationKey=Guid.NewGuid(),body.deviceId,secretMaterial=InstanceFixture.Secret() },Guid.NewGuid()),201);
+        await Code(await Machine(machine,a.Url,"/api/v1/enrollment/instances",bearer,new { body.softwareId,installationKey=Guid.NewGuid(),body.deviceId,secretMaterial=InstanceFixture.Secret() },Guid.NewGuid()),422,"GRANT_EXHAUSTED");
+        var secondPosition=await Position(human,a.Url,session,did,sid,"接入工控机 B"); var secondSecret=InstanceFixture.Secret();
+        var secondGrant=await Ok(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[]{did},hardwareBindingId=Id(secondPosition),hardwareBindingRevision=secondPosition.GetProperty("revision").GetInt64(),maxInstances=1,expiresAt=DateTimeOffset.UtcNow.AddHours(1),secretMaterial=secondSecret,reason="第二位置" },session),201);
+        await Ok(await Machine(machine,a.Url,"/api/v1/enrollment/instances",Id(secondGrant)+"."+secondSecret,new { body.softwareId,installationKey=Guid.NewGuid(),body.deviceId,secretMaterial=InstanceFixture.Secret() },Guid.NewGuid()),201);
         var listUrl=$"/api/v1/manage/instances?softwareId={sid}&pageSize=1"; var firstPage=await Ok(await human.GetAsync(a.Url+listUrl)); var cursor=firstPage.GetProperty("nextCursor").GetString()!; Assert.Single(firstPage.GetProperty("items").EnumerateArray());
         var secondPage=await Ok(await human.GetAsync(b.Url+listUrl+"&cursor="+Uri.EscapeDataString(cursor))); Assert.Single(secondPage.GetProperty("items").EnumerateArray()); Assert.Equal(JsonValueKind.Null,secondPage.GetProperty("nextCursor").ValueKind);
         await Code(await human.GetAsync(a.Url+listUrl+"&freshness=NeverReported&cursor="+Uri.EscapeDataString(cursor)),400,"INVALID_REQUEST");
         await Code(await human.GetAsync(a.Url+listUrl+"&cursor="+Uri.EscapeDataString("broken-"+cursor)),400,"INVALID_REQUEST");
-        var before=await Ok(await human.GetAsync(a.Url+"/api/v1/manage/instances/"+id)); Assert.Equal("NeverReported",before.GetProperty("freshness").GetString()); Assert.Equal(JsonValueKind.Null,before.GetProperty("lastSnapshot").ValueKind);
+        var before=await Ok(await human.GetAsync(a.Url+"/api/v1/manage/instances/"+id)); Assert.Equal(Id(position),before.GetProperty("hardwareBindingId").GetGuid()); Assert.Equal("接入工控机 A",before.GetProperty("hardwareName").GetString()); Assert.Equal("NeverReported",before.GetProperty("freshness").GetString()); Assert.Equal(JsonValueKind.Null,before.GetProperty("lastSnapshot").ValueKind);
         var context=await Ok(await Machine(machine,b.Url,"/api/v1/client/context",instanceBearer)); Assert.Equal(id,context.GetProperty("instanceId").GetGuid()); Assert.Equal(sid,context.GetProperty("softwareId").GetGuid()); Assert.Equal(0,context.GetProperty("currentEpoch").GetInt64());
         await Code(await Machine(machine,a.Url,"/api/v1/client/report-streams",instanceBearer,new { expectedEpoch=0 }),400,"INVALID_REQUEST");
         var streamKey=Guid.NewGuid(); await Ok(await Machine(machine,a.Url,"/api/v1/client/report-streams",instanceBearer,new { expectedEpoch=0 },streamKey)); await Ok(await Machine(machine,b.Url,"/api/v1/client/report-streams",instanceBearer,new { expectedEpoch=0 },streamKey));
@@ -85,7 +89,7 @@ public sealed class InstanceHttpTests
         await Code(await Machine(machine,a.Url,"/api/v1/client/status-reports",instanceBearer,new { instanceId=Guid.NewGuid() }),400,"UNKNOWN_FIELD");
         await Code(await Machine(machine,a.Url,"/api/v1/manage/instances?softwareId="+sid,instanceBearer),401,"CREDENTIAL_INVALID");
         await Code(await human.GetAsync(a.Url+"/api/v1/client/context"),401,"CREDENTIAL_INVALID");
-        var grantRow=Assert.Single((await Ok(await human.GetAsync(a.Url+"/api/v1/manage/enrollment-grants?softwareId="+sid))).GetProperty("items").EnumerateArray());
+        var grantRow=(await Ok(await human.GetAsync(a.Url+"/api/v1/manage/enrollment-grants?softwareId="+sid))).GetProperty("items").EnumerateArray().Single(x=>Id(x)==Id(grant));
         await Ok(await Write(human,a.Url,"enrollment-grants/"+Id(grant)+"/revoke",new { expectedRevision=grantRow.GetProperty("revision").GetInt64(),reason="撤销新登记" },session));
         var replay=await Ok(await Machine(machine,b.Url,"/api/v1/enrollment/instances",bearer,body,key),201); Assert.Equal(id,replay.GetProperty("instanceId").GetGuid());
         var recoverySecret=InstanceFixture.Secret(); var recovery=await Ok(await Write(human,a.Url,$"instances/{id}/recovery-grants",new { expiresAt=DateTimeOffset.UtcNow.AddHours(1),secretMaterial=recoverySecret,reason="HTTP 恢复许可" },session),201);
@@ -111,12 +115,18 @@ public sealed class InstanceHttpTests
         var software=await Ok(await Write(human,a.Url,"software",new { code="GATE-S",name="夹具",category="UpperComputer" },session),201); var sid=Id(software);
         await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {Guid.NewGuid()},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,secretMaterial=InstanceFixture.Secret(),reason="无接入权限" },session),404,"RESOURCE_NOT_FOUND");
         var user=await Ok(await human.GetAsync(a.Url+"/api/v1/manage/users/"+session.GetProperty("subjectId").GetGuid())); await SiteCatalogHttpTests.Grant(human,a,session,user,Permissions(user).Append(new(sid,"enrollment.manage")).ToArray());
-        await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {Guid.NewGuid()},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,secretMaterial=InstanceFixture.Secret(),reason="错误设备" },session),404,"RESOURCE_NOT_FOUND");
+        await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {Guid.NewGuid()},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,hardwareBindingId=Guid.NewGuid(),hardwareBindingRevision=1,secretMaterial=InstanceFixture.Secret(),reason="错误设备" },session),404,"RESOURCE_NOT_FOUND");
         var process=await Ok(await Write(human,a.Url,"processes",new { code="GATE-P",name="门禁工序" },session),201);
         var device=await Ok(await Write(human,a.Url,"devices",new { processId=Id(process),deviceNo="GATE-D",name="门禁设备" },session),201);
         await Ok(await Write(human,a.Url,$"devices/{Id(device)}/software-bindings",new { softwareId=sid,reason="显式门禁映射" },session),201);
-        await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {Id(device)},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,secretMaterial=InstanceFixture.Secret(),reason="缺少签发上限配置" },session),503,"CONFIGURATION_INVALID");
+        var position=await Position(human,a.Url,session,Id(device),sid,"门禁工控机");
+        await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,hardwareBindingId=Id(position),hardwareBindingRevision=position.GetProperty("revision").GetInt64(),deviceIds=new[] {Id(device)},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,secretMaterial=InstanceFixture.Secret(),reason="缺少签发上限配置" },session),503,"CONFIGURATION_INVALID");
         Assert.Equal(0,await db.CountAsync("iam.enrollment_grants")); Assert.Equal(0,await db.CountAsync("ins.instances"));
+    }
+    internal static async Task<JsonElement> Position(HttpClient client,string url,JsonElement session,Guid device,Guid software,string name)
+    {
+        var hardware=await Ok(await Write(client,url,$"devices/{device}/hardware",new { type="IPC",name },session),201);
+        return await Ok(await Write(client,url,$"hardware/{Id(hardware)}/software-bindings",new { softwareId=software,reason="明确硬件安装位置" },session),201);
     }
     internal static PermissionView[] Permissions(JsonElement u)=>u.GetProperty("permissions").EnumerateArray().Select(x=>new PermissionView(x.GetProperty("softwareId").ValueKind==JsonValueKind.Null?null:x.GetProperty("softwareId").GetGuid(),x.GetProperty("operation").GetString()!)).ToArray();
     internal static Guid Id(JsonElement x)=>x.GetProperty("id").GetGuid();

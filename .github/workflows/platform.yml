@@ -40,7 +40,7 @@ jobs:
     env:
       SVM_SDK_VERSION: ${{ matrix.sdk }}
       CI: 'true'
-      SVM_WEB_TEST_NAMES: 'bounded JSON requests|fixed write verification|deployment read ownership|deployment safe controls|retains the final operation|removes task facts|shows configuration errors|restores a control work|release read ownership|release publication|shows real empty formal view|unknown disable retains|uncertain management writes|clears stale authority|restricts the first-change session'
+      SVM_WEB_TEST_NAMES: 'hardware workspace|workspace navigation and final facts|maps previous links|instance interactions|restricts the first-change|does not expose management|opens ordinary password|retains the final operation body|freezes launch target|shows real empty formal view'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -97,20 +97,20 @@ jobs:
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.tools == 'true'
         shell: bash
         run: |
-          eng/test tools --filter 'toolchain|publish rejects|web selection|CI impact' --preview
-          eng/test tools --filter 'toolchain|publish rejects|web selection|CI impact' --results-directory artifacts/test-results/platform/tools
+          eng/test tools --filter 'web selection|CI impact' --preview
+          eng/test tools --filter 'web selection|CI impact' --results-directory artifacts/test-results/platform/tools
       - name: Preview and verify affected web interactions
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.web == 'true'
         shell: bash
         run: |
-          eng/test web --file tests/request.test.ts --file tests/mutation.test.ts --file tests/deployments.test.ts --file tests/releases-reading.test.ts --file tests/packages.test.ts --file tests/publication.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
-          eng/test web --file tests/request.test.ts --file tests/mutation.test.ts --file tests/deployments.test.ts --file tests/releases-reading.test.ts --file tests/packages.test.ts --file tests/publication.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
-          eng/test web --file tests/request.test.ts --file tests/mutation.test.ts --file tests/deployments.test.ts --file tests/releases-reading.test.ts --file tests/packages.test.ts --file tests/publication.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
+          eng/test web --file tests/hardware-workspace.test.ts --file tests/instances.test.ts --file tests/deployments.test.ts --file tests/packages.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
+          eng/test web --file tests/hardware-workspace.test.ts --file tests/instances.test.ts --file tests/deployments.test.ts --file tests/packages.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
+          eng/test web --file tests/hardware-workspace.test.ts --file tests/instances.test.ts --file tests/deployments.test.ts --file tests/packages.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
       - name: Targeted Linux UI browser verification
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash
         run: |
-          eng/node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('deploy/linux/demo-settings.json'));s.task.batchSize=3;s.task.resultWaitSeconds=1;fs.mkdirSync('artifacts/linux-demo',{recursive:true});fs.writeFileSync('artifacts/linux-demo/ui-settings.json',JSON.stringify(s));"
+          eng/node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('deploy/linux/demo-settings.json'));fs.mkdirSync('artifacts/linux-demo',{recursive:true});fs.writeFileSync('artifacts/linux-demo/ui-settings.json',JSON.stringify(s));"
           eng/node deploy/linux/prepare.mjs --demo --settings artifacts/linux-demo/ui-settings.json --release artifacts/releases/ci --output artifacts/linux-demo/ci
           artifacts/linux-demo/ci/svm.sh build
           artifacts/linux-demo/ci/svm.sh pull
@@ -123,7 +123,7 @@ jobs:
           artifacts/linux-demo/ci/svm.sh validate
           artifacts/linux-demo/ci/svm.sh up
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node src/ui/svm-web/node_modules/playwright/cli.js install --with-deps chromium
-          eng/node deploy/linux/verify-ui.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
+          eng/node deploy/linux/verify-hardware.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
       - name: Stop owned demo resources
         if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash

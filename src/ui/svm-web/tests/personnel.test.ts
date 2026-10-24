@@ -6,22 +6,23 @@ import App from '../src/App.vue'
 import LoginPage from '../src/pages/LoginPage.vue'
 import PasswordPage from '../src/pages/PasswordPage.vue'
 import UsersPage from '../src/pages/UsersPage.vue'
+import SystemPage from '../src/pages/SystemPage.vue'
 import { useMutation } from '../src/mutation'
 import { useSession } from '../src/session'
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); document.body.innerHTML = '' })
 const snapshot = (mustChangePassword: boolean, permissions: object[]) => ({ authenticated: true, subjectId: 'fixture-subject',
   employeeNo: 'FIXTURE', displayName: '测试人员', mustChangePassword, permissions, csrfToken: 'fixture-token', serverTime: '2026-10-07T00:00:00Z' })
-async function mount(session: object) {
+async function mount(session: object, expectedPath = '/password') {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json(session)))
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/users', component: UsersPage },
-    { path: '/login', component: LoginPage }, { path: '/password', component: PasswordPage }] })
+    { path: '/system', component: SystemPage }, { path: '/login', component: LoginPage }, { path: '/password', component: PasswordPage }] })
   await router.push('/users')
   const root = document.createElement('div'); document.body.appendChild(root)
   const app = createApp(App).use(createPinia()).use(router); app.mount(root)
-  await vi.waitFor(() => expect(router.currentRoute.value.path).toBe('/password'))
+  await vi.waitFor(() => expect(router.currentRoute.value.path).toBe(expectedPath))
   await nextTick()
-  return { root, app }
+  return { root, app, router }
 }
 describe('personnel access', () => {
   it('uses applied filters for paging and resets the cursor when querying edited filters', async () => {
@@ -58,10 +59,21 @@ describe('personnel access', () => {
     app.unmount()
   })
   it('does not expose management to a person without the global grant', async () => {
-    const { root, app } = await mount(snapshot(false, [{ softwareId: 'fixture-software', operation: 'identity.manage' }]))
-    expect(root.textContent).toContain('当前账号未获管理或台账权限')
+    const { root, app } = await mount(snapshot(false, [{ softwareId: 'fixture-software', operation: 'identity.manage' }]), '/system')
+    expect(root.textContent).toContain('当前账号没有人员管理权限')
     expect(root.textContent).not.toContain('创建账号')
     app.unmount()
+  })
+  it('opens ordinary password changes from the account menu without leaving the current page', async () => {
+    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function () { this.open = true })
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function () { this.open = false })
+    const { root, app, router } = await mount(snapshot(false, []), '/system')
+    try {
+      ;(root.querySelector('.account-button') as HTMLButtonElement).click(); await nextTick()
+      const button = [...root.querySelectorAll('button')].find(x=>x.textContent?.trim()==='修改本人密码')!; button.click(); await nextTick(); await nextTick()
+      expect(root.querySelector('dialog[open]')).toBeTruthy(); expect(router.currentRoute.value.path).toBe('/system')
+      ;(root.querySelector('[aria-label="关闭改密"]') as HTMLButtonElement).click(); await nextTick(); expect(root.querySelector('dialog')).toBeNull()
+    } finally { app.unmount() }
   })
   it('clears stale authority when the renewed session read fails', async () => {
     const pinia = createPinia(); const store = useSession(pinia)

@@ -3,7 +3,7 @@ using Svm.Services.Contracts.Framework;
 namespace Svm.Services.Contracts.Instances;
 
 [RequestPolicy("iam.enrollment.create", ModuleOwner.Identity, RequestKind.Manage, RequestScope.Software, TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "enrollment.manage")]
-public sealed record CreateEnrollmentGrantCommand(Guid Key, Guid SoftwareId, IReadOnlyList<Guid> DeviceIds, DateTimeOffset ExpiresAt, int MaxInstances, string SecretMaterial, string Reason) : ICommand<GrantView>
+public sealed record CreateEnrollmentGrantCommand(Guid Key, Guid SoftwareId, IReadOnlyList<Guid> DeviceIds, DateTimeOffset ExpiresAt, int MaxInstances, string SecretMaterial, string Reason, Guid? HardwareBindingId = null, long? HardwareBindingRevision = null) : ICommand<GrantView>
 { public override string ToString() => "CreateEnrollmentGrantCommand [redacted]"; }
 
 [RequestPolicy("iam.enrollment.revoke", ModuleOwner.Identity, RequestKind.Manage, RequestScope.Software, TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "enrollment.manage")]
@@ -65,6 +65,6 @@ public static class InstanceCapabilities
     public static bool IsWrite(Type t) => Writes.Contains(t);
     public static bool IsQuery(Type t) => Queries.Contains(t);
     public static bool IsProtocol(Type t) => t == typeof(RegisterInstanceCommand) || t == typeof(RecoverInstanceCommand) || t == typeof(SubmitStatusReportCommand);
-    private static readonly HashSet<Type> Writes = [typeof(CreateEnrollmentGrantCommand), typeof(RevokeEnrollmentGrantCommand), typeof(CreateRecoveryGrantCommand), typeof(RevokeRecoveryGrantCommand), typeof(RevokeInstanceCredentialCommand), typeof(UpdateInstanceLifecycleCommand), typeof(RegisterInstanceCommand), typeof(RecoverInstanceCommand), typeof(OpenReportStreamCommand), typeof(SubmitStatusReportCommand)];
+    private static readonly HashSet<Type> Writes = [typeof(Svm.Services.Contracts.Catalog.BindInstanceHardwareCommand), typeof(CreateEnrollmentGrantCommand), typeof(RevokeEnrollmentGrantCommand), typeof(CreateRecoveryGrantCommand), typeof(RevokeRecoveryGrantCommand), typeof(RevokeInstanceCredentialCommand), typeof(UpdateInstanceLifecycleCommand), typeof(RegisterInstanceCommand), typeof(RecoverInstanceCommand), typeof(OpenReportStreamCommand), typeof(SubmitStatusReportCommand)];
     private static readonly HashSet<Type> Queries = [typeof(ListEnrollmentGrantsQuery), typeof(ListInstanceCredentialsQuery), typeof(ListInstancesQuery), typeof(GetInstanceQuery), typeof(GetInstanceHistoryQuery), typeof(GetClientContextQuery)];
 }

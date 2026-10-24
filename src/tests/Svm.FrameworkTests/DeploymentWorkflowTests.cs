@@ -87,7 +87,7 @@ public sealed class DeploymentWorkflowTests
         await f.Instances.Site.SendAsync(new CreateBindingCommand(Guid.NewGuid(),f.Instances.Device.Id,other.Id,"夹具第二软件映射"));
         var user=await f.Instances.Site.UserAsync(f.Instances.Site.Proof.SubjectId);
         await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(),user.Id,user.Revision,user.Permissions.Append(new(other.Id,"enrollment.manage")).ToArray(),"夹具登记第二软件实例"));
-        var secret=InstanceFixture.Secret(); var grant=(await f.Instances.SendAsync(new CreateEnrollmentGrantCommand(Guid.NewGuid(),other.Id,[f.Instances.Device.Id],f.Instances.Clock.GetUtcNow().AddHours(1),1,secret,"夹具另一软件登记许可"))).Value;
+        var position=await f.Instances.PositionAsync(other.Id); var secret=InstanceFixture.Secret(); var grant=(await f.Instances.SendAsync(new CreateEnrollmentGrantCommand(Guid.NewGuid(),other.Id,[f.Instances.Device.Id],f.Instances.Clock.GetUtcNow().AddHours(1),1,secret,"夹具另一软件登记许可",position.Id,position.Revision))).Value;
         var foreign=(await f.Instances.SendAsync(new RegisterInstanceCommand(Guid.NewGuid(),other.Id,Guid.NewGuid(),f.Instances.Device.Id,InstanceFixture.Secret()),new AccessProof(ActorKind.EnrollmentGrant,grant.Id,secret),softwareId:other.Id)).Value;
         var deployment=await Deployment(f,release.Id,[valid.Id,foreign.InstanceId,unknown,valid.Id]);
         await Prepare(f,deployment.WorkId!.Value);

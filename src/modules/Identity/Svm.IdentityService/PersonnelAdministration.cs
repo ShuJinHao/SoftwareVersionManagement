@@ -79,7 +79,9 @@ internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IP
     public async Task GrantCreatorAsync(Guid softwareId, CancellationToken token)
     {
         RequireOperation();
-        if (operations.Current is not { Owner: ModuleOwner.Releases, Operation: "rel.software.create" } operation || softwareId == Guid.Empty)
+        if (operations.Current is not { } operation || softwareId == Guid.Empty ||
+            operation is not ({ Owner: ModuleOwner.Releases, Operation: "rel.software.create" } or
+                { Owner: ModuleOwner.Instances, Operation: "ins.hardware-bindings.create" }))
             throw new RequestRejectedException(RequestFailure.PermissionDenied);
         await administration.AddSoftwarePermissionsAsync(operation.SubjectId, softwareId, ["software.read", "instance.read", "instance.manage"], token);
         await personnel.AdvanceRevisionAsync(operation.SubjectId, token);

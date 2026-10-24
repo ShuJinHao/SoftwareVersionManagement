@@ -7,7 +7,7 @@ internal sealed class CreateSoftwareCommandAdapter(ISoftwareCatalog software) : 
 {
     public OperationRequestData Describe(CreateSoftwareCommand x) => new(x.Key,
         OperationValue.Object(),
-        OperationValue.Object(new OperationField("code", OperationValue.Text(x.Code)), new OperationField("name", OperationValue.Text(x.Name)), new OperationField("category", OperationValue.Text(x.Category)), new OperationField("description", x.Description is null ? OperationValue.Null : OperationValue.Text(x.Description))));
+        OperationValue.Object(new OperationField("code", x.Code is null ? OperationValue.Null : OperationValue.Text(x.Code)), new OperationField("name", OperationValue.Text(x.Name)), new OperationField("category", OperationValue.Text(x.Category)), new OperationField("description", x.Description is null ? OperationValue.Null : OperationValue.Text(x.Description))));
     public OperationResultReference GetReference(OperationResult<SoftwareView> x) => new(x.OperationId, x.Status, x.ResourceId);
     public async Task<OperationResult<SoftwareView>> RestoreAsync(OperationResultReference reference, CancellationToken token)
     {
@@ -35,7 +35,7 @@ internal sealed class CreateProcessCommandAdapter(ISiteAssets assets) : IIdempot
 {
     public OperationRequestData Describe(CreateProcessCommand x) => new(x.Key,
         OperationValue.Object(),
-        OperationValue.Object(new OperationField("code", OperationValue.Text(x.Code)), new OperationField("name", OperationValue.Text(x.Name))));
+        OperationValue.Object(new OperationField("code", x.Code is null ? OperationValue.Null : OperationValue.Text(x.Code)), new OperationField("name", OperationValue.Text(x.Name))));
     public OperationResultReference GetReference(OperationResult<ProcessView> x) => new(x.OperationId, x.Status, x.ResourceId);
     public async Task<OperationResult<ProcessView>> RestoreAsync(OperationResultReference reference, CancellationToken token)
     {
@@ -63,7 +63,7 @@ internal sealed class CreateDeviceCommandAdapter(ISiteAssets assets) : IIdempote
 {
     public OperationRequestData Describe(CreateDeviceCommand x) => new(x.Key,
         OperationValue.Object(),
-        OperationValue.Object(new OperationField("processId", OperationValue.Identifier(x.ProcessId)), new OperationField("deviceNo", OperationValue.Text(x.DeviceNo)), new OperationField("name", OperationValue.Text(x.Name))));
+        OperationValue.Object([..(x.AssetNumber is null ? Array.Empty<OperationField>() : new[] { new OperationField("assetNumber", OperationValue.Text(x.AssetNumber)) }), new OperationField("processId", OperationValue.Identifier(x.ProcessId)), new OperationField("deviceNo", x.DeviceNo is null ? OperationValue.Null : OperationValue.Text(x.DeviceNo)), new OperationField("name", OperationValue.Text(x.Name))]));
     public OperationResultReference GetReference(OperationResult<DeviceView> x) => new(x.OperationId, x.Status, x.ResourceId);
     public async Task<OperationResult<DeviceView>> RestoreAsync(OperationResultReference reference, CancellationToken token)
     {
@@ -77,7 +77,7 @@ internal sealed class UpdateDeviceCommandAdapter(ISiteAssets assets) : IIdempote
 {
     public OperationRequestData Describe(UpdateDeviceCommand x) => new(x.Key,
         OperationValue.Object(new OperationField("deviceId", OperationValue.Identifier(x.DeviceId))),
-        OperationValue.Object(new OperationField("expectedRevision", OperationValue.Integer(x.ExpectedRevision)), new OperationField("processId", x.ProcessId is { } processid ? OperationValue.Identifier(processid) : OperationValue.Null), new OperationField("name", x.Name is null ? OperationValue.Null : OperationValue.Text(x.Name)), new OperationField("reason", OperationValue.Text(x.Reason))));
+        OperationValue.Object([..(x.UpdateAssetNumber ? new[] { new OperationField("assetNumber", x.AssetNumber is null ? OperationValue.Null : OperationValue.Text(x.AssetNumber)) } : Array.Empty<OperationField>()), new OperationField("expectedRevision", OperationValue.Integer(x.ExpectedRevision)), new OperationField("processId", x.ProcessId is { } processid ? OperationValue.Identifier(processid) : OperationValue.Null), new OperationField("name", x.Name is null ? OperationValue.Null : OperationValue.Text(x.Name)), new OperationField("reason", OperationValue.Text(x.Reason))]));
     public OperationResultReference GetReference(OperationResult<DeviceView> x) => new(x.OperationId, x.Status, x.ResourceId);
     public async Task<OperationResult<DeviceView>> RestoreAsync(OperationResultReference reference, CancellationToken token)
     {

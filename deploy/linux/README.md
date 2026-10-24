@@ -76,7 +76,7 @@ cd artifacts/linux-demo/my-demo
 
 svm.sh 可在准备好的 Linux 目录独立运行，不依赖源码、SDK 或 Node。prepare 对发布物摘要进行复核后，生成独立构建上下文与运行配置。build 仅以固定 ASP.NET 运行镜像构建，不在镜像中安装开发工具。
 
-初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 11 份历史迁移 → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
+初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 12 份迁移（最后为 HardwareWorkspace） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
 
 登录资料在私有 operator.json；初始账号仅有播种规则规定的权限，首次登录改密，再按职责明确分配资产和软件权限。工具不将真实账号或凭据输出到公共日志。不要公开这个目录、operator.json、连接配置、CA 私钥或服务私钥。
 
@@ -92,26 +92,26 @@ preview 只启动管理 API 与数据库，直接通过 HTTPS 访问；没有包
 - DataProtection 的 svm/ ApplicationName、保护证书与数据库密钥跨节点共享且稳定，不依赖安装路径。
 - SVM_HOST_CONFIG_FILE 提供公用 HTTPS 证书、KnownProxies 和私有 HealthPort。--validate-config 校验配置/注册后退出，不启动监听、消费者、业务循环或 DDL。
 - /health/live、/health/ready 仅在独立私有监听提供。--healthcheck 从容器内访问，运行镜像不需 curl/Node。
-- 数据库未迁移/不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
+- 数据库未达到 12 份迁移及 HardwareWorkspace 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
 - 证书角色覆盖与完整性增强仍暂缓；当前链验证、指纹、有效性和 mTLS 继续保留。
 
 直接执行 --validate-config 仍需完整挂载配置和准备日志目录；它不验证网络可达性。status、依赖 healthcheck 与后续 HTTPS 流程用于确认网络和数据库事实。
 
 ## 查看业务效果
 
-先在未绑定 GitLab 的虚构软件上完成：登录改密 → 明确授权 → 工序/设备/软件/映射 → 登记两个实例 → 上传演示 ZIP → 双副本就绪 → 实例 A 安装上报 → 转正式 → 为尚未安装的实例 B 创建 Update → 领取/开始/回执 → 独立安装上报。
+先在未绑定 GitLab 的虚构软件上完成：登录改密 → 明确授权 → 工序/设备/工控机 → 固定硬件软件位置 → 签发位置许可并登记两个实例 → 上传演示 ZIP → 双副本就绪 → 实例 A 安装上报 → 转正式 → 为尚未安装的实例 B 创建 Update → 领取/开始/回执 → 独立安装上报。
 
 本项目提供仅调用正式 API 的模拟接入方，并用真实浏览器查看当前数据：
 
 ~~~sh
 # 在验证机运行；该机器需要项目工具、网页依赖和固定 Playwright 浏览器。
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node src/ui/svm-web/node_modules/playwright/cli.js install chromium
-eng/node deploy/linux/verify.mjs --deployment artifacts/linux-demo/my-demo --results artifacts/test-results/linux-demo
+eng/node deploy/linux/verify-hardware.mjs --deployment artifacts/linux-demo/my-demo --results artifacts/test-results/linux-demo
 ~~~
 
-验证器只允许明确 demo 身份，使用一次性全新台账。它会改初始密码、创建虚构业务记录并停止/恢复该演示的部分组件；不能对真实厂区运行。API 请求验证演示 CA 和主机名；Chromium 仅接受本次生成的服务器叶子公钥 SPKI，不使用全局忽略证书错误。正式用户浏览器应信任企业 CA。
+验证器只允许明确 demo 身份，使用一次性全新台账。它会改初始密码、创建虚构台账、固定安装位置和模拟报告，并在浏览器创建硬件/视觉软件、选择具体工控机更新；不能对真实厂区运行。API 请求验证演示 CA 和主机名；Chromium 仅接受本次生成的服务器叶子公钥 SPKI，不使用全局忽略证书错误。正式用户浏览器应信任企业 CA。
 
-本流程不执行 Windows 软件安装，成功回执与后续上报均是模拟协议事实；不代表厂家现场安装、数据保护或高可用通过。验证失败后保存脱敏阶段记录；更新已经成功时，可显式在原命令末尾添加 --verify-existing，只读取已完成的虚构业务事实、重启所属节点/消息组件并验证浏览器。该模式不会重复上传或创建投放；未知业务提交不能使用此模式猜测成功。
+本流程不执行 Windows 软件安装，成功回执与后续上报均是模拟协议事实；不代表厂家现场安装、数据保护或高可用通过。验证失败后保存脱敏阶段记录，私有 hardware-fixture.json 记录每个写入的确认结果。可用 --resume 复用已确认阶段继续；任何未确认写入都会停止，必须先核实原请求，不能删检查点自动重试。整个业务阶段确认完成后可用 --display-only 只查看页面、重拍截图，不重复上传或创建投放。历史 verify.mjs/verify-ui.mjs 为旧许可模型的验证记录，本批使用 verify-hardware.mjs。
 
 ## 停止、升级与清理
 

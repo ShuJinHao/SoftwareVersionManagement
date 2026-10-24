@@ -11,9 +11,10 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
     private DateTimeOffset Now => (clock ?? TimeProvider.System).GetUtcNow();
     internal const string Projection = """
         SELECT i."Id",i."SoftwareId",i."DeviceId",d."DeviceNo",d."Name" AS "DeviceName",pr."Id" AS "ProcessId",
-          pr."Code" AS "ProcessCode",pr."Name" AS "ProcessName",i."Lifecycle",i."Revision",ss."SnapshotJson"::text AS "SnapshotJson",ss."LastAcceptedAt"
+          pr."Code" AS "ProcessCode",pr."Name" AS "ProcessName",i."Lifecycle",i."Revision",ss."SnapshotJson"::text AS "SnapshotJson",ss."LastAcceptedAt",i."HardwareBindingId",h."Id" AS "HardwareId",h."Name" AS "HardwareName",h."ManagementIp"
         FROM ins.instances i JOIN ins.devices d ON d."Id"=i."DeviceId" JOIN ins.processes pr ON pr."Id"=d."ProcessId"
         JOIN ins.instance_snapshots ss ON ss."InstanceId"=i."Id"
+        LEFT JOIN ins.hardware_software_bindings hb ON hb."Id"=i."HardwareBindingId" LEFT JOIN ins.hardware h ON h."Id"=hb."HardwareId"
         """;
     private const string Visible = """
         pr."SiteId"=@siteId AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId"
@@ -74,13 +75,13 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
     {
         await scope.EnsureAsync(null,token); var now=Now;
         var rows=await session.QueryAsync<GrantRow>("""
-          SELECT g."Id",g."SoftwareId",g."DeviceIds",g."ExpiresAt",g."MaxInstances",g."UsedCount",g."RevokedAt",g."Revision"
+          SELECT g."Id",g."SoftwareId",g."DeviceIds",g."ExpiresAt",g."MaxInstances",g."UsedCount",g."RevokedAt",g."Revision",g."HardwareBindingId",g."HardwareBindingRevision"
           FROM iam.enrollment_grants g WHERE g."SoftwareId"=@softwareId AND (CAST(@after AS uuid) IS NULL OR g."Id">@after)
           AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId" WHERE p."SubjectId"=@subjectId AND
             p."SoftwareId"=g."SoftwareId" AND p."Operation"='enrollment.manage' AND u."IsEnabled" AND NOT u."MustChangePassword")
           ORDER BY g."Id" LIMIT @take
           """,new { softwareId,subjectId=scope.SubjectId,after,take=size+1 },token);
-        var items=rows.Take(size).Select(x=>new GrantView(x.Id,x.SoftwareId,x.DeviceIds,null,x.RevokedAt is not null?"Revoked":x.ExpiresAt<=now?"Expired":x.UsedCount>=x.MaxInstances?"Exhausted":"Active",x.ExpiresAt,x.MaxInstances,x.UsedCount,x.Revision)).ToArray();
+        var items=rows.Take(size).Select(x=>new GrantView(x.Id,x.SoftwareId,x.DeviceIds,null,x.RevokedAt is not null?"Revoked":x.ExpiresAt<=now?"Expired":x.UsedCount>=x.MaxInstances?"Exhausted":"Active",x.ExpiresAt,x.MaxInstances,x.UsedCount,x.Revision,x.HardwareBindingId,x.HardwareBindingRevision)).ToArray();
         return new(items,rows.Count>size?items[^1].Id:null);
     }
     public async Task<InstancePage<CredentialView>> CredentialsAsync(Guid instanceId,int size,Guid? after,CancellationToken token)
@@ -106,10 +107,11 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
         internal InstallationHistoryView View()=>new(Id,InstanceId,InstallationState,InstalledReleaseId,InstalledVersion,InstalledAt,ReceivedAt,ReportedRunningState);
     }
     private sealed class GrantRow
-    { public Guid Id {get;set;} public Guid SoftwareId {get;set;} public Guid[] DeviceIds {get;set;}=[]; public DateTimeOffset ExpiresAt {get;set;} public int MaxInstances {get;set;} public int UsedCount {get;set;} public DateTimeOffset? RevokedAt {get;set;} public long Revision {get;set;} }
+    { public Guid? HardwareBindingId {get;set;} public long? HardwareBindingRevision {get;set;} public Guid Id {get;set;} public Guid SoftwareId {get;set;} public Guid[] DeviceIds {get;set;}=[]; public DateTimeOffset ExpiresAt {get;set;} public int MaxInstances {get;set;} public int UsedCount {get;set;} public DateTimeOffset? RevokedAt {get;set;} public long Revision {get;set;} }
 }
 internal class InstanceRow
 {
+    public Guid? HardwareBindingId {get;set;} public Guid? HardwareId {get;set;} public string? HardwareName {get;set;} public string? ManagementIp {get;set;}
     public Guid Id {get;set;} public Guid SoftwareId {get;set;} public Guid DeviceId {get;set;}
     public string DeviceNo {get;set;}=""; public string DeviceName {get;set;}=""; public Guid ProcessId {get;set;}
     public string ProcessCode {get;set;}=""; public string ProcessName {get;set;}=""; public string Lifecycle {get;set;}="";
@@ -119,5 +121,5 @@ internal class InstanceRow
     public string? LatestTaskResult { get; set; }
     internal InstanceView View(SiteView site,DateTimeOffset now) => new(Id,SoftwareId,DeviceId,DeviceNo,DeviceName,new(site.SiteId,site.SiteName,ProcessId,ProcessCode,ProcessName),
         Lifecycle,SnapshotJson is null?null:JsonSerializer.Deserialize<StateReport>(SnapshotJson),LastAcceptedAt,
-        LastAcceptedAt is { } t ? Math.Max(0,(long)Math.Floor((now-t).TotalSeconds)):null,InstanceValidation.Freshness(LastAcceptedAt,now),LatestAvailableFormalReleaseId,LatestTaskId,LatestTaskResult,Revision);
+        LastAcceptedAt is { } t ? Math.Max(0,(long)Math.Floor((now-t).TotalSeconds)):null,InstanceValidation.Freshness(LastAcceptedAt,now),LatestAvailableFormalReleaseId,LatestTaskId,LatestTaskResult,Revision,HardwareBindingId,HardwareId,HardwareName,ManagementIp);
 }

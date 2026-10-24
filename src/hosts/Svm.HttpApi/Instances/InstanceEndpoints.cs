@@ -21,9 +21,9 @@ internal static class InstanceEndpoints
         });
         manage.MapPost("/enrollment-grants",async (HttpContext h,ISender s,IAntiforgery a)=>
         {
-            using var d=await Input(h,a,["softwareId","deviceIds","expiresAt","maxInstances","secretMaterial","reason"]); var b=d.RootElement;
+            using var d=await Input(h,a,["softwareId","deviceIds","expiresAt","maxInstances","secretMaterial","reason","hardwareBindingId","hardwareBindingRevision"]); var b=d.RootElement;
             var ids=Array(b,"deviceIds").Select(x=>x.ValueKind==JsonValueKind.String && x.TryGetGuid(out var id)?id:throw Invalid()).ToArray();
-            var v=(await s.Send(new CreateEnrollmentGrantCommand(Key(h),Id(b,"softwareId"),ids,Date(b,"expiresAt"),Capacity(b),Text(b,"secretMaterial"),Text(b,"reason")),h.RequestAborted)).Value;
+            var v=(await s.Send(new CreateEnrollmentGrantCommand(Key(h),Id(b,"softwareId"),ids,Date(b,"expiresAt"),Capacity(b),Text(b,"secretMaterial"),Text(b,"reason"),OptionalId(b,"hardwareBindingId"),b.TryGetProperty("hardwareBindingRevision",out var revision) && revision.ValueKind!=JsonValueKind.Null ? Number(b,"hardwareBindingRevision") : null),h.RequestAborted)).Value;
             return Detail(v,201);
         });
         manage.MapPost("/enrollment-grants/{grantId:guid}/revoke",async (Guid grantId,HttpContext h,ISender s,IAntiforgery a)=>
