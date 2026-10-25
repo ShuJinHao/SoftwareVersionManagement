@@ -18,6 +18,7 @@ internal static class CatalogEndpoints
             if (!context.HttpContext.Request.IsHttps) throw new RequestRejectedException(RequestFailure.PermissionDenied);
             context.HttpContext.Response.Headers.CacheControl = "no-store"; return await next(context);
         });
+        HardwareEndpoints.Map(group);
         group.MapGet("/site", async (HttpContext http, ISender sender) =>
         { EmptyQuery(http); var site = await sender.Send(new GetSiteQuery(), http.RequestAborted); return Results.Json(new { site.SiteId, site.SiteName, site.SiteTimeZone, serverTime = DateTimeOffset.UtcNow }); });
         group.MapGet("/processes", async (HttpContext http, ISender sender, CatalogCursor cursor) =>
@@ -25,7 +26,7 @@ internal static class CatalogEndpoints
         group.MapGet("/processes/{processId:guid}", async (Guid processId, HttpContext http, ISender sender) =>
         { EmptyQuery(http); return Detail(await sender.Send(new GetProcessQuery(processId), http.RequestAborted)); });
         group.MapGet("/devices", async (HttpContext http, ISender sender, CatalogCursor cursor) =>
-        { var input = await cursor.ReadAsync(http, "devices", ["processId", "deviceNo", "name"], http.RequestAborted); var page = await sender.Send(new ListDevicesQuery(input.Input), http.RequestAborted); return Page(page, input, cursor); });
+        { var input = await cursor.ReadAsync(http, "devices", ["processId", "deviceNo", "name", "assetNumber"], http.RequestAborted); var page = await sender.Send(new ListDevicesQuery(input.Input), http.RequestAborted); return Page(page, input, cursor); });
         group.MapGet("/devices/{deviceId:guid}", async (Guid deviceId, HttpContext http, ISender sender) =>
         { EmptyQuery(http); return Detail(await sender.Send(new GetDeviceQuery(deviceId), http.RequestAborted)); });
         group.MapGet("/software", async (HttpContext http, ISender sender, CatalogCursor cursor) =>
@@ -55,7 +56,7 @@ internal static class CatalogEndpoints
         group.MapPost("/software", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
             using var doc = await Input(http, antiforgery, ["code", "name", "category", "description"]); var b = doc.RootElement;
-            var result = await sender.Send(new CreateSoftwareCommand(Key(http), Text(b, "code"), Text(b, "name"), Text(b, "category"), OptionalText(b, "description")), http.RequestAborted);
+            var result = await sender.Send(new CreateSoftwareCommand(Key(http), OptionalText(b, "code"), Text(b, "name"), Text(b, "category"), OptionalText(b, "description")), http.RequestAborted);
             return Results.Json(Software(result.Value), statusCode: 201);
         });
         group.MapPatch("/software/{softwareId:guid}", async (Guid softwareId, HttpContext http, ISender sender, IAntiforgery antiforgery) =>
@@ -67,7 +68,7 @@ internal static class CatalogEndpoints
         group.MapPost("/processes", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
             using var doc = await Input(http, antiforgery, ["code", "name"]); var b = doc.RootElement;
-            var result = await sender.Send(new CreateProcessCommand(Key(http), Text(b, "code"), Text(b, "name")), http.RequestAborted);
+            var result = await sender.Send(new CreateProcessCommand(Key(http), OptionalText(b, "code"), Text(b, "name")), http.RequestAborted);
             return Results.Json(Process(result.Value), statusCode: 201);
         });
         group.MapPatch("/processes/{processId:guid}", async (Guid processId, HttpContext http, ISender sender, IAntiforgery antiforgery) =>
@@ -78,15 +79,15 @@ internal static class CatalogEndpoints
         });
         group.MapPost("/devices", async (HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
-            using var doc = await Input(http, antiforgery, ["processId", "deviceNo", "name"]); var b = doc.RootElement;
-            var result = await sender.Send(new CreateDeviceCommand(Key(http), Identifier(b, "processId"), Text(b, "deviceNo"), Text(b, "name")), http.RequestAborted);
+            using var doc = await Input(http, antiforgery, ["processId", "deviceNo", "name", "assetNumber"]); var b = doc.RootElement;
+            var result = await sender.Send(new CreateDeviceCommand(Key(http), Identifier(b, "processId"), OptionalText(b, "deviceNo"), Text(b, "name"), OptionalText(b, "assetNumber")), http.RequestAborted);
             return Results.Json(Device(result.Value), statusCode: 201);
         });
         group.MapPatch("/devices/{deviceId:guid}", async (Guid deviceId, HttpContext http, ISender sender, IAntiforgery antiforgery) =>
         {
-            using var doc = await Input(http, antiforgery, ["processId", "name", "reason", "expectedRevision"]); var b = doc.RootElement;
+            using var doc = await Input(http, antiforgery, ["processId", "name", "reason", "expectedRevision", "assetNumber"]); var b = doc.RootElement;
             var result = await sender.Send(new UpdateDeviceCommand(Key(http), deviceId, Revision(b), b.TryGetProperty("processId", out var p) && p.ValueKind != JsonValueKind.Null ? Identifier(b, "processId") : null,
-                OptionalText(b, "name"), Text(b, "reason")), http.RequestAborted);
+                OptionalText(b, "name"), Text(b, "reason"), OptionalText(b, "assetNumber"), b.TryGetProperty("assetNumber", out _)), http.RequestAborted);
             return Results.Json(Device(result.Value));
         });
         group.MapPost("/devices/{deviceId:guid}/software-bindings", async (Guid deviceId, HttpContext http, ISender sender, IAntiforgery antiforgery) =>
@@ -108,7 +109,7 @@ internal static class CatalogEndpoints
     private static IResult Detail(DeviceView value) => Results.Json(Device(value));
     private static object Software(SoftwareView x) => new { x.Id, x.Code, x.Name, x.Category, x.Description, x.LatestAvailableFormalReleaseId, x.Revision, serverTime = DateTimeOffset.UtcNow };
     private static object Process(ProcessView x) => new { x.Id, x.SiteId, x.Code, x.Name, x.Revision, serverTime = DateTimeOffset.UtcNow };
-    private static object Device(DeviceView x) => new { x.Id, x.DeviceNo, x.Name, x.ProcessId, x.ProcessCode, x.ProcessName, x.SiteId, x.SiteName, x.Revision, serverTime = DateTimeOffset.UtcNow };
+    private static object Device(DeviceView x) => new { x.Id, x.DeviceNo, x.Name, x.ProcessId, x.ProcessCode, x.ProcessName, x.SiteId, x.SiteName, x.Revision, x.AssetNumber, serverTime = DateTimeOffset.UtcNow };
     private static object Binding(BindingView x) => new { x.DeviceId, x.SoftwareId, x.Revision };
     private static object BindingDetail(BindingView x) => new { x.DeviceId, x.SoftwareId, x.Revision, serverTime = DateTimeOffset.UtcNow };
     private static Guid Identifier(JsonElement body, string field) => Guid.TryParseExact(Text(body, field), "D", out var id) && id != Guid.Empty ? id : throw new RequestRejectedException(RequestFailure.InvalidRequest);

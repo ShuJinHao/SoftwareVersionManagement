@@ -34,6 +34,7 @@ public static class PersistenceRegistration
         services.AddScoped<IReleaseImportRepository, ReleaseImportRepository>();
         services.AddScoped<IPackageRepository, PackageRepository>();
         services.AddScoped<ISiteAssetRepository, SiteAssetRepository>();
+        services.AddScoped<IHardwareRepository, HardwareRepository>();
         services.AddScoped<IAuditRepository, AuditRepository>();
         services.AddScoped<IInstanceAccessRepository, InstanceAccessRepository>();
         services.AddScoped<IManagedInstanceRepository, ManagedInstanceRepository>();

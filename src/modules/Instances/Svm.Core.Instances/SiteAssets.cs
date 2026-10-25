@@ -13,15 +13,16 @@ public sealed class ProductionProcess(StrongId<ProductionProcess> id, Guid siteI
     private static string Required(string value) { ArgumentException.ThrowIfNullOrWhiteSpace(value); return value; }
 }
 
-public sealed class ProductionDevice(StrongId<ProductionDevice> id, StrongId<ProductionProcess> processId, string deviceNo, string name)
+public sealed class ProductionDevice(StrongId<ProductionDevice> id, StrongId<ProductionProcess> processId, string deviceNo, string name, string? assetNumber = null)
     : AggregateRoot<StrongId<ProductionDevice>>(id)
 {
     public StrongId<ProductionProcess> ProcessId { get; private set; } = processId;
+    public string? AssetNumber { get; private set; } = assetNumber;
     public string DeviceNo { get; private set; } = Required(deviceNo);
     public string Name { get; private set; } = Required(name);
     public long Revision { get; private set; } = 1;
-    public void Update(StrongId<ProductionProcess>? processId, string? name)
-    { if (processId is { } process) ProcessId = process; if (name is not null) Name = Required(name); Revision++; }
+    public void Update(StrongId<ProductionProcess>? processId, string? name, string? assetNumber = null, bool updateAssetNumber = false)
+    { if (processId is { } process) ProcessId = process; if (name is not null) Name = Required(name); if (updateAssetNumber) AssetNumber = assetNumber; Revision++; }
     private static string Required(string value) { ArgumentException.ThrowIfNullOrWhiteSpace(value); return value; }
 }
 
@@ -50,6 +51,9 @@ public interface ISiteAssetRepository
     Task<DeviceSoftwareBinding?> BindingByIdAsync(Guid id, CancellationToken token);
     Task<bool> ProcessCodeExistsAsync(Guid siteId, string code, CancellationToken token);
     Task<bool> DeviceNoExistsAsync(string deviceNo, CancellationToken token);
+    Task<string> NextProcessCodeAsync(CancellationToken token);
+    Task<string> NextDeviceNoAsync(CancellationToken token);
+    Task<bool> HasActiveHardwareBindingsAsync(Guid deviceBindingId, CancellationToken token);
     void AddProcess(ProductionProcess process);
     void AddDevice(ProductionDevice device);
     void AddBinding(DeviceSoftwareBinding binding);

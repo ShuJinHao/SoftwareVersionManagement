@@ -54,9 +54,15 @@ internal sealed class InstanceFixture(SiteCatalogFixture site) : IAsyncDisposabl
     }
     internal async Task<T> SendAsync<T>(IRequest<T> x,AccessProof? access=null,Guid? instanceId=null,IInterceptor? interceptor=null,bool auditFailure=false,CancellationToken token=default,SessionProof? human=null,Guid? softwareId=null)
     { await using var p=Provider(access,instanceId,interceptor,auditFailure,human,softwareId); await using var scope=p.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<ISender>().Send(x,token); }
-    internal async Task<(GrantView Grant,AccessProof Proof)> GrantAsync(int capacity=10,DateTimeOffset? expires=null)
+    internal async Task<HardwareBindingView> PositionAsync(Guid? softwareId = null, Guid? deviceId = null)
     {
-        var secret=Secret(); var result=await SendAsync(new CreateEnrollmentGrantCommand(Guid.NewGuid(),SoftwareId,[Device.Id],expires??Clock.GetUtcNow().AddHours(1),capacity,secret,"夹具登记许可"));
+        var hardware=(await Site.SendAsync(new CreateHardwareCommand(Guid.NewGuid(),deviceId ?? Device.Id,"IPC","夹具工控机",null,"192.0.2.20"))).Value;
+        return (await Site.SendAsync(new CreateHardwareBindingCommand(Guid.NewGuid(),hardware.Id,softwareId ?? SoftwareId,null,"夹具安装位置"))).Value;
+    }
+    internal async Task<(GrantView Grant,AccessProof Proof)> GrantAsync(int capacity=1,DateTimeOffset? expires=null)
+    {
+        var position=await PositionAsync();
+        var secret=Secret(); var result=await SendAsync(new CreateEnrollmentGrantCommand(Guid.NewGuid(),SoftwareId,[Device.Id],expires??Clock.GetUtcNow().AddHours(1),capacity,secret,"夹具登记许可",position.Id,position.Revision));
         return (result.Value,new(ActorKind.EnrollmentGrant,result.Value.Id,secret));
     }
     internal async Task<(RegistrationResult Registration,AccessProof Proof,RegisterInstanceCommand Command,AccessProof GrantProof)> EnrollAsync()

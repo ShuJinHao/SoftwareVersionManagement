@@ -60,6 +60,11 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         var t = await tasks.AttemptTaskAsync(x.AttemptId, false, ct); var d = await tasks.DeploymentAsync(t.DeploymentId, false, ct);
         var release = await Target(d.SoftwareId, d.TargetReleaseId, true, ct); var p = await packages.GetAsync(release.PackageId, false, true, ct);
         if (x.Input.Preflight.DownloadedSha256 != p.Sha256 || !x.Input.Preflight.DataProtectionConfirmed) throw new RequestRejectedException(RequestFailure.ChecksumMismatch);
+        if (t.HardwareBindingId is { } fixedPosition)
+        {
+            var current = await facts.GetAsync(t.InstanceId, true, ct);
+            if (current?.HardwareBindingId != fixedPosition) throw new RequestRejectedException(RequestFailure.InvalidState);
+        }
         await tasks.CheckStartAsync(x.AttemptId, ct);
         var report = x.Input.StateReport; await VerifyReport(d.SoftwareId, report, ct);
         var direction = Direction(report, release.Version); if (direction is not null) throw new RequestRejectedException(direction == "ROLLBACK_REQUIRED" ? RequestFailure.RollbackRequired : direction == "CURRENT_VERSION_UNKNOWN" ? RequestFailure.CurrentVersionUnknown : RequestFailure.InvalidState);
@@ -104,11 +109,11 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
             {
                 foreach (var id in await tasks.NextMembersAsync(x.Lease, ct))
                 {
-                    var f = await facts.GetAsync(id, false, ct); var reason = f?.SoftwareId != d.SoftwareId ? "OUT_OF_SCOPE" : f.Lifecycle != "Active" ? "INSTANCE_SUSPENDED" : Direction(f.Snapshot, r.Version);
+                    var f = await facts.GetAsync(id, true, ct); var reason = f?.SoftwareId != d.SoftwareId ? "OUT_OF_SCOPE" : f.Lifecycle != "Active" ? "INSTANCE_SUSPENDED" : f.HardwareBindingId is null ? "HARDWARE_BINDING_REQUIRED" : Direction(f.Snapshot, r.Version);
                     Guid? retry = null;
                     if (d.Id != Guid.Empty && reason is null)
                     { var source = await tasks.RetryDeploymentAsync(d.Id, ct); if (source is { } old) { try { retry = await tasks.RetrySourceAsync(old, id, ct); } catch (RequestRejectedException e) when (e.Failure == RequestFailure.RetrySourceInvalid) { reason = "RETRY_SOURCE_INVALID"; } } }
-                    await tasks.AdmitAsync(x.Lease, id, reason, retry, ct);
+                    await tasks.AdmitAsync(x.Lease, id, reason, retry, ct, f?.HardwareBindingId);
                 }
             }
         }

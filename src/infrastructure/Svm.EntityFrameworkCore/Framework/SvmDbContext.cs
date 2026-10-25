@@ -30,6 +30,7 @@ internal sealed class SvmDbContext : DbContext
         Operations.OperationResultModel.Configure(modelBuilder);
         Messaging.OutboxModel.Configure(modelBuilder);
         Catalog.CatalogModel.Configure(modelBuilder);
+        Catalog.HardwareModel.Configure(modelBuilder);
         Instances.InstanceModel.Configure(modelBuilder);
         Packages.ReleasePackageModel.Configure(modelBuilder);
         Packages.ReleaseImportModel.Configure(modelBuilder);

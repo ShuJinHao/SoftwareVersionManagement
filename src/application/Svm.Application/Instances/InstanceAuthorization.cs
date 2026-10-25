@@ -6,7 +6,7 @@ using Svm.Services.Contracts.Instances;
 namespace Svm.Application.Instances;
 
 internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInstances instances,IAccessProofSource proofs,ISiteAssets assets,
-    ISoftwareCatalog software,IUnitOfWork unitOfWork)
+    ISoftwareCatalog software,IUnitOfWork unitOfWork,IHardwareAssets hardware)
 {
     private bool Protect => unitOfWork.CurrentOperationId is not null;
     internal async ValueTask<AuthorizationDecision> MachineAsync(AuthorizationRequest request,CancellationToken token)
@@ -52,6 +52,10 @@ internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInsta
             case RevokeInstanceCredentialCommand x:
                 var c=await access.CredentialAsync(x.CredentialId,token); instanceId=c.SubjectId; softwareId=await access.SoftwareForAsync("instance",c.SubjectId,Protect,token); break;
             case CreateRecoveryGrantCommand x: instanceId=x.InstanceId; break;
+            case BindInstanceHardwareCommand x:
+                if (!person.Permissions.Any(p => p.SoftwareId is null && p.Operation == "asset.manage"))
+                    return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+                instanceId=x.InstanceId; break;
             case UpdateInstanceLifecycleCommand x: instanceId=x.InstanceId; break;
             case ListInstanceCredentialsQuery x: instanceId=x.InstanceId; break;
             case GetInstanceQuery x: instanceId=x.InstanceId; break;
@@ -69,6 +73,9 @@ internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInsta
         if(!await software.ExistsAsync(sid,Protect,token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if(instanceId is { } instance)
         {
+            // Protect the device/position before the instance, consistently with registration and reference protection.
+            if (request.Request is BindInstanceHardwareCommand binding)
+                await hardware.BindingAsync(binding.HardwareBindingId, Protect, token);
             var value=await instances.GetIdentityAsync(instance,Protect,token);
             if(value is null || value.SoftwareId!=sid) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             return AuthorizationDecision.Allow(AuthorizationTarget.Instance(sid,instance));

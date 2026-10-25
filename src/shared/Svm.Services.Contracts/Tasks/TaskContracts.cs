@@ -43,7 +43,7 @@ public sealed record ManualClosureView(Guid SubjectId, string Reason, string Ons
 public sealed record TaskView(Guid Id, Guid DeploymentId, Guid? BatchId, Guid InstanceId, Guid TargetReleaseId,
     string State, TaskWindow Window, string? WaitReason, bool IsDeferred, DateTimeOffset? ResponseDeadlineAt,
     Guid? AttemptId, DateTimeOffset? StartAuthorizedAt, DateTimeOffset? MustBeginBefore, string? LastReportedProgress,
-    string? TerminalResult, ManualClosureView? ManualClosure, Guid? RetryOfTaskId, long Revision);
+    string? TerminalResult, ManualClosureView? ManualClosure, Guid? RetryOfTaskId, long Revision, Guid? HardwareBindingId = null);
 public sealed record FailureReview([property: JsonRequired] Guid BatchId, [property: JsonRequired] long FailureRevision);
 public sealed record StartPreflight([property: JsonRequired] string DownloadedSha256, [property: JsonRequired] bool DataProtectionConfirmed, long? CompatibilityDeclarationRevision = null, string? Note = null);
 public sealed record StartInput([property: JsonRequired] StateReport StateReport, [property: JsonRequired] StartPreflight Preflight);
@@ -77,7 +77,7 @@ public interface ITaskQueries
     Task<IReadOnlyDictionary<Guid, TaskSummary>> LatestAsync(IReadOnlyList<Guid> instanceIds, CancellationToken token);
 }
 /// <summary>INS supplies bounded facts; snapshot pages are consumed only inside the framework-owned repeatable-read root.</summary>
-public sealed record InstanceTaskFact(Guid Id, Guid SoftwareId, string Lifecycle, StateReport? Snapshot);
+public sealed record InstanceTaskFact(Guid Id, Guid SoftwareId, string Lifecycle, StateReport? Snapshot, Guid? HardwareBindingId = null);
 public interface IInstanceTaskFacts
 {
     Task<InstanceTaskFact?> GetAsync(Guid instanceId, bool protect, CancellationToken token);
@@ -128,7 +128,7 @@ public interface ITaskWorkflow
     Task<TaskLease?> ClaimWorkAsync(Guid id, Guid leaseToken, CancellationToken token);
     Task<TaskWorkView> WorkAsync(Guid id, CancellationToken token);
     Task<IReadOnlyList<Guid>> NextMembersAsync(TaskLease lease, CancellationToken token);
-    Task AdmitAsync(TaskLease lease, Guid instanceId, string? reason, Guid? retryOfTask, CancellationToken token);
+    Task AdmitAsync(TaskLease lease, Guid instanceId, string? reason, Guid? retryOfTask, CancellationToken token, Guid? hardwareBindingId = null);
     Task AdvanceAsync(TaskLease lease, bool authorized, bool targetAvailable, CancellationToken token);
     Task FailWorkAsync(TaskLease lease, string code, CancellationToken token);
     Task<Guid?> RetryDeploymentAsync(Guid deploymentId, CancellationToken token);

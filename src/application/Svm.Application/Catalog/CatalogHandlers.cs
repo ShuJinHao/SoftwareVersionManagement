@@ -81,11 +81,11 @@ internal sealed class UpdateProcessCommandHandler(ISiteAssets assets, CatalogCom
 }
 internal sealed class CreateDeviceCommandHandler(ISiteAssets assets, CatalogCompletion completion) : IRequestHandler<CreateDeviceCommand, OperationResult<DeviceView>>
 {
-    public Task<OperationResult<DeviceView>> Handle(CreateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.create", "register device", () => assets.CreateDeviceAsync(request.ProcessId, request.DeviceNo, request.Name, token), x => x.Id, token);
+    public Task<OperationResult<DeviceView>> Handle(CreateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.create", "register device", () => assets.CreateDeviceAsync(request.ProcessId, request.DeviceNo, request.Name, token, request.AssetNumber), x => x.Id, token);
 }
 internal sealed class UpdateDeviceCommandHandler(ISiteAssets assets, CatalogCompletion completion) : IRequestHandler<UpdateDeviceCommand, OperationResult<DeviceView>>
 {
-    public Task<OperationResult<DeviceView>> Handle(UpdateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.update", request.Reason, () => assets.UpdateDeviceAsync(request.DeviceId, request.ExpectedRevision, request.ProcessId, request.Name, token), x => x.Id, token);
+    public Task<OperationResult<DeviceView>> Handle(UpdateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.update", request.Reason, () => assets.UpdateDeviceAsync(request.DeviceId, request.ExpectedRevision, request.ProcessId, request.Name, token, request.AssetNumber, request.UpdateAssetNumber), x => x.Id, token);
 }
 internal sealed class CreateBindingCommandHandler(ISiteAssets assets, CatalogCompletion completion) : IRequestHandler<CreateBindingCommand, OperationResult<BindingView>>
 {

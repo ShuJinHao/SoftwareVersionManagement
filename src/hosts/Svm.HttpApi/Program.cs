@@ -64,6 +64,7 @@ public partial class Program
         if (packageFiles is not null && site.Require().SiteId != messaging!.SiteId) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         builder.Services.AddSingleton(site);
         builder.Services.AddScoped<CatalogCursor>();
+        builder.Services.AddScoped<HardwareCursor>();
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<InstanceCursor>();
         builder.Services.AddSingleton(InstanceAccessConfiguration.LoadFromEnvironment());

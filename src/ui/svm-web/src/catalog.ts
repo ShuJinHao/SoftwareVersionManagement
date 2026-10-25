@@ -1,6 +1,6 @@
 export interface Site { siteId: string; siteName: string; siteTimeZone: string }
 export interface Process { id: string; siteId: string; code: string; name: string; revision: number }
-export interface Device { id: string; deviceNo: string; name: string; processId: string; processCode: string; processName: string; siteId: string; siteName: string; revision: number }
+export interface Device { id: string; deviceNo: string; name: string; processId: string; processCode: string; processName: string; siteId: string; siteName: string; revision: number; assetNumber?: string | null }
 export interface Software { id: string; code: string; name: string; category: 'UpperComputer' | 'Vision'; description: string | null; latestAvailableFormalReleaseId: string | null; revision: number }
 export interface Binding { deviceId: string; softwareId: string; revision: number }
 export interface Inventory { software: Software; binding: Binding; instance: import('./instances').Instance | null }

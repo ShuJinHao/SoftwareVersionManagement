@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ApiError, request, type Session } from '../api'
 import { useSession } from '../session'
+const props=defineProps<{embedded?:boolean}>()
+const emit=defineEmits<{completed:[];busy:[boolean]}>()
 const session = useSession(), router = useRouter()
 const currentPassword = ref(''), newPassword = ref(''), confirmPassword = ref(''), busy = ref(false), error = ref(''), success = ref('')
+watch(busy,value=>emit('busy',value),{flush:'sync'})
 async function change() {
   if (busy.value) return
   if (newPassword.value !== confirmPassword.value) { error.value = '两次输入的新密码不一致。'; return }
@@ -13,11 +16,9 @@ async function change() {
     session.current = await request<Session>('/api/v1/session/password', 'POST',
       { currentPassword: currentPassword.value, newPassword: newPassword.value }, session.current?.csrfToken)
     success.value = '密码已修改，旧会话已失效。'
-    if (session.canAssets) await router.replace('/site')
-    else if (session.canSoftware) await router.replace('/software')
-    else if (session.canManage) await router.replace('/users')
+    if (!props.embedded) await router.replace(session.canAssets || session.canSoftware || session.canInstances ? '/workspace' : '/system')
   } catch (e) { error.value = e instanceof ApiError ? e.message : '修改未完成，请重新登录核实。' }
-  finally { currentPassword.value = ''; newPassword.value = ''; confirmPassword.value = ''; busy.value = false }
+  finally { currentPassword.value = ''; newPassword.value = ''; confirmPassword.value = ''; busy.value = false; if(success.value && props.embedded) emit('completed') }
 }
 </script>
 <template>

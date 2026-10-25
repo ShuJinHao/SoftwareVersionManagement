@@ -289,6 +289,7 @@ onUnmounted(() => { disposed = true; for (const scope of readScopes) scope.inval
       <p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">原操作键和正文保留在本页内存中，请人工核实，页面不会自动重发。</p>
       <div v-if="syncWork"><p>{{ syncWork.tag ?? '发布扫描' }} · {{ syncStages[syncWork.stage] ?? syncWork.stage }}</p><p v-if="syncWork.lastErrorCode" class="error">{{ syncWork.lastErrorCode }}</p><p v-if="syncWork.stage === 'Completed'" class="muted">同步已完成；可刷新版本列表或查看导入版本，当前查看对象不会自动切换。</p><button :disabled="busy || syncLoading" @click="refreshSync">核对同步进度</button><button v-if="syncWork.releaseId" :disabled="locked" @click="detail(syncWork.releaseId)">查看导入版本</button></div>
     </section>
+    <p v-if="source?.kind === 'Manual'" class="state-card" aria-label="版本来源配置">当前为人工来源，尚未绑定 GitLab。GitLab 项目绑定由部署管理员配置，配置后在此查看正式版本及同步进度。</p>
     <div class="tab-row"><button :aria-pressed="channel === 'Test'" :disabled="locked" @click="channel = 'Test'; changeChannel()">测试版本</button><button :aria-pressed="channel === 'Formal'" :disabled="locked" @click="channel = 'Formal'; changeChannel()">正式版本</button></div>
     <div class="dialog-actions"><button :disabled="locked || loading" @click="load(true)">刷新列表</button><button v-if="software?.latestAvailableFormalReleaseId" :disabled="locked" @click="latestFormal">查看最新可用正式版</button></div>
     <div class="account-layout">

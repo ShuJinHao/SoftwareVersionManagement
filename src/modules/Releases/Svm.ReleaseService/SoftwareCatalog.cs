@@ -15,10 +15,11 @@ internal sealed class SoftwareCatalog(ISoftwareCatalogRepository repository, IUn
     public async Task<bool> ExistsAsync(Guid id, bool protect, CancellationToken token)
     { options.Require(); return await repository.GetAsync(id, protect, token) is not null; }
     public async Task<SoftwareView> GetAsync(Guid id, bool protect, CancellationToken token) => View(await Existing(id, protect, token));
-    public async Task<SoftwareView> CreateAsync(string code, string name, string category, string? description, CancellationToken token)
+    public async Task<SoftwareView> CreateAsync(string? code, string name, string category, string? description, CancellationToken token)
     {
         RequireWrite();
-        if (await repository.CodeExistsAsync(code, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
+        if (code is null) { do { code = await repository.NextCodeAsync(token); } while (await repository.CodeExistsAsync(code, token)); }
+        else if (await repository.CodeExistsAsync(code, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
         var value = new SoftwareProduct(new StrongId<SoftwareProduct>(Guid.NewGuid()), code, name, category, description);
         repository.Add(value); return View(value);
     }

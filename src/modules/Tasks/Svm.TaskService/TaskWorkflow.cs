@@ -190,13 +190,14 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
     public async Task<Guid?> RetryDeploymentAsync(Guid id, CancellationToken ct) => (await Deployment(id, false, ct)).RetryOfDeploymentId;
     public async Task<Guid?> RetrySourceAsync(Guid deployment, Guid instance, CancellationToken ct)
     { var t = await repository.RetryAsync(deployment, instance, ct); if (t is null || !t.Ended) throw Reject(RequestFailure.RetrySourceInvalid); return t.Id.Value; }
-    public async Task AdmitAsync(TaskLease lease, Guid instance, string? reason, Guid? retryOf, CancellationToken ct)
+    public async Task AdmitAsync(TaskLease lease, Guid instance, string? reason, Guid? retryOf, CancellationToken ct, Guid? hardwareBindingId = null)
     {
         Write(); var w = await Owned(lease, ct); var d = await Deployment(w.ResourceId, true, ct);
         if (w.Stage != "Admission" || d.Ended || d.ControlPending || d.PauseCodes.Contains("AuthorizationChanged", StringComparison.Ordinal)) throw Reject();
         if (await repository.GuardAsync(instance, ct) is not null) reason = "INSTANCE_BUSY";
         Guid? taskId = null;
-        if (reason is null) { taskId = Guid.NewGuid(); repository.Add(new InstanceTask(taskId.Value, d.Id.Value, instance, d.TargetReleaseId, d.NotBefore, d.LatestStart, retryOf, await time.NowAsync(ct))); repository.Add(new InstanceExecutionGuard(instance, new(taskId.Value))); }
+        if (reason is null && hardwareBindingId is null) reason = "HARDWARE_BINDING_REQUIRED";
+        if (reason is null) { taskId = Guid.NewGuid(); repository.Add(new InstanceTask(taskId.Value, d.Id.Value, instance, d.TargetReleaseId, d.NotBefore, d.LatestStart, retryOf, await time.NowAsync(ct), hardwareBindingId)); repository.Add(new InstanceExecutionGuard(instance, new(taskId.Value))); }
         repository.Add(new AdmissionItem(d.Id, instance, reason is null ? "Accepted" : "Rejected", reason, taskId)); d.Admit(reason is null); w.Advance(instance);
     }
     public async Task AdvanceAsync(TaskLease lease, bool authorized, bool targetAvailable, CancellationToken ct)
@@ -299,7 +300,7 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
       return new(t.Id.Value, t.DeploymentId.Value, t.BatchId?.Value, t.InstanceId, t.TargetReleaseId, t.State == "Queued" && b?.State == "Open" ? "Available" : t.State,
         new(t.NotBefore, t.LatestStart), wait,
         t.IsDeferred, deadline, t.AttemptId, a?.StartAuthorizedAt, a?.MustBeginBefore, t.LastReportedProgress, t.TerminalResult,
-        t.ClosedAt is { } closed ? new(t.ClosedBy!.Value, t.ClosureReason!, t.OnsiteEvidence!, closed) : null, t.RetryOfTaskId, t.Revision); }
+        t.ClosedAt is { } closed ? new(t.ClosedBy!.Value, t.ClosureReason!, t.OnsiteEvidence!, closed) : null, t.RetryOfTaskId, t.Revision, t.HardwareBindingId); }
     private static StartGrant Grant(InstanceTask t, ExecutionAttempt a) => new(t.Id.Value, a.Id, t.TargetReleaseId, a.PackageId!.Value, a.Sha256!, a.StartAuthorizedAt!.Value, a.MustBeginBefore!.Value);
     private static TaskWorkAuthority Authority(TaskWork w) => new(w.Id.Value, w.SoftwareId, w.ResourceId, w.InitiatorId, w.Kind, w.DispatchSequence, w.DispatchEventId, w.Accepted, w.State, w.Stage, w.LeaseToken, w.LeaseGeneration, w.LeaseUntil);
 }

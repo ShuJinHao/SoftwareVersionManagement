@@ -42,7 +42,7 @@ public sealed class GitLabMigrationTests
             var directory = Path.Combine(OutboxFixture.Root, "artifacts", "gitlab-import"); Directory.CreateDirectory(directory);
             await File.WriteAllTextAsync(Path.Combine(directory, "gitlab-import-upgrade.sql"), script);
             var result = await db.Runner.ApplyAsync(default);
-            Assert.Equal(11, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
+            Assert.Equal(12, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db));
             await using (var c = Context(db))
             {
                 var snapshot = c.GetService<Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer>().Initialize(c.GetService<IMigrationsAssembly>().ModelSnapshot!.Model, designTime:true);
@@ -72,6 +72,6 @@ public sealed class GitLabMigrationTests
           SELECT (to_jsonb(x)-ARRAY['SourceKind','SourceBindingId','SourceTag','SourceFactsJson'])::text value FROM rel.releases x
           UNION ALL SELECT to_jsonb(x)::text FROM pkg.packages x
           UNION ALL SELECT to_jsonb(x)::text FROM ins.installation_evidence x
-          UNION ALL SELECT to_jsonb(x)::text FROM ins.instances x) facts
+          UNION ALL SELECT (to_jsonb(x)-'HardwareBindingId')::text FROM ins.instances x) facts
         """);
 }

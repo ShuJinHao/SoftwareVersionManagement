@@ -1,3 +1,4 @@
+using Svm.SharedKernel.Domain;
 using Microsoft.EntityFrameworkCore;
 using Svm.Core.Instances;
 using Svm.EntityFrameworkCore.Framework;
@@ -47,6 +48,11 @@ internal sealed class SiteAssetRepository(SvmDbContext context, IUnitOfWork unit
         RequireWrite(); await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({deviceNo}, 71003))", token);
         return await context.Set<ProductionDevice>().AnyAsync(x => x.DeviceNo == deviceNo, token);
     }
+    public async Task<string> NextProcessCodeAsync(CancellationToken token)
+    { RequireWrite(); var value = await context.Database.SqlQueryRaw<long>("SELECT nextval('ins.process_code_seq') AS \"Value\"").SingleAsync(token); return "PR-" + value.ToString("D6", System.Globalization.CultureInfo.InvariantCulture); }
+    public async Task<string> NextDeviceNoAsync(CancellationToken token)
+    { RequireWrite(); var value = await context.Database.SqlQueryRaw<long>("SELECT nextval('ins.device_no_seq') AS \"Value\"").SingleAsync(token); return "EQ-" + value.ToString("D6", System.Globalization.CultureInfo.InvariantCulture); }
+    public Task<bool> HasActiveHardwareBindingsAsync(Guid deviceBindingId, CancellationToken token) => context.Set<HardwareSoftwareBinding>().AnyAsync(x => x.DeviceBindingId == new StrongId<DeviceSoftwareBinding>(deviceBindingId) && x.IsActive, token);
     public void AddProcess(ProductionProcess process) { RequireWrite(); context.Add(process); }
     public void AddDevice(ProductionDevice device) { RequireWrite(); context.Add(device); }
     public void AddBinding(DeviceSoftwareBinding binding) { RequireWrite(); context.Add(binding); }

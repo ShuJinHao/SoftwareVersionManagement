@@ -18,5 +18,6 @@ public interface ISoftwareCatalogRepository
 {
     Task<SoftwareProduct?> GetAsync(Guid id, bool protect, CancellationToken token);
     Task<bool> CodeExistsAsync(string code, CancellationToken token);
+    Task<string> NextCodeAsync(CancellationToken token);
     void Add(SoftwareProduct software);
 }

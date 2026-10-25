@@ -31,12 +31,24 @@ describe('instance interactions', () => {
     const writes: RequestInit[] = []; vi.stubGlobal('fetch', vi.fn(async (p: string, o?: RequestInit) => { if (o?.method === 'PATCH') { writes.push(o); return writes.length === 1 ? Response.json({ code: 'DEPENDENCY_UNAVAILABLE' }, { status: 503 }) : Response.json({ ...instance, lifecycle: 'Suspended', revision: 2 }) }; if (p.endsWith('/session')) return Response.json(session); if (p.includes('version-history') || p.includes('/credentials?')) return page([]); if (p.endsWith('/' + iid)) return Response.json(instance); return page([instance]) }))
     const { router, pending } = await mount(InstancesPage); await settle(); await click('查看实例'); await click('暂停 API 接入'); fill('操作原因', 'fixture pause'); await submit('确认提交'); expect(pending.value).toBe(true); await router.push('/other'); expect(router.currentRoute.value.path).toBe('/page'); await submit('核实原操作'); expect(writes).toHaveLength(2); expect(writes[1].headers).toEqual(writes[0].headers); expect(writes[1].body).toEqual(writes[0].body); expect(pending.value).toBe(false)
   })
-  it('generates at least 256-bit enrollment material and clears it after explicit completion without storage', async () => {
-    const writes: RequestInit[] = []; const stored = vi.spyOn(Storage.prototype, 'setItem'); vi.stubGlobal('fetch', vi.fn(async (p: string, o?: RequestInit) => { if (o?.method === 'POST') { writes.push(o); return Response.json({ id: iid, softwareId: sid, state: 'Active', expiresAt: session.serverTime, deviceIds: [did], maxInstances: 1, usedCount: 0, revision: 1 }) }; if (p.endsWith('/session')) return Response.json(session); return page([]) }))
-    await mount(EnrollmentPage); await settle(); await click('签发登记许可'); fill('有效期', '2027-01-01T12:00'); fill('操作原因', 'fixture grant'); await submit('创建许可'); const body = JSON.parse(writes[0].body as string) as { secretMaterial: string; deviceIds: string[] }; expect(body.secretMaterial).toHaveLength(43); expect(body.deviceIds).toEqual([did]); expect(stored).not.toHaveBeenCalled(); expect(document.body.textContent).toContain(iid); await click('完成并清除秘密'); expect(document.querySelector('input[type=password]')).toBeNull(); expect(document.body.textContent).not.toContain(body.secretMaterial)
+  it('shows legacy and fixed grant history without allowing broad enrollment creation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => page([{ id: iid, softwareId: sid, state: 'Active', expiresAt: session.serverTime, deviceIds: [did], maxInstances: 2, usedCount: 1, revision: 1, hardwareBindingId: null }])))
+    await mount(EnrollmentPage); await settle()
+    expect(document.body.textContent).toContain('历史宽范围（不可新增登记）'); expect(document.body.textContent).toContain('新许可从具体工控机的软件位置签发')
+    expect(document.body.textContent).not.toContain('签发登记许可'); expect(document.querySelector('input[type=password]')).toBeNull()
   })
-  it('grant verification after a lost response sends only the original key and secret', async () => {
-    const writes: RequestInit[] = []; vi.stubGlobal('fetch', vi.fn(async (p: string, o?: RequestInit) => { if (o?.method === 'POST') { writes.push(o); if (writes.length === 1) throw new TypeError('fixture network loss'); return Response.json({ id: iid, softwareId: sid, state: 'Active', deviceIds: [did], revision: 1 }) }; if (p.endsWith('/session')) return Response.json(session); return page([]) }))
-    const { pending } = await mount(EnrollmentPage); await settle(); await click('签发登记许可'); fill('有效期', '2027-01-01T12:00'); fill('操作原因', 'fixture grant'); await submit('创建许可'); expect(pending.value).toBe(true); await submit('核实原操作'); expect(writes[0].headers).toEqual(writes[1].headers); expect(writes[0].body).toEqual(writes[1].body); expect(pending.value).toBe(false)
+  it('revokes only the frozen grant and preserves its original operation after response loss', async () => {
+    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function () { this.open = true })
+    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function () { this.open = false })
+    const writes: { path: string; options: RequestInit }[] = []
+    const grant = { id: iid, softwareId: sid, state: 'Active', expiresAt: session.serverTime, deviceIds: [did], maxInstances: 1, usedCount: 0, revision: 4, hardwareBindingId: did }
+    vi.stubGlobal('fetch', vi.fn(async (p: string, o?: RequestInit) => {
+      if (o?.method === 'POST') { writes.push({ path: p, options: o }); if (writes.length === 1) throw new TypeError('fixture response loss'); return Response.json({ ...grant, state: 'Revoked', revision: 5 }) }
+      if (p.endsWith('/session')) return Response.json(session); return page([grant])
+    }))
+    const { router, pending } = await mount(EnrollmentPage); await settle(); await click('撤销'); fill('原因', '固定许可撤销'); await submit('确认撤销')
+    expect(pending.value).toBe(true); await router.push('/other'); expect(router.currentRoute.value.path).toBe('/page')
+    await submit('核实原操作'); expect(writes).toHaveLength(2); expect(writes[0].path).toBe(`/api/v1/manage/enrollment-grants/${iid}/revoke`)
+    expect(writes[0].options.body).toBe(JSON.stringify({ expectedRevision: 4, reason: '固定许可撤销' })); expect(writes[0].path).toBe(writes[1].path); expect(writes[0].options.body).toBe(writes[1].options.body); expect(writes[0].options.headers).toEqual(writes[1].options.headers); expect(pending.value).toBe(false)
   })
 })
