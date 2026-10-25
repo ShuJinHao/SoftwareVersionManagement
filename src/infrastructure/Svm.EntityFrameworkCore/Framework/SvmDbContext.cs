@@ -27,6 +27,7 @@ internal sealed class SvmDbContext : DbContext
     {
         modelBuilder.HasDefaultSchema("framework");
         Identity.PersonnelModel.Configure(modelBuilder);
+        Identity.RoleModel.Configure(modelBuilder);
         Operations.OperationResultModel.Configure(modelBuilder);
         Messaging.OutboxModel.Configure(modelBuilder);
         Catalog.CatalogModel.Configure(modelBuilder);

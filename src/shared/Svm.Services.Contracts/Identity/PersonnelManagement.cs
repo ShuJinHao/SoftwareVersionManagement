@@ -74,10 +74,11 @@ public sealed class ReplaceUserPermissionsCommand(Guid key, Guid userId, long ex
 /// <summary>Type identity, never copied metadata or a request-supplied operation, activates these writes.</summary>
 public static class PersonnelManagementCapabilities
 {
-    public static bool Contains(Type type) => type == typeof(CreateUserCommand) || type == typeof(UpdateUserCommand) ||
+    public static bool Contains(Type type) => RoleCapabilities.IsWrite(type) || type == typeof(CreateUserCommand) || type == typeof(UpdateUserCommand) ||
         type == typeof(ResetUserPasswordCommand) || type == typeof(ReplaceUserPermissionsCommand);
     public static Guid? Target(object request) => request switch
     {
+        CreateRoleCommand or UpdateRoleCommand => null, ReplaceAuthorizationCommand x => x.SubjectId,
         UpdateUserCommand x => x.UserId, ResetUserPasswordCommand x => x.UserId,
         ReplaceUserPermissionsCommand x => x.UserId, CreateUserCommand => null,
         _ => throw new RequestRejectedException(RequestFailure.ConfigurationInvalid)

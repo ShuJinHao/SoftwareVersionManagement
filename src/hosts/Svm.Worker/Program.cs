@@ -42,7 +42,7 @@ else
     if (messaging is null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
     if (tasks is null) builder.Services.AddSvmPackageWorkerApplication(); else builder.Services.AddSvmTaskWorkerApplication();
     builder.Services.AddSvmConsumption(tasks is null ? ApplicationRegistration.PackageConsumers : ApplicationRegistration.TaskConsumers);
-    builder.Services.AddSvmPackageFiles(files).AddSvmPackages().AddSvmReleases().AddSvmSoftwareCatalog().AddSvmPersonnelWorkAuthorization().AddSvmAudit();
+    builder.Services.AddSvmPackageFiles(files).AddSvmPackages().AddSvmReleases().AddSvmSoftwareCatalog().AddSvmPersonnelWorkAuthorization().AddSvmSiteAssets().AddSvmAudit();
     var site = SiteConfiguration.LoadFromEnvironment(); site.Require();
     if (site.SiteId != messaging.SiteId) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
     builder.Services.AddSingleton(site); builder.Services.AddSingleton(TimeProvider.System);

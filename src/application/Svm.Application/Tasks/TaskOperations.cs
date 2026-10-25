@@ -27,12 +27,21 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
       return Accepted(s, s.Id, w.WorkId, "tsk.selection.created", "restricted snapshot requested"); }
     public async Task<OperationResult<SelectionView>> PutTargetChunk(PutTargetChunkCommand x, CancellationToken ct)
     {
+        var selection = await tasks.SelectionAsync(x.SelectionId, false, ct);
+        foreach (var id in x.InstanceIds)
+        {
+            var instance = await instances.GetIdentityAsync(id, false, ct);
+            // Invalid or foreign IDs remain opaque admission rejections; real same-product targets must be in range.
+            if (instance?.SoftwareId == selection.SoftwareId && !await authorization.HasInstanceAsync(Actor, selection.SoftwareId, "deployment.create", id, true, ct))
+                throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        }
         return Done(await tasks.ChunkAsync(x.SelectionId, x.ChunkNo, x.InstanceIds, TaskProjection.ChunkDigest(x.InstanceIds), ct), x.SelectionId, "tsk.selection.chunk", "bounded explicit target chunk");
     }
     public async Task<OperationResult<SelectionView>> SealTargetSelection(SealTargetSelectionCommand x, CancellationToken ct) =>
         Done(await tasks.SealAsync(x.SelectionId, x.ExpectedRevision, x.ExpectedChunkCount, x.ExpectedMemberCount, ct), x.SelectionId, "tsk.selection.sealed", "member and chunk counts verified");
     public async Task<OperationResult<DeploymentView>> CreateDeployment(CreateDeploymentCommand x, CancellationToken ct)
     {
+        if (!await authorization.CoversSelectionAsync(Actor, x.Input.SoftwareId, "deployment.create", x.Input.SelectionId, true, ct)) throw new RequestRejectedException(RequestFailure.PermissionDenied);
         var release = await Target(x.Input.SoftwareId, x.Input.TargetReleaseId, true, ct); var now = await time.NowAsync(ct);
         var d = await tasks.CreateAsync(Guid.NewGuid(), x.Input, release.Id, Actor, x.Input.Window ?? DefaultWindow(now), ct);
         var w = await tasks.CreateWorkAsync(Guid.NewGuid(), d.SoftwareId, d.Id, Actor, "Deployment", ct);
@@ -92,7 +101,7 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         var filter = await tasks.FilterAsync(w.ResourceId, ct); var at = await time.NowAsync(ct); Guid? after = null;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(TimeSpan.FromSeconds(options.SnapshotTimeoutSeconds!.Value));
         while (true)
-        { var ids = await facts.SnapshotPageAsync(filter, after, options.SelectionChunkSize!.Value, timeout.Token); if (ids.Count == 0) break;
+        { var ids = await facts.SnapshotPageAsync(filter, w.InitiatorId, after, options.SelectionChunkSize!.Value, timeout.Token); if (ids.Count == 0) break;
           await tasks.AddSnapshotMembersAsync(w.ResourceId, ids, timeout.Token); after = ids[^1]; }
         await tasks.CompleteSnapshotAsync(w.ResourceId, at, ct); await tasks.AdvanceAsync(x.Lease, true, true, ct);
         return Done(await tasks.SelectionAsync(w.ResourceId, false, ct), w.ResourceId, "tsk.selection.snapshot", "single repeatable-read snapshot sealed");
@@ -103,13 +112,15 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         var authorized = await authorization.HasPermissionAsync(w.InitiatorId, w.SoftwareId, permission, true, ct); var available = true;
         if (w.Kind != "TargetSelection")
         {
-            var d = await tasks.DeploymentAsync(w.ResourceId, false, ct); var r = await releases.GetAsync(d.TargetReleaseId, true, ct);
+            var d = await tasks.DeploymentAsync(w.ResourceId, false, ct);
+            authorized &= await authorization.CoversSelectionAsync(w.InitiatorId, w.SoftwareId, permission, d.SelectionId, true, ct);
+            var r = await releases.GetAsync(d.TargetReleaseId, true, ct);
             available = r.State == "Formal" && (await packages.GetAsync(r.PackageId, false, true, ct)).DownloadAvailable;
             if (authorized && available && w.Kind == "Deployment" && w.Stage == "Admission")
             {
                 foreach (var id in await tasks.NextMembersAsync(x.Lease, ct))
                 {
-                    var f = await facts.GetAsync(id, true, ct); var reason = f?.SoftwareId != d.SoftwareId ? "OUT_OF_SCOPE" : f.Lifecycle != "Active" ? "INSTANCE_SUSPENDED" : f.HardwareBindingId is null ? "HARDWARE_BINDING_REQUIRED" : Direction(f.Snapshot, r.Version);
+                    var f = await facts.GetAsync(id, true, ct); var reason = f?.SoftwareId != d.SoftwareId || !await authorization.HasInstanceAsync(w.InitiatorId, w.SoftwareId, "deployment.create", id, true, ct) ? "OUT_OF_SCOPE" : f.Lifecycle != "Active" ? "INSTANCE_SUSPENDED" : f.HardwareBindingId is null ? "HARDWARE_BINDING_REQUIRED" : Direction(f.Snapshot, r.Version);
                     Guid? retry = null;
                     if (d.Id != Guid.Empty && reason is null)
                     { var source = await tasks.RetryDeploymentAsync(d.Id, ct); if (source is { } old) { try { retry = await tasks.RetrySourceAsync(old, id, ct); } catch (RequestRejectedException e) when (e.Failure == RequestFailure.RetrySourceInvalid) { reason = "RETRY_SOURCE_INVALID"; } } }

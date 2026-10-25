@@ -121,7 +121,11 @@ public sealed record PackageNodeCatalog(IReadOnlyList<string> Nodes)
     public void Require(string node) { Validate(); if (!Nodes.Contains(node, StringComparer.Ordinal)) throw new RequestRejectedException(RequestFailure.PermissionDenied); }
 }
 public interface IPersonnelWorkAuthorization
-{ Task<bool> HasPermissionAsync(Guid subjectId, Guid softwareId, string operation, bool protect, CancellationToken token); }
+{
+    Task<bool> HasPermissionAsync(Guid subjectId, Guid softwareId, string operation, bool protect, CancellationToken token);
+    Task<bool> HasInstanceAsync(Guid subjectId, Guid softwareId, string operation, Guid instanceId, bool protect, CancellationToken token);
+    Task<bool> CoversSelectionAsync(Guid subjectId, Guid softwareId, string operation, Guid selectionId, bool protect, CancellationToken token);
+}
 public interface IPackageDownloadProof
 {
     Svm.Services.Contracts.Identity.SessionProof? Person { get; }

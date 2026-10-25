@@ -83,7 +83,7 @@ public sealed class DeploymentWorkflowTests
     public async Task MixedExplicitTargetsKeepUnknownIdsAndRejectOutOfScopeWithoutLeakingFacts()
     {
         await using var f=await TaskFixture.CreateAsync(); var release=await Formal(f); var valid=await Enroll(f); var unknown=Guid.NewGuid();
-        var other=(await f.Instances.Site.SendAsync(new CreateSoftwareCommand(Guid.NewGuid(),"TASK-OTHER","夹具其他软件","Vision",null))).Value;
+        var other=(await f.Instances.Site.SoftwareAsync("TASK-OTHER")).Value;
         await f.Instances.Site.SendAsync(new CreateBindingCommand(Guid.NewGuid(),f.Instances.Device.Id,other.Id,"夹具第二软件映射"));
         var user=await f.Instances.Site.UserAsync(f.Instances.Site.Proof.SubjectId);
         await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(),user.Id,user.Revision,user.Permissions.Append(new(other.Id,"enrollment.manage")).ToArray(),"夹具登记第二软件实例"));

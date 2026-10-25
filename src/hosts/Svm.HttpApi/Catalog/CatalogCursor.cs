@@ -22,7 +22,7 @@ internal sealed class CatalogCursor(IDataProtectionProvider protection, SiteCata
         var user = await users.GetAsync(subject, token) ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
         var size = Query(http, "pageSize") is { } pageSize ? int.TryParse(pageSize, NumberStyles.None, CultureInfo.InvariantCulture, out var n) ? n :
             throw new RequestRejectedException(RequestFailure.InvalidRequest) : options.DefaultPageSize;
-        var filter = new CatalogFilter(Query(http, "code") ?? Query(http, "deviceNo"), Query(http, "name"), Query(http, "category"), QueryId(http, "processId"), QueryId(http, "softwareId"));
+        var filter = new CatalogFilter(Query(http, "code") ?? Query(http, "deviceNo"), Query(http, "name"), Query(http, "category"), QueryId(http, "processId"), QueryId(http, "softwareId"), Query(http, "kind"));
         CatalogPosition? after = null;
         if (Query(http, "cursor") is { } value)
         {

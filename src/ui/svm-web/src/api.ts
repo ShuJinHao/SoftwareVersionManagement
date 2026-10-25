@@ -2,6 +2,7 @@ export interface Permission { softwareId: string | null; operation: string }
 export interface Session {
   authenticated: boolean; subjectId: string | null; employeeNo: string | null; displayName: string | null
   mustChangePassword: boolean | null; permissions: Permission[]; csrfToken: string; serverTime: string
+  authorization?: import('./authorization').Authorization | null; authorizationRevision?: number
 }
 export interface User {
   id: string; employeeNo: string; displayName: string; isEnabled: boolean; mustChangePassword: boolean

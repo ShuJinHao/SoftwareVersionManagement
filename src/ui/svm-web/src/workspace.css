@@ -5,3 +5,16 @@ body{color:var(--ink);background:#f5f7f4;font-size:13px}button{font-size:13px;co
 @media(max-width:1200px){.platform-shell.has-sidebar{grid-template-columns:174px minmax(0,1fr)}.platform-sidebar{padding-left:10px;padding-right:10px}.platform-content{padding:24px 18px}.work-layout{grid-template-columns:185px minmax(0,1fr);gap:14px}.content-heading{flex-wrap:wrap;padding:18px}.scope-chip{display:none}}
 @media(max-width:850px){.platform-shell.has-sidebar{grid-template-columns:1fr}.platform-sidebar{height:auto;position:static;flex-direction:row;align-items:center;padding:12px 16px;gap:20px}.platform-sidebar nav{display:flex;gap:8px}.nav-label,.sidebar-foot{display:none}.platform-brand small{display:none}.platform-sidebar nav a{font-size:11px;padding:8px}.platform-topbar{height:64px;padding:0 18px}.platform-topbar .breadcrumbs{font-size:10px}.work-layout{grid-template-columns:170px minmax(0,1fr)}.work-heading{margin-bottom:18px}.work-heading h1{font-size:23px}.content-heading .row-actions{justify-content:flex-start}.context-body{padding:16px}}
 @media(max-width:600px){.platform-sidebar{flex-wrap:wrap;gap:10px}.platform-brand{font-size:14px}.platform-sidebar nav{margin-left:auto}.platform-sidebar nav a svg{display:none}.platform-logo{width:28px;height:28px}.platform-content{padding:20px 12px}.work-layout{grid-template-columns:1fr}.work-selector{position:static;max-height:265px}.work-heading p{font-size:11px}.platform-topbar .breadcrumbs{display:none}.platform-topbar{justify-content:flex-end}.hardware-section{margin:12px 10px}.hardware-section>header{flex-wrap:wrap}.selection-bar{flex-wrap:wrap}}
+
+/* Role and scope editing stays within the two existing work areas. */
+.system-tabs {width:max-content;margin-bottom:20px}
+.authorization-dialog {width:min(860px,calc(100vw - 40px))}
+.authorization-card {border:1px solid var(--border,#e2e8f0);border-radius:10px;padding:16px;margin:12px 0;background:var(--panel,#fff)}
+.authorization-card p {margin:10px 0}
+.authorization-card small {display:block;line-height:1.8}
+.authorization-editor .authorization-picker {margin:12px 0}
+.authorization-picker select {min-width:0;flex:1}
+.authorization-editor details,.authorization-summary details {padding:12px 0}
+.authorization-editor summary,.authorization-summary summary {cursor:pointer;font-weight:600}
+.authorization-card .section-heading {align-items:center;gap:12px}
+.authorization-editor .grant-options {display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px}

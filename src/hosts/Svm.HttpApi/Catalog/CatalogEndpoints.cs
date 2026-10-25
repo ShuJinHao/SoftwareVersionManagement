@@ -35,9 +35,9 @@ internal static class CatalogEndpoints
         { EmptyQuery(http); return Detail(await sender.Send(new GetSoftwareQuery(softwareId), http.RequestAborted)); });
         group.MapGet("/permission-options", async (HttpContext http, ISender sender, CatalogCursor cursor) =>
         {
-            var input = await cursor.ReadAsync(http, "permission-options", ["code", "name", "category"], http.RequestAborted);
+            var input = await cursor.ReadAsync(http, "permission-options", ["code", "name", "category", "kind", "processId"], http.RequestAborted);
             var page = await sender.Send(new GetPermissionOptionsQuery(input.Input), http.RequestAborted);
-            return Results.Json(new { items = page.Items.Select(s => new { s.Id, s.Code, s.Name, s.Category }), softwareOperations = page.SoftwareOperations,
+            return Results.Json(new { items = page.Items.Select(s => new { s.Id, s.Code, s.Name, s.Category }), softwareOperations = page.SoftwareOperations, roles = page.Roles, processes = page.Processes, devices = page.Devices, operations = page.Operations,
                 nextCursor = cursor.Encode(input, page.Next), serverTime = DateTimeOffset.UtcNow });
         });
         group.MapGet("/devices/{deviceId:guid}/software-bindings", async (Guid deviceId, HttpContext http, ISender sender, CatalogCursor cursor) =>

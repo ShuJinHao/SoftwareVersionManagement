@@ -41,7 +41,7 @@ public sealed class SiteCatalogHttpTests
         using (var replay = await Write(client, api.Url, $"devices/{did}/software-bindings/{sid}", delete, session, deleteKey, HttpMethod.Delete)) Assert.Equal(HttpStatusCode.NoContent, replay.StatusCode);
         var row = Assert.Single((await Ok(await client.GetAsync(api.Url + $"/api/v1/manage/devices/{did}/software-bindings"))).GetProperty("items").EnumerateArray()); Assert.Equal(3, row.GetProperty("revision").GetInt64());
         Assert.Equal(1, await db.CountAsync("ins.device_software_bindings"));
-        using (var forbidden = await client.PostAsJsonAsync(api.Url + $"/api/v1/manage/software/{sid}/releases", new { })) Assert.Equal(HttpStatusCode.NotFound, forbidden.StatusCode);
+        using (var unavailable = await client.PostAsJsonAsync(api.Url + $"/api/v1/manage/software/{sid}/releases", new { })) await Code(unavailable, 503, "CONFIGURATION_INVALID");
     }
     [Fact]
     public async Task ProtectedCursorFiltersBeforePaginationAndBindsRevisionActorSiteAndRoute()
@@ -64,7 +64,7 @@ public sealed class SiteCatalogHttpTests
         using (var invalid = await personClient.GetAsync(api.Url + "/api/v1/manage/software?pageSize=1&cursor=" + cursor)) await Code(invalid, 400, "INVALID_REQUEST");
         var candidate = await Ok(await personClient.GetAsync(api.Url + "/api/v1/manage/permission-options?pageSize=1"));
         Assert.Equal(new[] { "id", "code", "name", "category" }.Order(), Assert.Single(candidate.GetProperty("items").EnumerateArray()).EnumerateObject().Select(p => p.Name).Order());
-        Assert.Equal(13, candidate.GetProperty("softwareOperations").GetArrayLength());
+        Assert.Equal(PermissionCatalog.Entries.Where(x => !x.Global && RoleOperationCatalog.IsOpen(x.Operation)).Select(x=>x.Operation).Order(), candidate.GetProperty("softwareOperations").EnumerateArray().Select(x=>x.GetString()).Order());
         Assert.Empty((await Ok(await personClient.GetAsync(api.Url + "/api/v1/manage/software"))).GetProperty("items").EnumerateArray());
         var user = await Ok(await client.GetAsync(api.Url + "/api/v1/manage/users/" + Subject(session)));
         await Grant(client, api, session, user, Permissions(user).Where(p => p.SoftwareId != Id(a) || p.Operation != "software.read").ToArray());
@@ -104,8 +104,17 @@ public sealed class SiteCatalogHttpTests
     }
     internal static Task<JsonElement> Grant(HttpClient client, LocalApi api, JsonElement session, JsonElement user, PermissionView[] permissions) =>
         Ok(Write(client, api.Url, "subjects/" + Id(user) + "/permissions", new { permissions, expectedRevision = user.GetProperty("revision").GetInt64(), reason = "夹具显式授权" }, session, method: HttpMethod.Put));
-    private static Task<JsonElement> Software(HttpClient c, LocalApi a, JsonElement session, string code) =>
-        Ok(Write(c, a.Url, "software", new { code, name = "软件" + code, category = "UpperComputer", description = "夹具说明" }, session), 201);
+    private static async Task<JsonElement> Software(HttpClient c, LocalApi a, JsonElement session, string code)
+    {
+        var result=await Ok(Write(c, a.Url, "software", new { code, name = "软件" + code, category = "UpperComputer", description = "夹具说明" }, session), 201);
+        await GrantSoftwareAsync(c,a,session,Id(result));return result;
+    }
+    internal static async Task GrantSoftwareAsync(HttpClient client,LocalApi api,JsonElement session,Guid softwareId)
+    {
+        var user=await Ok(await client.GetAsync(api.Url+"/api/v1/manage/users/"+Subject(session)));
+        Assert.DoesNotContain(Permissions(user),p=>p.SoftwareId==softwareId);
+        await Grant(client,api,session,user,Permissions(user).Concat(new[]{"software.read","instance.read","instance.manage"}.Select(op=>new PermissionView(softwareId,op))).ToArray());
+    }
     private static PermissionView[] Permissions(JsonElement user) => user.GetProperty("permissions").EnumerateArray().Select(p =>
         new PermissionView(p.GetProperty("softwareId").ValueKind == JsonValueKind.Null ? null : p.GetProperty("softwareId").GetGuid(), p.GetProperty("operation").GetString()!)).ToArray();
     private static Guid Id(JsonElement x) => x.GetProperty("id").GetGuid(); private static Guid Subject(JsonElement x) => x.GetProperty("subjectId").GetGuid();

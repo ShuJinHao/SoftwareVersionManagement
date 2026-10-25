@@ -167,7 +167,7 @@ internal sealed class CheckPackageReplicasCommandHandler(IPackages packages, Pac
 internal sealed class GetPackageAuthorityQueryHandler(IPackages packages) : IRequestHandler<GetPackageAuthorityQuery, PackageWorkAuthority>
 { public Task<PackageWorkAuthority> Handle(GetPackageAuthorityQuery x, CancellationToken token) => packages.AuthorityAsync(x.WorkId, false, token); }
 
-internal sealed class AuthorizeDownloadCommandHandler(IPackages packages, IPackageDownloadProof proofs, IPersonnelService personnel,
+internal sealed class AuthorizeDownloadCommandHandler(IPackages packages, IPackageDownloadProof proofs, IPersonnelService personnel, Svm.Application.Personnel.SiteAuthorization scope,
     IInstanceAccess access, IManagedInstances instances, ISoftwareCatalog catalog, IReleases releases, IUnitOfWork unit, IAuditWriter audit, ICallContext calls)
     : IRequestHandler<AuthorizeDownloadCommand, OperationResult<DownloadAuthorization>>
 {
@@ -187,7 +187,7 @@ internal sealed class AuthorizeDownloadCommandHandler(IPackages packages, IPacka
         {
             var person = await personnel.AuthenticateAsync(proofs.Person ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired), true, token)
                 ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
-            if (person.MustChangePassword || !person.Permissions.Any(p => p.SoftwareId == software && p.Operation == "software.read")) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+            if (person.MustChangePassword || !await scope.SoftwareAsync(person.Access, "software.read", software, token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
             subject = person.SubjectId; actor = "Human"; employee = person.EmployeeNo;
         }
         if (!await catalog.ExistsAsync(software, true, token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);

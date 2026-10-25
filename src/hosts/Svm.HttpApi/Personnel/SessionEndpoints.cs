@@ -69,7 +69,7 @@ internal static class SessionEndpoints
         http.Response.Headers.CacheControl = "no-store";
         return Results.Json(new { authenticated = person is not null, subjectId = person?.SubjectId, employeeNo = person?.EmployeeNo,
             displayName = person?.DisplayName, mustChangePassword = person?.MustChangePassword,
-            permissions = person?.Permissions ?? [], csrfToken = antiforgery.GetAndStoreTokens(http).RequestToken, serverTime = DateTimeOffset.UtcNow });
+            permissions = person?.Permissions ?? [], authorization = person?.Access, authorizationRevision = person?.Access.Revision,  csrfToken = antiforgery.GetAndStoreTokens(http).RequestToken, serverTime = DateTimeOffset.UtcNow });
     }
     private static async Task<IResult> Complete(HttpContext http, IAntiforgery antiforgery, PersonnelMutation mutation)
     {

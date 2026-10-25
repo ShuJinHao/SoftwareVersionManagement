@@ -58,3 +58,8 @@ public interface ISiteAssetRepository
     void AddDevice(ProductionDevice device);
     void AddBinding(DeviceSoftwareBinding binding);
 }
+
+public interface ISiteScopeRepository
+{
+    Task<bool> HasSoftwareAsync(Guid softwareId, bool entireSite, IReadOnlyList<Guid> processes, IReadOnlyList<Guid> devices, CancellationToken token);
+}

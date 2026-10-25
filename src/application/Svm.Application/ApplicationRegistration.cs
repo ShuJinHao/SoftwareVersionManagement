@@ -37,6 +37,7 @@ public static class ApplicationRegistration
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
         services.AddSvmRequestPipeline(bindings.Where(b => PackageCapabilities.IsWorker(b.RequestType) || GitLabCapabilities.IsInternal(b.RequestType)).ToArray());
         services.AddScoped<GitLabAuthorization>();
+        services.AddScoped<SiteAuthorization>();
         services.AddScoped<IRequestAuthorizer, PackageWorkerAuthorization>();
         services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
         return services;
@@ -50,6 +51,7 @@ public static class ApplicationRegistration
         var bindings = RequestBinding.Discover(typeof(ApplicationRegistration).Assembly, typeof(IQuery<>).Assembly);
         services.AddSvmRequestPipeline(bindings.Where(b => TaskCapabilities.IsInternal(b.RequestType) || PackageCapabilities.IsWorker(b.RequestType) || GitLabCapabilities.IsInternal(b.RequestType)).ToArray());
         services.AddScoped<GitLabAuthorization>();
+        services.AddScoped<SiteAuthorization>();
         services.AddScoped<IRequestAuthorizer, TaskWorkerAuthorization>(); services.AddScoped<TaskAuthorization>(); services.AddScoped<TaskOperations>(); services.AddScoped<TaskDispatch>();
         services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>(); return services;
     }
@@ -59,7 +61,7 @@ public static class ApplicationRegistration
         services.AddSvmRequestPipeline(bindings.Where(b => seed ? b.RequestType == typeof(SeedPersonnelCommand) :
             b.RequestType != typeof(SeedPersonnelCommand) && (PersonnelWriteCapabilities.Contains(b.RequestType) ||
                 b.RequestType == typeof(AnonymousSessionQuery) || b.RequestType == typeof(CurrentSessionQuery) ||
-                management && (PersonnelManagementCapabilities.Contains(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) ||
+                management && (PersonnelManagementCapabilities.Contains(b.RequestType) && !RoleCapabilities.IsWrite(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) || siteCatalog && (RoleCapabilities.IsWrite(b.RequestType) || RoleCapabilities.IsQuery(b.RequestType)) ||
                 siteCatalog && (CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)) ||
                 instanceAccess && (InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)) ||
                 packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType) || GitLabCapabilities.Contains(b.RequestType) && !GitLabCapabilities.IsInternal(b.RequestType)) || taskAccess && TaskCapabilities.Contains(b.RequestType))).ToArray());
@@ -75,7 +77,13 @@ public static class ApplicationRegistration
         }
         if (siteCatalog)
         {
+            services.AddScoped<RoleCompletion>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreateRoleCommand, OperationResult<RoleView>>, CreateRoleAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<UpdateRoleCommand, OperationResult<RoleView>>, UpdateRoleAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<ReplaceAuthorizationCommand, OperationResult<AuthorizationView>>, ReplaceAuthorizationAdapter>();
             services.AddScoped<CatalogCompletion>();
+            services.AddScoped<SiteAuthorization>();
+            services.AddScoped<CatalogAuthorization>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateHardwareCommand, OperationResult<HardwareView>>, CreateHardwareCommandAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<UpdateHardwareCommand, OperationResult<HardwareView>>, UpdateHardwareCommandAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateHardwareBindingCommand, OperationResult<HardwareBindingView>>, CreateHardwareBindingCommandAdapter>();

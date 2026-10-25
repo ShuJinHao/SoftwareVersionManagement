@@ -29,8 +29,7 @@ internal sealed class CatalogReadScope(ReadQuerySession session, SiteCatalogOpti
         if (ids.Count > 1 || ids.Any(id => id != site.SiteId)) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
         var allowed = (await session.QueryAsync<bool>("""
             SELECT EXISTS(SELECT 1 FROM iam.users u WHERE u."Id"=@subjectId AND u."IsEnabled" AND NOT u."MustChangePassword"
-              AND (CAST(@permission AS text) IS NULL OR EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=u."Id"
-                   AND p."SoftwareId" IS NULL AND p."Operation"=@permission)))
+              AND (CAST(@permission AS text) IS NULL OR CASE WHEN @permission='identity.manage' THEN iam.has_global(u."Id",@permission) ELSE iam.has_any(u."Id",@permission) END))
             """, new { subjectId = SubjectId, permission = globalPermission }, token)).Single();
         if (!allowed) throw new RequestRejectedException(RequestFailure.PermissionDenied);
     }
@@ -40,7 +39,7 @@ internal sealed class CatalogReadScope(ReadQuerySession session, SiteCatalogOpti
     internal static CatalogPage<T> Page<T>(IReadOnlyList<T> rows, int size, Func<T, CatalogPosition> position)
     { var items = rows.Take(size).ToArray(); return new(items, rows.Count > size ? position(items[^1]) : null); }
 }
-internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogReadScope scope, IFormalReleaseAvailability? availability = null) : ISoftwareCatalogQueries
+internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogReadScope scope, IRoleQueries roles, IFormalReleaseAvailability? availability = null) : ISoftwareCatalogQueries
 {
     private const string Projection = """
         SELECT s."Id",s."Code",s."Name",s."Category",s."Description",NULL::uuid AS "LatestAvailableFormalReleaseId",s."Revision"
@@ -51,7 +50,7 @@ internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogRe
         AND (CAST(@category AS text) IS NULL OR s."Category"=@category)
         AND (CAST(@afterId AS uuid) IS NULL OR (s."Code" COLLATE "C",s."Id")>(CAST(@afterKey AS text) COLLATE "C",CAST(@afterId AS uuid)))
         """;
-    private const string Visible = "EXISTS(SELECT 1 FROM iam.permissions p WHERE p.\"SubjectId\"=@subjectId AND p.\"SoftwareId\"=s.\"Id\" AND p.\"Operation\"='software.read')";
+    private const string Visible = "iam.has_software(@subjectId,'software.read',s.\"Id\")";
     public async Task<SoftwareView?> GetAsync(Guid id, CancellationToken token)
     {
         await scope.EnsureAsync(null, token);
@@ -72,11 +71,40 @@ internal sealed class SoftwareCatalogQueries(ReadQuerySession session, CatalogRe
     public async Task<PermissionOptionsPage> PermissionOptionsAsync(CatalogListInput input, CancellationToken token)
     {
         await scope.EnsureAsync("identity.manage", token);
+        if (input.Filter.Kind == "Role")
+        {
+            var result = await roles.ListAsync(input.Filter.Name, input.After?.Id, input.PageSize, token);
+            return new([], RoleOperationCatalog.Product, result.Next is { } next ? new(next.ToString("D"), next) : null) { Roles = result.Items };
+        }
+        if (input.Filter.Kind == "Process")
+        {
+            var candidates = await session.QueryAsync<ProcessView>("""
+                SELECT p."Id",p."SiteId",p."Code",p."Name",p."Revision" FROM ins.processes p
+                WHERE p."SiteId"=@siteId AND (CAST(@name AS text) IS NULL OR p."Name" ILIKE @name ESCAPE '\')
+                  AND (CAST(@afterId AS uuid) IS NULL OR (p."Code" COLLATE "C",p."Id")>(CAST(@afterKey AS text) COLLATE "C",@afterId))
+                ORDER BY p."Code" COLLATE "C",p."Id" LIMIT @take
+                """, Parameters(input), token);
+            var result = CatalogReadScope.Page(candidates, input.PageSize, x => new(x.Code, x.Id));
+            return new([], RoleOperationCatalog.Product, result.Next) { Processes = result.Items };
+        }
+        if (input.Filter.Kind == "Device")
+        {
+            var candidates = await session.QueryAsync<DeviceView>("""
+                SELECT d."Id",d."DeviceNo",d."Name",d."ProcessId",p."Code" AS "ProcessCode",p."Name" AS "ProcessName",p."SiteId",@siteName AS "SiteName",d."Revision",NULL::text AS "AssetNumber"
+                FROM ins.devices d JOIN ins.processes p ON p."Id"=d."ProcessId"
+                WHERE p."SiteId"=@siteId AND (CAST(@processId AS uuid) IS NULL OR p."Id"=@processId)
+                  AND (CAST(@name AS text) IS NULL OR d."Name" ILIKE @name ESCAPE '\' OR d."DeviceNo" ILIKE @name ESCAPE '\')
+                  AND (CAST(@afterId AS uuid) IS NULL OR (d."DeviceNo" COLLATE "C",d."Id")>(CAST(@afterKey AS text) COLLATE "C",@afterId))
+                ORDER BY d."DeviceNo" COLLATE "C",d."Id" LIMIT @take
+                """, Parameters(input), token);
+            var result = CatalogReadScope.Page(candidates, input.PageSize, x => new(x.DeviceNo, x.Id));
+            return new([], RoleOperationCatalog.Product, result.Next) { Devices = result.Items };
+        }
         var rows = await session.QueryAsync<SoftwareView>(Projection.Replace("s.\"Description\"", "NULL::text AS \"Description\"") + " WHERE " + Filter + " ORDER BY s.\"Code\" COLLATE \"C\",s.\"Id\" LIMIT @take", Parameters(input), token);
         var page = CatalogReadScope.Page(rows, input.PageSize, x => new(x.Code, x.Id));
-        return new(page.Items, PermissionCatalog.Entries.Where(p => !p.Global).Select(p => p.Operation).Order(StringComparer.Ordinal).ToArray(), page.Next);
+        return new(page.Items, PermissionCatalog.Entries.Where(p => !p.Global && RoleOperationCatalog.IsOpen(p.Operation)).Select(p => p.Operation).Order(StringComparer.Ordinal).ToArray(), page.Next);
     }
-    private object Parameters(CatalogListInput x) => new { subjectId = scope.SubjectId, code = CatalogReadScope.Prefix(x.Filter.Code), name = CatalogReadScope.Contains(x.Filter.Name),
+    private object Parameters(CatalogListInput x) => new { subjectId = scope.SubjectId, siteId = scope.Site.SiteId, siteName = scope.Site.SiteName, processId = x.Filter.ProcessId, code = CatalogReadScope.Prefix(x.Filter.Code), name = CatalogReadScope.Contains(x.Filter.Name),
         category = x.Filter.Category, afterKey = x.After?.SortKey, afterId = x.After?.Id, take = x.PageSize + 1 };
 }
 internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock=null, IFormalReleaseAvailability? availability = null, Svm.Services.Contracts.Tasks.ITaskQueries? tasks = null) : ISiteAssetQueries
@@ -89,13 +117,13 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
     public async Task<ProcessView?> ProcessAsync(Guid id, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
-        return (await session.QueryAsync<ProcessView>(ProcessProjection + " WHERE p.\"Id\"=@id AND p.\"SiteId\"=@siteId", new { id, siteId = scope.Site.SiteId }, token)).SingleOrDefault();
+        return (await session.QueryAsync<ProcessView>(ProcessProjection + " WHERE p.\"Id\"=@id AND p.\"SiteId\"=@siteId AND (iam.has_field(@subjectId,'asset.read',p.\"Id\",NULL,NULL) OR EXISTS(SELECT 1 FROM ins.devices vd WHERE vd.\"ProcessId\"=p.\"Id\" AND iam.has_field(@subjectId,'asset.read',p.\"Id\",vd.\"Id\",NULL)))", new { id, siteId = scope.Site.SiteId, subjectId = scope.SubjectId }, token)).SingleOrDefault();
     }
     public async Task<CatalogPage<ProcessView>> ProcessesAsync(CatalogListInput input, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
         var rows = await session.QueryAsync<ProcessView>(ProcessProjection + """
-             WHERE p."SiteId"=@siteId AND (CAST(@code AS text) IS NULL OR p."Code" LIKE @code ESCAPE '\')
+             WHERE p."SiteId"=@siteId AND (iam.has_field(@subjectId,'asset.read',p."Id",NULL,NULL) OR EXISTS(SELECT 1 FROM ins.devices vd WHERE vd."ProcessId"=p."Id" AND iam.has_field(@subjectId,'asset.read',p."Id",vd."Id",NULL))) AND (CAST(@code AS text) IS NULL OR p."Code" LIKE @code ESCAPE '\')
              AND (CAST(@name AS text) IS NULL OR p."Name" ILIKE @name ESCAPE '\')
              AND (CAST(@afterId AS uuid) IS NULL OR (p."Code" COLLATE "C",p."Id")>(CAST(@afterKey AS text) COLLATE "C",CAST(@afterId AS uuid)))
              ORDER BY p."Code" COLLATE "C",p."Id" LIMIT @take
@@ -105,13 +133,13 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
     public async Task<DeviceView?> DeviceAsync(Guid id, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
-        return (await session.QueryAsync<DeviceView>(DeviceProjection + " WHERE d.\"Id\"=@id AND p.\"SiteId\"=@siteId", new { id, siteId = scope.Site.SiteId, siteName = scope.Site.SiteName }, token)).SingleOrDefault();
+        return (await session.QueryAsync<DeviceView>(DeviceProjection + " WHERE d.\"Id\"=@id AND p.\"SiteId\"=@siteId AND iam.has_field(@subjectId,'asset.read',d.\"ProcessId\",d.\"Id\",NULL)", new { id, siteId = scope.Site.SiteId, siteName = scope.Site.SiteName, subjectId = scope.SubjectId }, token)).SingleOrDefault();
     }
     public async Task<CatalogPage<DeviceView>> DevicesAsync(CatalogListInput input, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
         var rows = await session.QueryAsync<DeviceView>(DeviceProjection + """
-             WHERE p."SiteId"=@siteId AND (CAST(@processId AS uuid) IS NULL OR d."ProcessId"=@processId)
+             WHERE p."SiteId"=@siteId AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL) AND (CAST(@processId AS uuid) IS NULL OR d."ProcessId"=@processId)
              AND (CAST(@code AS text) IS NULL OR d."DeviceNo" LIKE @code ESCAPE '\')
              AND (CAST(@name AS text) IS NULL OR d."Name" ILIKE @name ESCAPE '\')
              AND (CAST(@afterId AS uuid) IS NULL OR (d."DeviceNo" COLLATE "C",d."Id")>(CAST(@afterKey AS text) COLLATE "C",CAST(@afterId AS uuid)))
@@ -127,7 +155,7 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
         """;
     private const string BoundFilter = """
         b."DeviceId"=@deviceId AND b."IsActive" AND pr."SiteId"=@siteId
-        AND EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."Id" AND p."Operation"='software.read')
+        AND iam.has_field(@subjectId,'software.read',d."ProcessId",d."Id",s."Id") AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL)
         AND (CAST(@softwareId AS uuid) IS NULL OR s."Id"=@softwareId)
         AND (CAST(@category AS text) IS NULL OR s."Category"=@category)
         AND (CAST(@afterId AS uuid) IS NULL OR (s."Code" COLLATE "C",b."Id")>(CAST(@afterKey AS text) COLLATE "C",CAST(@afterId AS uuid)))
@@ -152,9 +180,8 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
             LEFT JOIN ins.instance_snapshots ss ON ss."InstanceId"=i."Id"
             LEFT JOIN ins.hardware_software_bindings hb ON hb."Id"=i."HardwareBindingId" LEFT JOIN ins.hardware h ON h."Id"=hb."HardwareId"
             WHERE b."DeviceId"=@deviceId AND b."IsActive" AND pr."SiteId"=@siteId
-            AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId" WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."Id"
-              AND p."Operation"='software.read' AND u."IsEnabled" AND NOT u."MustChangePassword")
-            AND EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."Id" AND p."Operation"='instance.read')
+            AND iam.has_field(@subjectId,'software.read',d."ProcessId",d."Id",s."Id") AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL)
+            AND iam.has_field(@subjectId,'instance.read',d."ProcessId",d."Id",s."Id")
             AND (CAST(@softwareId AS uuid) IS NULL OR s."Id"=@softwareId) AND (CAST(@category AS text) IS NULL OR s."Category"=@category)
             AND (CAST(@afterId AS uuid) IS NULL OR (s."Code" COLLATE "C",COALESCE(i."Id",b."Id"))>(CAST(@afterKey AS text) COLLATE "C",CAST(@afterId AS uuid)))
             ORDER BY s."Code" COLLATE "C",COALESCE(i."Id",b."Id") LIMIT @take
@@ -177,7 +204,7 @@ internal sealed class SiteAssetQueries(ReadQuerySession session, CatalogReadScop
         public string Code {get;set;}=""; public string Name {get;set;}=""; public string Category {get;set;}=""; public string? Description {get;set;} public long SoftwareRevision {get;set;}
     }
     private Task<IReadOnlyList<BoundRow>> BoundAsync(Guid deviceId, CatalogListInput input, bool inventory, CancellationToken token) =>
-        session.QueryAsync<BoundRow>(BoundProjection + " WHERE " + BoundFilter + (inventory ? " AND EXISTS(SELECT 1 FROM iam.permissions ip WHERE ip.\"SubjectId\"=@subjectId AND ip.\"SoftwareId\"=s.\"Id\" AND ip.\"Operation\"='instance.read')" : "") + " ORDER BY s.\"Code\" COLLATE \"C\",b.\"Id\" LIMIT @take",
+        session.QueryAsync<BoundRow>(BoundProjection + " WHERE " + BoundFilter + (inventory ? " AND iam.has_field(@subjectId,'instance.read',d.\"ProcessId\",d.\"Id\",s.\"Id\")" : "") + " ORDER BY s.\"Code\" COLLATE \"C\",b.\"Id\" LIMIT @take",
             new { deviceId, subjectId = scope.SubjectId, siteId = scope.Site.SiteId, category = input.Filter.Category, softwareId = input.Filter.SoftwareId,
                 afterKey = input.After?.SortKey, afterId = input.After?.Id, take = input.PageSize + 1 }, token);
     private object Parameters(CatalogListInput x) => new { subjectId = scope.SubjectId, siteId = scope.Site.SiteId, siteName = scope.Site.SiteName,

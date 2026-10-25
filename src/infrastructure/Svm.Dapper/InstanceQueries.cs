@@ -17,8 +17,7 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
         LEFT JOIN ins.hardware_software_bindings hb ON hb."Id"=i."HardwareBindingId" LEFT JOIN ins.hardware h ON h."Id"=hb."HardwareId"
         """;
     private const string Visible = """
-        pr."SiteId"=@siteId AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId"
-          WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=i."SoftwareId" AND p."Operation"='instance.read' AND u."IsEnabled" AND NOT u."MustChangePassword")
+        pr."SiteId"=@siteId AND iam.has_field(@subjectId,'instance.read',d."ProcessId",d."Id",i."SoftwareId")
         """;
     public async Task<InstanceView?> GetAsync(Guid id,CancellationToken token,string permission="instance.read")
     {
@@ -62,9 +61,8 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
         if(await GetAsync(id,token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         var rows=await session.QueryAsync<HistoryRow>("""
             SELECT e."Id",e."InstanceId",e."InstallationState",e."InstalledReleaseId",e."InstalledVersion",e."InstalledAt",e."ReceivedAt",e."ReportedRunningState"
-            FROM ins.installation_evidence e JOIN ins.instances i ON i."Id"=e."InstanceId"
-            WHERE e."InstanceId"=@id AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId"
-              WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=i."SoftwareId" AND p."Operation"='instance.read' AND u."IsEnabled" AND NOT u."MustChangePassword")
+            FROM ins.installation_evidence e JOIN ins.instances i ON i."Id"=e."InstanceId" JOIN ins.devices d ON d."Id"=i."DeviceId"
+            WHERE e."InstanceId"=@id AND iam.has_field(@subjectId,'instance.read',d."ProcessId",d."Id",i."SoftwareId")
               AND (CAST(@after AS uuid) IS NULL OR (e."ReceivedAt",e."Id")>(
                 SELECT a."ReceivedAt",a."Id" FROM ins.installation_evidence a WHERE a."InstanceId"=@id AND a."Id"=@after))
             ORDER BY e."ReceivedAt",e."Id" LIMIT @take
@@ -77,8 +75,8 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
         var rows=await session.QueryAsync<GrantRow>("""
           SELECT g."Id",g."SoftwareId",g."DeviceIds",g."ExpiresAt",g."MaxInstances",g."UsedCount",g."RevokedAt",g."Revision",g."HardwareBindingId",g."HardwareBindingRevision"
           FROM iam.enrollment_grants g WHERE g."SoftwareId"=@softwareId AND (CAST(@after AS uuid) IS NULL OR g."Id">@after)
-          AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId" WHERE p."SubjectId"=@subjectId AND
-            p."SoftwareId"=g."SoftwareId" AND p."Operation"='enrollment.manage' AND u."IsEnabled" AND NOT u."MustChangePassword")
+          AND (cardinality(g."DeviceIds")>0 AND NOT EXISTS(SELECT 1 FROM unnest(g."DeviceIds") requested(id) LEFT JOIN ins.devices gd ON gd."Id"=requested.id
+            WHERE gd."Id" IS NULL OR NOT iam.has_field(@subjectId,'enrollment.manage',gd."ProcessId",gd."Id",g."SoftwareId")))
           ORDER BY g."Id" LIMIT @take
           """,new { softwareId,subjectId=scope.SubjectId,after,take=size+1 },token);
         var items=rows.Take(size).Select(x=>new GrantView(x.Id,x.SoftwareId,x.DeviceIds,null,x.RevokedAt is not null?"Revoked":x.ExpiresAt<=now?"Expired":x.UsedCount>=x.MaxInstances?"Exhausted":"Active",x.ExpiresAt,x.MaxInstances,x.UsedCount,x.Revision,x.HardwareBindingId,x.HardwareBindingRevision)).ToArray();
@@ -88,9 +86,8 @@ internal sealed class InstanceQueries(ReadQuerySession session,CatalogReadScope 
     {
         await scope.EnsureAsync(null,token);
         var rows=await session.QueryAsync<CredentialRow>("""
-            SELECT c."Id",c."SubjectId",c."ExpiresAt",c."RevokedAt",c."Revision" FROM iam.instance_credentials c JOIN iam.instance_subjects s ON s."Id"=c."SubjectId"
-            WHERE c."SubjectId"=@instanceId AND (CAST(@after AS uuid) IS NULL OR c."Id">@after) AND EXISTS(SELECT 1 FROM iam.permissions p JOIN iam.users u ON u."Id"=p."SubjectId"
-              WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=s."SoftwareId" AND p."Operation"='enrollment.manage' AND u."IsEnabled" AND NOT u."MustChangePassword")
+            SELECT c."Id",c."SubjectId",c."ExpiresAt",c."RevokedAt",c."Revision" FROM iam.instance_credentials c JOIN iam.instance_subjects s ON s."Id"=c."SubjectId" JOIN ins.instances i ON i."Id"=s."Id" JOIN ins.devices d ON d."Id"=i."DeviceId"
+            WHERE c."SubjectId"=@instanceId AND (CAST(@after AS uuid) IS NULL OR c."Id">@after) AND iam.has_field(@subjectId,'enrollment.manage',d."ProcessId",d."Id",s."SoftwareId")
             ORDER BY c."Id" LIMIT @take
             """,new { instanceId,subjectId=scope.SubjectId,after,take=size+1 },token);
         var items=rows.Take(size).Select(x=>x.View()).ToArray(); return new(items,rows.Count>size?items[^1].Id:null);

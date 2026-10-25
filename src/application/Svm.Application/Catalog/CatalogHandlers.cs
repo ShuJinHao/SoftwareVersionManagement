@@ -63,9 +63,9 @@ internal sealed class GetPermissionOptionsQueryHandler(ISoftwareCatalogQueries q
 {
     public async Task<PermissionOptionsPage> Handle(GetPermissionOptionsQuery request, CancellationToken token) { return await queries.PermissionOptionsAsync(request.Input, token); }
 }
-internal sealed class CreateSoftwareCommandHandler(ISoftwareCatalog software, IPersonnelSoftwareAdministration grants, CatalogCompletion completion) : IRequestHandler<CreateSoftwareCommand, OperationResult<SoftwareView>>
+internal sealed class CreateSoftwareCommandHandler(ISoftwareCatalog software, CatalogCompletion completion) : IRequestHandler<CreateSoftwareCommand, OperationResult<SoftwareView>>
 {
-    public Task<OperationResult<SoftwareView>> Handle(CreateSoftwareCommand request, CancellationToken token) => completion.ExecuteAsync("rel.software.create", "register software", async () => { var view = await software.CreateAsync(request.Code, request.Name, request.Category, request.Description, token); await grants.GrantCreatorAsync(view.Id, token); return view; }, x => x.Id, token);
+    public Task<OperationResult<SoftwareView>> Handle(CreateSoftwareCommand request, CancellationToken token) => completion.ExecuteAsync("rel.software.create", "register software", async () => { var view = await software.CreateAsync(request.Code, request.Name, request.Category, request.Description, token); return view; }, x => x.Id, token);
 }
 internal sealed class UpdateSoftwareCommandHandler(ISoftwareCatalog software, CatalogCompletion completion) : IRequestHandler<UpdateSoftwareCommand, OperationResult<SoftwareView>>
 {
@@ -83,9 +83,9 @@ internal sealed class CreateDeviceCommandHandler(ISiteAssets assets, CatalogComp
 {
     public Task<OperationResult<DeviceView>> Handle(CreateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.create", "register device", () => assets.CreateDeviceAsync(request.ProcessId, request.DeviceNo, request.Name, token, request.AssetNumber), x => x.Id, token);
 }
-internal sealed class UpdateDeviceCommandHandler(ISiteAssets assets, CatalogCompletion completion) : IRequestHandler<UpdateDeviceCommand, OperationResult<DeviceView>>
+internal sealed class UpdateDeviceCommandHandler(ISiteAssets assets, CatalogCompletion completion, IRoleAuthorization roles) : IRequestHandler<UpdateDeviceCommand, OperationResult<DeviceView>>
 {
-    public Task<OperationResult<DeviceView>> Handle(UpdateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.update", request.Reason, () => assets.UpdateDeviceAsync(request.DeviceId, request.ExpectedRevision, request.ProcessId, request.Name, token, request.AssetNumber, request.UpdateAssetNumber), x => x.Id, token);
+    public Task<OperationResult<DeviceView>> Handle(UpdateDeviceCommand request, CancellationToken token) => completion.ExecuteAsync("ins.devices.update", request.Reason, async () => { var result = await assets.UpdateDeviceAsync(request.DeviceId, request.ExpectedRevision, request.ProcessId, request.Name, token, request.AssetNumber, request.UpdateAssetNumber); if (request.ProcessId is not null) await roles.AdvanceSiteRevisionAsync(token); return result; }, x => x.Id, token);
 }
 internal sealed class CreateBindingCommandHandler(ISiteAssets assets, CatalogCompletion completion) : IRequestHandler<CreateBindingCommand, OperationResult<BindingView>>
 {

@@ -182,3 +182,12 @@ eng/node deploy/linux/verify-audit.mjs --deployment artifacts/linux-demo/audit-c
 用户查看用的演示单独保留。operator.json 包含本机演示登录材料，不上传仓库；svm.sh stop 暂停容器，svm.sh down 删除该演示的容器/网络并保留绑定目录数据。故障测试资源与这个保留演示分开清理，不能把保留演示记录成资源残留为零。
 
 2026-10-18 实际展示使用 Release 5e8b272（dirty=false），宿主 macOS arm64、服务 Linux arm64，专属项目 svm-demo-35dbe7795749。七阶段局部走查完成；初次键盘断言将 Tab 进入浏览器界面误判，修正验证器后仅以 --display-only 重查页面和焦点，原写入不重跑。完整截图在 artifacts/test-results/audit-correctness/pages.md，测试与资源汇总在同目录 test-selection-results.json。七容器演示保留，故障测试用的一次性 PG/RabbitMQ 已删除；开发库容器保持停止。
+
+
+## 人员角色与现场范围演示
+
+新部署须显式应用第十三份 RolesAndSiteScopes 迁移。迁移只建立四个可编辑角色，不给已有账号自动分配；管理员在系统管理选择人员、角色及负责工序/设备。新软件不自动增加直接授权；旧 /permissions 只维护旧直接授权，与角色取并集，收窄访问时要一并核对。
+
+本批定向浏览器入口：`eng/node deploy/linux/verify-roles.mjs --deployment artifacts/linux-demo/roles-and-site-scopes --results artifacts/test-results/roles-and-site-scopes/linux-demo`。仅允许明确 full/demo 环境。真实 HTTPS/API 准备两个工序、共用程序、独立实例和正式演示包，四类人员登录查看各自现场、产品权限、角色维护及本人权限；使用测试协议报告，不执行厂家安装。脚本保留私有 roles-fixture.json 和原操作检查点，未知写入停止，不自动重做；--resume 仅继续已确认阶段，--display-only 要求前次全部完成。凭据只在专属目录保管，公开证据无密码。
+
+CI 对本批精确网页选集和 verify-roles 执行浏览器验证；历史 verify-hardware 仅对应原硬件批次。按需复用未改变的消息与文件恢复证据；四角色演示不代表完整生产权限治理或现场验收。保留演示与故障/一次性资源分别登记。

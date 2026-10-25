@@ -19,7 +19,7 @@ public sealed class HardwareWorkspaceHttpTests
         var d=await Ok(await Write(human,api.Url,"devices",new { processId=Id(p),name="虚构设备",assetNumber="FIXTURE-ASSET" },session),201); Assert.StartsWith("EQ-",d.GetProperty("deviceNo").GetString());
         var h=await Ok(await Write(human,api.Url,$"devices/{Id(d)}/hardware",new { type="IPC",name="虚构工控机",managementIp="192.0.2.10" },session),201);
         var binding=await Ok(await Write(human,api.Url,$"hardware/{Id(h)}/software-bindings",new { newSoftware=new { name="虚构上位机",category="UpperComputer" },reason="创建并强关联" },session),201);
-        var sid=binding.GetProperty("softwareId").GetGuid(); var software=await Ok(await human.GetAsync(api.Url+"/api/v1/manage/software/"+sid)); Assert.StartsWith("SW-",software.GetProperty("code").GetString());
+        var sid=binding.GetProperty("softwareId").GetGuid(); await SiteCatalogHttpTests.GrantSoftwareAsync(human,api,session,sid); var software=await Ok(await human.GetAsync(api.Url+"/api/v1/manage/software/"+sid)); Assert.StartsWith("SW-",software.GetProperty("code").GetString());
         var other=await Position(human,api.Url,session,Id(d),sid,"另一工控机");
         var url=$"/api/v1/manage/workspace/installations?softwareId={sid}&pageSize=1";
         var first=await Ok(await human.GetAsync(api.Url+url)); Assert.Equal(2,first.GetProperty("totalCount").GetInt64()); var row=Assert.Single(first.GetProperty("items").EnumerateArray()); Assert.Equal("NotRegistered",row.GetProperty("locationState").GetString()); Assert.Equal(JsonValueKind.Null,row.GetProperty("instance").ValueKind);

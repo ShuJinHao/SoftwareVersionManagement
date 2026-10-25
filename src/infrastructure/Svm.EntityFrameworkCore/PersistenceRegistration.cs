@@ -28,6 +28,8 @@ public static class PersistenceRegistration
         services.AddScoped<IUnitOfWork, PostgresUnitOfWork>();
         services.AddScoped<IOperationResultStore, OperationResultStore>();
         services.AddScoped<IPersonnelRepository, PersonnelRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<Svm.Core.Instances.ISiteScopeRepository, Svm.EntityFrameworkCore.Catalog.SiteScopeRepository>();
         services.AddScoped<IPersonnelAdministrationRepository, PersonnelAdministrationRepository>();
         services.AddScoped<ISoftwareCatalogRepository, SoftwareCatalogRepository>();
         services.AddScoped<IReleaseRepository, ReleaseRepository>();

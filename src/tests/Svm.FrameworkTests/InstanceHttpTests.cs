@@ -52,7 +52,7 @@ public sealed class InstanceHttpTests
         using var human=a.Client(new CookieContainer()); using var machine=a.Client(new CookieContainer()); var session=await SiteCatalogHttpTests.AuthorizeAsync(db,a,human);
         var process=await Ok(await Write(human,a.Url,"processes",new { code="ENROLL-P",name="接入工序" },session),201);
         var device=await Ok(await Write(human,a.Url,"devices",new { processId=Id(process),deviceNo="ENROLL-D",name="接入设备" },session),201);
-        var software=await Ok(await Write(human,a.Url,"software",new { code="ENROLL-S",name="视觉接入夹具",category="Vision" },session),201); var sid=Id(software); var did=Id(device);
+        var software=await Ok(await Write(human,a.Url,"software",new { code="ENROLL-S",name="视觉接入夹具",category="Vision" },session),201); var sid=Id(software); var did=Id(device); await SiteCatalogHttpTests.GrantSoftwareAsync(human,a,session,sid);
         var user=await Ok(await human.GetAsync(a.Url+"/api/v1/manage/users/"+session.GetProperty("subjectId").GetGuid()));
         await SiteCatalogHttpTests.Grant(human,a,session,user,Permissions(user).Append(new(sid,"enrollment.manage")).ToArray());
         await Ok(await Write(human,a.Url,$"devices/{did}/software-bindings",new { softwareId=sid,reason="夹具映射" },session),201);
@@ -112,7 +112,7 @@ public sealed class InstanceHttpTests
         await Code(await human.PostAsJsonAsync(a.Url+"/api/v1/manage/enrollment-grants",new { }),403,"PERMISSION_DENIED");
         await Code(await Machine(machine,a.Url,"/api/v1/enrollment/instances","bad-secret",new { }),401,"CREDENTIAL_INVALID");
         await Code(await human.GetAsync(a.Url+"/api/v1/client/context"),401,"CREDENTIAL_INVALID");
-        var software=await Ok(await Write(human,a.Url,"software",new { code="GATE-S",name="夹具",category="UpperComputer" },session),201); var sid=Id(software);
+        var software=await Ok(await Write(human,a.Url,"software",new { code="GATE-S",name="夹具",category="UpperComputer" },session),201); var sid=Id(software); await SiteCatalogHttpTests.GrantSoftwareAsync(human,a,session,sid);
         await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {Guid.NewGuid()},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,secretMaterial=InstanceFixture.Secret(),reason="无接入权限" },session),404,"RESOURCE_NOT_FOUND");
         var user=await Ok(await human.GetAsync(a.Url+"/api/v1/manage/users/"+session.GetProperty("subjectId").GetGuid())); await SiteCatalogHttpTests.Grant(human,a,session,user,Permissions(user).Append(new(sid,"enrollment.manage")).ToArray());
         await Code(await Write(human,a.Url,"enrollment-grants",new { softwareId=sid,deviceIds=new[] {Guid.NewGuid()},expiresAt=DateTimeOffset.UtcNow.AddHours(1),maxInstances=1,hardwareBindingId=Guid.NewGuid(),hardwareBindingRevision=1,secretMaterial=InstanceFixture.Secret(),reason="错误设备" },session),404,"RESOURCE_NOT_FOUND");

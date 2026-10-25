@@ -6,7 +6,7 @@ using Svm.Services.Contracts.Instances;
 namespace Svm.Application.Instances;
 
 internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInstances instances,IAccessProofSource proofs,ISiteAssets assets,
-    ISoftwareCatalog software,IUnitOfWork unitOfWork,IHardwareAssets hardware)
+    ISoftwareCatalog software,IUnitOfWork unitOfWork,IHardwareAssets hardware, Svm.Application.Personnel.SiteAuthorization scope)
 {
     private bool Protect => unitOfWork.CurrentOperationId is not null;
     internal async ValueTask<AuthorizationDecision> MachineAsync(AuthorizationRequest request,CancellationToken token)
@@ -53,8 +53,6 @@ internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInsta
                 var c=await access.CredentialAsync(x.CredentialId,token); instanceId=c.SubjectId; softwareId=await access.SoftwareForAsync("instance",c.SubjectId,Protect,token); break;
             case CreateRecoveryGrantCommand x: instanceId=x.InstanceId; break;
             case BindInstanceHardwareCommand x:
-                if (!person.Permissions.Any(p => p.SoftwareId is null && p.Operation == "asset.manage"))
-                    return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 instanceId=x.InstanceId; break;
             case UpdateInstanceLifecycleCommand x: instanceId=x.InstanceId; break;
             case ListInstanceCredentialsQuery x: instanceId=x.InstanceId; break;
@@ -67,7 +65,7 @@ internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInsta
             // IAM guard precedes INS locks and races with recovery/revocation/stream operations.
             softwareId=await access.SoftwareForAsync("instance",id,Protect,token);
         }
-        if(softwareId is not { } sid || !person.Permissions.Any(p=>p.SoftwareId==sid && p.Operation==request.Policy.Permission))
+        if(softwareId is not { } sid || !await scope.SoftwareAsync(person.Access,request.Policy.Permission!,sid,token))
             return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         await assets.EnsureDeploymentAsync(Protect,token);
         if(!await software.ExistsAsync(sid,Protect,token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
@@ -78,8 +76,20 @@ internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInsta
                 await hardware.BindingAsync(binding.HardwareBindingId, Protect, token);
             var value=await instances.GetIdentityAsync(instance,Protect,token);
             if(value is null || value.SoftwareId!=sid) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+            if (!await scope.DeviceAsync(person.Access, request.Policy.Permission!, value.DeviceId, sid, token) ||
+                request.Request is BindInstanceHardwareCommand && !await scope.DeviceAsync(person.Access, "binding.manage", value.DeviceId, sid, token))
+                return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             return AuthorizationDecision.Allow(AuthorizationTarget.Instance(sid,instance));
         }
+        var devices = request.Request switch
+        {
+            CreateEnrollmentGrantCommand c => c.DeviceIds,
+            RevokeEnrollmentGrantCommand c => (await access.GrantAsync(c.GrantId, false, token)).DeviceIds ?? [],
+            _ => Array.Empty<Guid>()
+        };
+        foreach (var deviceId in devices)
+            if (!await scope.DeviceAsync(person.Access, request.Policy.Permission!, deviceId, sid, token))
+                return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         return AuthorizationDecision.Allow(AuthorizationTarget.Software(sid));
     }
 }

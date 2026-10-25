@@ -6,7 +6,7 @@ using Svm.Services.Contracts.Releases;
 namespace Svm.Application.Releases;
 
 internal sealed class GitLabAuthorization(IReleaseImports imports, GitLabImportOptions options, ISoftwareCatalog software,
-    IUnitOfWork unit, IGitLabServiceIdentity? service = null)
+    IUnitOfWork unit, Svm.Application.Personnel.SiteAuthorization scope, IGitLabServiceIdentity? service = null)
 {
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest request, PersonnelView? person, CancellationToken token)
     {
@@ -26,7 +26,7 @@ internal sealed class GitLabAuthorization(IReleaseImports imports, GitLabImportO
                 request.Context.Actor.WorkId != (workId ?? binding.Id) || request.Context.Actor.WorkOwner != request.Policy.Owner || work is not null && work.BindingId != binding.Id)
                 return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
         }
-        else if (person is null || !person.Permissions.Any(p => p.SoftwareId == softwareId && p.Operation == request.Policy.Permission))
+        else if (person is null || !await scope.SoftwareAsync(person.Access, request.Policy.Permission!, softwareId, token))
             return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if (!await software.ExistsAsync(softwareId, unit.CurrentOperationId is not null, token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         return GitLabCapabilities.IsInternal(request.Request.GetType())

@@ -31,12 +31,13 @@ public sealed class SiteCatalogCompositionTests
         services.AddScoped<ITrustedCallContextSource, Source>(); services.AddScoped<ISessionProofSource, Source>(); return services;
     }
     [Fact]
-    public void ClosedCompositionContainsOnlyEightAdditionalWritesAndTenQueries()
+    public void ClosedCompositionContainsCatalogHardwareAndExplicitRoleCapabilities()
     {
         var services = Services(); services.ValidateSvmFoundation(); using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
         var bindings = provider.GetRequiredService<RequestCatalog>().Bindings;
-        Assert.Equal(8, bindings.Count(b => CatalogCapabilities.IsWrite(b.RequestType))); Assert.Equal(10, bindings.Count(b => CatalogCapabilities.IsQuery(b.RequestType)));
-        Assert.Equal(12, services.Count(d => d.ServiceType.IsGenericType && d.ServiceType.GetGenericTypeDefinition() == typeof(IIdempotencyRequestAdapter<,>)));
+        Assert.Equal(12, bindings.Count(b => CatalogCapabilities.IsWrite(b.RequestType))); Assert.Equal(15, bindings.Count(b => CatalogCapabilities.IsQuery(b.RequestType)));
+        Assert.Equal(3,bindings.Count(b=>RoleCapabilities.IsWrite(b.RequestType))); Assert.Equal(4,bindings.Count(b=>RoleCapabilities.IsQuery(b.RequestType)));
+        Assert.Equal(19, services.Count(d => d.ServiceType.IsGenericType && d.ServiceType.GetGenericTypeDefinition() == typeof(IIdempotencyRequestAdapter<,>)));
     }
     [Theory] [InlineData("missing")] [InlineData("singleton")] [InlineData("factory")] [InlineData("duplicate")]
     public void InvalidCatalogAdapterRegistrationIsRejected(string mode)
