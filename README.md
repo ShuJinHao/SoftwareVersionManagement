@@ -9,6 +9,8 @@
 2026-10-25 本批验证：Architecture 79、定向后端 37、网页 47、工具 2 项通过；类型检查、构建、完整开发验证 Release 及独立 Linux arm64 四角色 HTTPS 演示完成。演示地址 https://localhost:9450/，仅本机虚构数据，保留及停止说明见 artifacts/linux-demo/roles-and-site-scopes/RETAINED.md。第十三份审阅 SQL 位于 artifacts/roles-and-site-scopes/roles-and-site-scopes-upgrade.sql；开发库未升级。依赖审计新增告警与未覆盖范围见框架设计第 11.1 节，依赖锁未改。
 
 
+交付提交 `07b638b`，见 [PR #17](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/17)，以尚未合并的 PR #16 分支为基线，保留审阅。Windows/Linux 两 SDK 的五个 [CI 检查](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/40174885775) 全部通过。9450 演示已切换到该提交的干净完整 Release，当前截图位于 artifacts/test-results/roles-and-site-scopes/linux-demo-clean/pages.md；开发库未升级。
+
 人员授权已改为“角色 → 负责现场 → 有效操作”，系统管理内切换人员/角色，账户菜单查看本人权限。每条角色分配独立关联范围，不能借其他角色范围扩权；共享软件跨工序时只显示有权设备，查看版本不扩大设备访问。四个初始角色不自动分配，发布/停用默认不授予。角色修改统一作用于全部已分配人员；服务端重新裁决下载、目标、开始许可和整体投放控制。新 API 与兼容规则见[详细设计第 3.1.1 节](docs/详细设计.md#311-人员角色与现场范围)。
 
 **核心硬件工作台已接入真实 API。** 主导航为“软件工作台 / 系统管理”：按工序找设备，设备内按工控机/PLC 分组，按软件反查授权范围内的全部安装位置。上位机/视觉可在多个工控机复用，同一工控机可关联多个软件；更新直接带入勾选实例。工序/设备/软件内部编号自动生成，原显式编号继续兼容；管理 IP 与上报 IP 分开。许可从固定位置签发，旧实例可一次性补充归属；PLC 当前只交付控制器台账。账号菜单提供本人改密，系统管理展示真实有效权限。GitLab 来源查询、同步及工作查询沿用真实能力，绑定仍由部署配置管理；无绑定明确提示，不提供模拟连接按钮。
