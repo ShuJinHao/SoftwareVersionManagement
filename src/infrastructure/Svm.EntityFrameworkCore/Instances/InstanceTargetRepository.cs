@@ -9,14 +9,14 @@ namespace Svm.EntityFrameworkCore.Instances;
 
 internal sealed class InstanceTargetRepository(SvmDbContext db, IUnitOfWork unit, ITargetSnapshotContext snapshot) : IInstanceTargetRepository
 {
-    public async Task<IReadOnlyList<Guid>> SnapshotPageAsync(InstanceTargetFilter f, Guid? after, int take, CancellationToken ct)
+    public async Task<IReadOnlyList<Guid>> SnapshotPageAsync(InstanceTargetFilter f, Guid subjectId, Guid? after, int take, CancellationToken ct)
     {
         if (!snapshot.IsMaterializing || unit.CurrentOperationId is null || db.Database.CurrentTransaction?.GetDbTransaction().IsolationLevel != System.Data.IsolationLevel.RepeatableRead || take is < 1 or > 1000)
             throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting);
         return await db.Database.SqlQueryRaw<Guid>("""
             SELECT i."Id" AS "Value" FROM ins.instances i JOIN ins.devices d ON d."Id"=i."DeviceId"
             JOIN ins.instance_snapshots s ON s."InstanceId"=i."Id"
-            WHERE i."SoftwareId"={0} AND ({1}::uuid IS NULL OR i."Id">{1})
+            WHERE iam.has_field({11},'deployment.create',d."ProcessId",d."Id",i."SoftwareId") AND i."SoftwareId"={0} AND ({1}::uuid IS NULL OR i."Id">{1})
               AND ({2}::uuid IS NULL OR d."ProcessId"={2}) AND ({3}::uuid IS NULL OR i."DeviceId"={3})
               AND ({4}::text IS NULL OR d."DeviceNo" LIKE {4} ESCAPE '\')
               AND ({5}::text IS NULL OR s."SnapshotJson"->'ReportedIps' ? {5}::text)
@@ -27,6 +27,6 @@ internal sealed class InstanceTargetRepository(SvmDbContext db, IUnitOfWork unit
             """, f.SoftwareId, (object?)after ?? DBNull.Value, (object?)f.ProcessId ?? DBNull.Value, (object?)f.DeviceId ?? DBNull.Value,
             f.DeviceNo is null ? DBNull.Value : f.DeviceNo.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%",
             (object?)f.ReportedIp ?? DBNull.Value, (object?)f.InstalledReleaseId ?? DBNull.Value, (object?)f.Freshness ?? DBNull.Value,
-            (object?)f.RunningState ?? DBNull.Value, (object?)f.Lifecycle ?? DBNull.Value, take).ToListAsync(ct);
+            (object?)f.RunningState ?? DBNull.Value, (object?)f.Lifecycle ?? DBNull.Value, take, subjectId).ToListAsync(ct);
     }
 }

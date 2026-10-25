@@ -39,7 +39,7 @@ internal sealed class UpdateHardwareCommandHandler(IHardwareAssets hardware, Cat
         () => hardware.UpdateAsync(x.HardwareId, x.ExpectedRevision, x.Name, x.AssetNumber, x.ManagementIp, token), h => h.Id, token);
 }
 internal sealed class CreateHardwareBindingCommandHandler(IHardwareAssets hardware, ISoftwareCatalog software,
-    IPersonnelSoftwareAdministration grants, CatalogCompletion completion) : IRequestHandler<CreateHardwareBindingCommand, OperationResult<HardwareBindingView>>
+    CatalogCompletion completion) : IRequestHandler<CreateHardwareBindingCommand, OperationResult<HardwareBindingView>>
 {
     public Task<OperationResult<HardwareBindingView>> Handle(CreateHardwareBindingCommand x, CancellationToken token) =>
         completion.ExecuteAsync("ins.hardware-bindings.create", x.Reason, async () =>
@@ -48,7 +48,6 @@ internal sealed class CreateHardwareBindingCommandHandler(IHardwareAssets hardwa
             if (x.NewSoftware is { } draft)
             {
                 product = await software.CreateAsync(null, draft.Name, draft.Category, draft.Description, token);
-                await grants.GrantCreatorAsync(product.Id, token);
             }
             else product = await software.GetAsync(x.SoftwareId!.Value, true, token);
             if (product.Category is not ("UpperComputer" or "Vision")) throw new RequestRejectedException(RequestFailure.InvalidState);

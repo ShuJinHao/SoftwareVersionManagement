@@ -51,7 +51,7 @@ public sealed record CreateSoftwareCommand(Guid Key, string? Code, string Name, 
 public sealed record UpdateSoftwareCommand(Guid Key, Guid SoftwareId, long ExpectedRevision, string Name, string? Description, string Reason) : ICommand<SoftwareView>;
 
 [RequestPolicy("ins.processes.create", ModuleOwner.Instances, RequestKind.Manage, RequestScope.Global,
-    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "asset.manage")]
+    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "asset.create")]
 public sealed record CreateProcessCommand(Guid Key, string? Code, string Name) : ICommand<ProcessView>;
 
 [RequestPolicy("ins.processes.update", ModuleOwner.Instances, RequestKind.Manage, RequestScope.Global,
@@ -59,7 +59,7 @@ public sealed record CreateProcessCommand(Guid Key, string? Code, string Name) :
 public sealed record UpdateProcessCommand(Guid Key, Guid ProcessId, long ExpectedRevision, string Name, string Reason) : ICommand<ProcessView>;
 
 [RequestPolicy("ins.devices.create", ModuleOwner.Instances, RequestKind.Manage, RequestScope.Global,
-    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "asset.manage")]
+    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "asset.create")]
 public sealed record CreateDeviceCommand(Guid Key, Guid ProcessId, string? DeviceNo, string Name, string? AssetNumber = null) : ICommand<DeviceView>;
 
 [RequestPolicy("ins.devices.update", ModuleOwner.Instances, RequestKind.Manage, RequestScope.Global,
@@ -67,9 +67,9 @@ public sealed record CreateDeviceCommand(Guid Key, Guid ProcessId, string? Devic
 public sealed record UpdateDeviceCommand(Guid Key, Guid DeviceId, long ExpectedRevision, Guid? ProcessId, string? Name, string Reason, string? AssetNumber = null, bool UpdateAssetNumber = false) : ICommand<DeviceView>;
 
 [RequestPolicy("ins.bindings.create", ModuleOwner.Instances, RequestKind.Manage, RequestScope.Software,
-    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "instance.manage")]
+    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "binding.manage")]
 public sealed record CreateBindingCommand(Guid Key, Guid DeviceId, Guid SoftwareId, string Reason) : ICommand<BindingView>;
 
 [RequestPolicy("ins.bindings.revoke", ModuleOwner.Instances, RequestKind.Manage, RequestScope.Software,
-    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "instance.manage")]
+    TransactionMode.DatabaseAtomic, IdempotencyMode.OperationResult, ValidationMode.Required, ActorKind.Human, Permission = "binding.manage")]
 public sealed record RevokeBindingCommand(Guid Key, Guid DeviceId, Guid SoftwareId, long ExpectedRevision, string Reason) : ICommand<BindingView>;

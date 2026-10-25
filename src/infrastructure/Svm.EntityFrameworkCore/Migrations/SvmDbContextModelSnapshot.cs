@@ -21,6 +21,7 @@ internal sealed class SvmDbContextModelSnapshot : ModelSnapshot
         IntegrationMaterialsV1Model.Configure(modelBuilder);
         GitLabImportV1Model.Configure(modelBuilder);
         HardwareWorkspaceV1Model.Configure(modelBuilder);
+        RolesAndScopesV1Model.Configure(modelBuilder);
     }
     internal static void Configure(ModelBuilder modelBuilder) => modelBuilder.HasDefaultSchema("framework").HasAnnotation("ProductVersion", "8.0.31");
 

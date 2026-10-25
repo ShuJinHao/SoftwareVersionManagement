@@ -44,18 +44,18 @@ public sealed class HardwareWorkspaceTests
         Assert.Equal(0, Assert.Single((await f.SendAsync(new GetWorkspaceDevicesQuery(new(new(), 50)), human: limited)).Items).InstallationCount);
     }
     [Fact]
-    public async Task NewSoftwareBindingAndCreatorGrantsCommitTogetherOrRollbackTogether()
+    public async Task NewSoftwareBindingCommitsWithoutCreatorGrantsAndAuditFailureRollsBack()
     {
         await using var f = await SiteCatalogFixture.CreateAsync(); var d = (await f.DeviceAsync()).Device;
         var h = (await f.SendAsync(new CreateHardwareCommand(Guid.NewGuid(), d.Id, "IPC", "组合创建夹具", null, "192.0.2.22"))).Value;
         var x = new CreateHardwareBindingCommand(Guid.NewGuid(), h.Id, null, new("组合软件", "Vision", null), "硬件内创建软件");
         var before = await f.CountAsync("rel.software"); var audits = await f.CountAsync("aud.events"); var operations = await f.CountAsync("ins.operation_results");
-        await Assert.ThrowsAnyAsync<Exception>(() => f.SendAsync(x, grantFailure: true));
+        await Assert.ThrowsAnyAsync<Exception>(() => f.SendAsync(x, auditFailure: true));
         Assert.Equal(before, await f.CountAsync("rel.software")); Assert.Equal(audits, await f.CountAsync("aud.events")); Assert.Equal(operations, await f.CountAsync("ins.operation_results"));
         var first = await f.SendAsync(x); var replay = await f.SendAsync(x); Assert.Equal(first.Value, replay.Value);
         Assert.Equal(before + 1, await f.CountAsync("rel.software")); Assert.Equal(audits + 1, await f.CountAsync("aud.events"));
         var permissions = (await f.UserAsync(f.Proof.SubjectId)).Permissions.Where(p => p.SoftwareId == first.Value.SoftwareId).Select(p => p.Operation).Order().ToArray();
-        Assert.Equal(new[] { "instance.manage", "instance.read", "software.read" }, permissions);
+        Assert.Empty(permissions);
         var plc = (await f.SendAsync(new CreateHardwareCommand(Guid.NewGuid(), d.Id, "PLC", "PLC 仅台账", null, null))).Value;
         await InstanceAccessTests.Rejected(RequestFailure.InvalidState, () => f.SendAsync(x with { Key = Guid.NewGuid(), HardwareId = plc.Id }));
         Assert.Equal(before + 1, await f.CountAsync("rel.software"));

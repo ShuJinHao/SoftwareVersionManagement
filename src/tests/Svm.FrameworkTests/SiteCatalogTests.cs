@@ -12,16 +12,16 @@ namespace Svm.FrameworkTests;
 public sealed class SiteCatalogTests
 {
     [Fact]
-    public async Task SoftwareAndOnlyThreeCreatorPermissionsCommitTogether()
+    public async Task SoftwareCreationDoesNotGrantDirectPermissions()
     {
         await using var f = await SiteCatalogFixture.CreateAsync(); var before = await f.UserAsync(f.Proof.SubjectId);
-        var result = await f.SoftwareAsync(); var user = await f.UserAsync(f.Proof.SubjectId);
-        Assert.Equal(new[] { "instance.manage", "instance.read", "software.read" }, user.Permissions.Where(p => p.SoftwareId == result.Value.Id).Select(p => p.Operation).Order());
-        Assert.Equal(before.Revision + 1, user.Revision); Assert.Null(result.Value.LatestAvailableFormalReleaseId);
+        var result = await f.SendAsync(new CreateSoftwareCommand(Guid.NewGuid(),null,"无隐式授权", "Vision",null)); var user = await f.UserAsync(f.Proof.SubjectId);
+        Assert.DoesNotContain(user.Permissions,p => p.SoftwareId == result.Value.Id);
+        Assert.Equal(before.Revision, user.Revision); Assert.Null(result.Value.LatestAvailableFormalReleaseId);
         Assert.Equal(1, await f.CountAsync("rel.software")); Assert.Equal(1, await f.CountAsync("rel.operation_results"));
-        var page = await f.SendAsync(new ListSoftwareQuery(new(new(), 50))); Assert.Equal(result.Value, Assert.Single(page.Items));
+        var page = await f.SendAsync(new ListSoftwareQuery(new(new(), 50))); Assert.Empty(page.Items);
     }
-    [Theory] [InlineData("audit")] [InlineData("save")] [InlineData("cancel")] [InlineData("grant")]
+    [Theory] [InlineData("audit")] [InlineData("save")] [InlineData("cancel")]
     public async Task FailedSoftwareCreationRollsBackSoftwareGrantsSiteAuditAndResult(string stage)
     {
         await using var f = await SiteCatalogFixture.CreateAsync(); var user = await f.UserAsync(f.Proof.SubjectId); var audit = await f.CountAsync("aud.events");
@@ -41,7 +41,7 @@ public sealed class SiteCatalogTests
         var command = new CreateSoftwareCommand(Guid.NewGuid(), "LOST", "夹具", "Vision", null);
         var result = await f.SendAsync(command, interceptor: loss); Assert.Equal(1, loss.Commits);
         Assert.Equal(result.Value.Id, (await f.SendAsync(command)).Value.Id); Assert.Equal(1, await f.CountAsync("rel.software"));
-        Assert.Equal(3, (await f.UserAsync(f.Proof.SubjectId)).Permissions.Count(p => p.SoftwareId is not null));
+        Assert.DoesNotContain((await f.UserAsync(f.Proof.SubjectId)).Permissions,p => p.SoftwareId is not null);
     }
     [Fact]
     public async Task ManufacturingHierarchyAndMultiSoftwareBindingsAreRealAndUnregistered()

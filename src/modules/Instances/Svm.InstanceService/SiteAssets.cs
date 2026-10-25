@@ -8,7 +8,7 @@ namespace Svm.InstanceService;
 
 public static class SiteAssetRegistration
 {
-    public static IServiceCollection AddSvmSiteAssets(this IServiceCollection services) => services.AddScoped<ISiteAssets, SiteAssets>().AddScoped<IHardwareAssets, HardwareAssets>();
+    public static IServiceCollection AddSvmSiteAssets(this IServiceCollection services) => services.AddScoped<ISiteAssets, SiteAssets>().AddScoped<IHardwareAssets, HardwareAssets>().AddScoped<ISiteScopeFacts, SiteScopeFacts>();
 }
 internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork unitOfWork, SiteCatalogOptions options) : ISiteAssets
 {
@@ -89,4 +89,10 @@ internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork un
     private static BindingView View(DeviceSoftwareBinding x) => new(x.Id.Value, x.DeviceId.Value, x.SoftwareId, x.Revision, x.IsActive);
     private static void CheckRevision(long actual, long expected) { if (actual != expected) throw new RequestRejectedException(RequestFailure.RevisionConflict); }
     private void RequireWrite() { options.Require(); if (unitOfWork.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
+}
+
+internal sealed class SiteScopeFacts(ISiteScopeRepository repository) : ISiteScopeFacts
+{
+    public Task<bool> HasSoftwareAsync(Guid id, bool site, IReadOnlyList<Guid> processes, IReadOnlyList<Guid> devices, CancellationToken token) =>
+        repository.HasSoftwareAsync(id, site, processes, devices, token);
 }

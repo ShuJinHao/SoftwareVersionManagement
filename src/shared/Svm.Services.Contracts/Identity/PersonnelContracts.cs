@@ -17,7 +17,11 @@ public sealed record PersonnelPolicy(int SessionHours, int MinimumPasswordLength
 
 public sealed record PermissionView(Guid? SoftwareId, string Operation);
 public sealed record PersonnelView(Guid SubjectId, string EmployeeNo, string DisplayName, bool MustChangePassword,
-    IReadOnlyList<PermissionView> Permissions);
+    IReadOnlyList<PermissionView> Permissions)
+{
+    public AuthorizationView? Authorization { get; init; }
+    public AuthorizationView Access => Authorization ?? AuthorizationView.Legacy(this);
+}
 
 // Secrets deliberately use classes with redacted diagnostics, never positional record ToString().
 public sealed class SessionProof(Guid sessionId, Guid subjectId, string secret)

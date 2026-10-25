@@ -18,9 +18,7 @@ internal sealed class FormalReleaseAvailability(ReadQuerySession session, ICallC
             WHERE r."SoftwareId"=ANY(@softwareIds) AND r."State"='Formal' AND p."State"='Ready' AND NOT p."Disabled"
               AND EXISTS(SELECT 1 FROM pkg.replicas cp WHERE cp."PackageId"=p."Id" AND cp."State"='Healthy'
                   AND cp."CheckedAt">clock_timestamp()-make_interval(secs=>@freshSeconds))
-              AND ((@kind='Human' AND EXISTS(SELECT 1 FROM iam.users u JOIN iam.permissions perm ON perm."SubjectId"=u."Id"
-                    WHERE u."Id"=@subject AND u."IsEnabled" AND NOT u."MustChangePassword"
-                      AND perm."SoftwareId"=r."SoftwareId" AND perm."Operation"='software.read'))
+              AND ((@kind='Human' AND iam.has_software(@subject,'software.read',r."SoftwareId"))
                    OR (@kind='Instance' AND r."SoftwareId"=@actorSoftware))
             ORDER BY r."SoftwareId",r."Major" DESC,r."Minor" DESC,r."Patch" DESC,r."Id" DESC
             """, new { softwareIds = softwareIds.Distinct().ToArray(), subject = actor.ActorId, kind = actor.Kind.ToString(),

@@ -8,7 +8,7 @@ using Svm.Services.Contracts.Tasks;
 namespace Svm.Application.Tasks;
 
 internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog software, IReleases releases,
-    IUnitOfWork unit, TaskOptions options, IPersonnelWorkAuthorization authorization,
+    IUnitOfWork unit, TaskOptions options, IPersonnelWorkAuthorization authorization, Svm.Application.Personnel.SiteAuthorization scope,
     ITaskServiceIdentity? service = null, IInstanceAccess? access = null, IAccessProofSource? proofs = null,
     IManagedInstances? instances = null)
 {
@@ -38,13 +38,27 @@ internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog so
             if (task is not null && task.InstanceId != identity.InstanceId) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             if (x.Request is StartInstanceTaskCommand && task is not null)
             { var d = await tasks.DeploymentAsync(task.DeploymentId, false, ct);
-              if (!await authorization.HasPermissionAsync(d.AuthorizationSubjectId, sid.Value, "deployment.create", protect, ct)) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied); }
+              if (!await authorization.HasInstanceAsync(d.AuthorizationSubjectId, sid.Value, "deployment.create", task.InstanceId, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied); }
             if (!await software.ExistsAsync(sid.Value, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             return AuthorizationDecision.Allow(AuthorizationTarget.Instance(sid.Value, identity.InstanceId!.Value));
         }
-        if (person is null || !person.Permissions.Any(p => p.SoftwareId == sid && p.Operation == x.Policy.Permission)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
-        if (x.Request is ControlInstanceTaskCommand { Action: "CloseUnknown" } && !person.Permissions.Any(p => p.SoftwareId == sid && p.Operation == "task.closeUnknown")) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
-        if (x.Request is ControlDeploymentCommand { Action: "Resume" } && !person.Permissions.Any(p => p.SoftwareId == sid && p.Operation == "deployment.create")) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        if (person is null || !await scope.SoftwareAsync(person.Access, x.Policy.Permission!, sid.Value, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+        var humanTask = x.Request switch { ControlInstanceTaskCommand q => q.TaskId, GetInstanceTaskQuery q => q.TaskId, ListTaskReceiptsQuery q => q.TaskId, _ => (Guid?)null };
+        if (humanTask is { } humanTaskId)
+        {
+            var targetTask = await tasks.TaskAsync(humanTaskId, false, ct);
+            if (!await authorization.HasInstanceAsync(person.SubjectId, sid.Value, x.Policy.Permission!, targetTask.InstanceId, protect, ct) ||
+                x.Request is ControlInstanceTaskCommand { Action: "CloseUnknown" } && !await authorization.HasInstanceAsync(person.SubjectId, sid.Value, "task.closeUnknown", targetTask.InstanceId, protect, ct))
+                return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+        }
+        var wholeDeployment = x.Request switch { ControlDeploymentCommand q => q.DeploymentId, CreateDeploymentControlWorkCommand q => q.DeploymentId, _ => (Guid?)null };
+        if (wholeDeployment is { } deploymentId)
+        {
+            var deployment = await tasks.DeploymentAsync(deploymentId, false, ct);
+            if (!await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.control", deployment.SelectionId, protect, ct) ||
+                x.Request is ControlDeploymentCommand { Action: "Resume" } && !await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.create", deployment.SelectionId, protect, ct))
+                return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+        }
         var selectionId = x.Request switch { PutTargetChunkCommand t => t.SelectionId, SealTargetSelectionCommand t => t.SelectionId, GetTargetSelectionQuery t => t.SelectionId, _ => (Guid?)null };
         if (selectionId is { } sel && await tasks.OwnerAsync("selection", sel, ct) != person.SubjectId) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if (!await software.ExistsAsync(sid.Value, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);

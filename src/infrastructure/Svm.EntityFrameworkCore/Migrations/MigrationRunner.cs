@@ -157,6 +157,8 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE UPDATE ON TABLE rel.integration_materials,tsk.target_members,tsk.selection_chunks,tsk.admission_items,tsk.receipts,tsk.dispatches,tsk.control_items FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.source_bindings,rel.sync_works FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE ins.hardware,ins.hardware_software_bindings FROM {writer};");
+        sql.AppendLine($"REVOKE DELETE ON TABLE iam.roles FROM {writer};");
+        sql.AppendLine($"GRANT EXECUTE ON FUNCTION iam.has_global(uuid,text),iam.has_any(uuid,text),iam.has_product(uuid,text,uuid),iam.has_field(uuid,text,uuid,uuid,uuid),iam.has_software(uuid,text,uuid),iam.has_instance(uuid,text,uuid,uuid) TO {writer}, {reader};");
         return sql.ToString();
     }
 }

@@ -8,8 +8,7 @@ internal sealed class PackageQueries(ReadQuerySession session, ICallContext call
 {
     private CallActor Actor => calls.Current?.Actor ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
     private const string Visible = """
-        ((@kind='Human' AND EXISTS(SELECT 1 FROM iam.users u JOIN iam.permissions perm ON perm."SubjectId"=u."Id"
-           WHERE u."Id"=@subject AND u."IsEnabled" AND NOT u."MustChangePassword" AND perm."SoftwareId"=p."SoftwareId" AND perm."Operation"='software.read'))
+        ((@kind='Human' AND iam.has_software(@subject,'software.read',p."SoftwareId"))
          OR (@kind='Instance' AND p."SoftwareId"=@actorSoftware))
         """;
     public async Task<PackageView?> GetAsync(Guid id, bool upload, CancellationToken token)

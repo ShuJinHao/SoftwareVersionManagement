@@ -24,12 +24,19 @@ public sealed class PackageMigrationTests
                 """);
             var before = await Digest(db); var script = db.Runner.GenerateScript(); Assert.Contains("20261010000100_ReleasesAndPackages", script);
             var directory = Path.Combine(OutboxFixture.Root, "artifacts", "releases-packages"); Directory.CreateDirectory(directory); await File.WriteAllTextAsync(Path.Combine(directory, "releases-packages-upgrade.sql"), script);
-            var result = await db.Runner.ApplyAsync(default); Assert.Equal(12, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db)); await using (var c = Context(db)) Assert.False(c.Database.HasPendingModelChanges());
+            var result = await db.Runner.ApplyAsync(default); Assert.Equal(13, result.Applied.Count); Assert.Empty(result.Pending); Assert.Equal(before, await Digest(db)); await using (var c = Context(db)) Assert.False(c.Database.HasPendingModelChanges());
             foreach (var table in new[] { "rel.releases", "pkg.packages", "pkg.works", "pkg.replicas", "pkg.download_sessions", "pkg.dispatches", "pkg.receive_attempts" }) Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM " + table));
             await Assert.ThrowsAsync<PostgresException>(() => PersistenceDatabase.ExecuteAsync(db.WriterConnection, "DELETE FROM pkg.dispatches")); await Assert.ThrowsAsync<PostgresException>(() => PersistenceDatabase.ExecuteAsync(db.ReaderConnection, "INSERT INTO pkg.dispatches VALUES(gen_random_uuid(),gen_random_uuid(),1)")); Assert.Equal(result.Applied, (await db.Runner.ApplyAsync(default)).Applied);
         }
         finally { await db.DisposeAsync(); }
     }
     private static SvmDbContext Context(PersistenceDatabase db) => new(new DbContextOptionsBuilder<SvmDbContext>().UseNpgsql(db.MigrationConnection, p => p.MigrationsHistoryTable("__EFMigrationsHistory", "framework")).Options);
-    private static Task<string> Digest(PersistenceDatabase db) => PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, "SELECT md5(string_agg(value,'|' ORDER BY value)) FROM (SELECT row_to_json(x)::text value FROM ins.instances x UNION ALL SELECT row_to_json(x)::text FROM ins.device_software_bindings x UNION ALL SELECT row_to_json(x)::text FROM rel.software x) q");
+    // Compare the pre-upgrade contract; later nullable hardware fields are expected additions.
+    private static Task<string> Digest(PersistenceDatabase db) => PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, """
+        SELECT md5(string_agg(value,'|' ORDER BY value)) FROM (
+          SELECT row_to_json(x)::text value FROM (
+            SELECT "Id","SoftwareId","DeviceId","InstallationKey","Lifecycle","Revision" FROM ins.instances) x
+          UNION ALL SELECT row_to_json(x)::text FROM ins.device_software_bindings x
+          UNION ALL SELECT row_to_json(x)::text FROM rel.software x) q
+        """);
 }

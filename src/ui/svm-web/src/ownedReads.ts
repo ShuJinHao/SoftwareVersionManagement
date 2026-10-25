@@ -7,7 +7,8 @@ import { useSession } from './session'
 export function useOwnedReads(clear: () => void) {
   const session = useSession()
   const authority = computed(() => JSON.stringify([session.current?.subjectId, session.current?.authenticated,
-    session.current?.mustChangePassword, session.current?.permissions.map(p => [p.softwareId, p.operation]).sort()]))
+    session.current?.mustChangePassword, session.current?.authorizationRevision, session.current?.authorization,
+    session.current?.permissions.map(p => [p.softwareId, p.operation]).sort()]))
   const scopes = new Map<string, ReturnType<typeof createReadScope>>()
   const active = ref(new Map<string, symbol>())
   const epoch = ref(0)

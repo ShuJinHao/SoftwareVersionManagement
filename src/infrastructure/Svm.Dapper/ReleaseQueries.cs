@@ -24,8 +24,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         FROM rel.releases r JOIN pkg.packages p ON p."Id"=r."PackageId"
         """;
     private const string Visible = """
-        ((@kind='Human' AND EXISTS(SELECT 1 FROM iam.users u JOIN iam.permissions perm ON perm."SubjectId"=u."Id"
-           WHERE u."Id"=@subject AND u."IsEnabled" AND NOT u."MustChangePassword" AND perm."SoftwareId"=r."SoftwareId" AND perm."Operation"=@permission))
+        ((@kind='Human' AND iam.has_software(@subject,@permission,r."SoftwareId"))
          OR (@kind='Instance' AND r."SoftwareId"=@actorSoftware))
         """;
     public async Task<ReleaseView?> GetAsync(Guid id, CancellationToken token) =>
@@ -56,10 +55,12 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
     {
         if (await GetAsync(releaseId, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         var rows = await session.QueryAsync<EvidenceRow>("""
-            SELECT "Id","InstanceId","InstalledReleaseId" AS "ReleaseId","InstalledVersion","InstalledAt","ReceivedAt","ReportedRunningState"
-            FROM ins.installation_evidence WHERE "InstalledReleaseId"=@releaseId AND "InstallationState"='Installed'
-              AND (CAST(@after AS uuid) IS NULL OR "Id">@after) ORDER BY "Id" LIMIT @take
-            """, new { releaseId, after, take = size + 1 }, token);
+            SELECT e."Id",e."InstanceId",e."InstalledReleaseId" AS "ReleaseId",e."InstalledVersion",e."InstalledAt",e."ReceivedAt",e."ReportedRunningState"
+            FROM ins.installation_evidence e JOIN ins.instances i ON i."Id"=e."InstanceId" JOIN ins.devices d ON d."Id"=i."DeviceId"
+            WHERE e."InstalledReleaseId"=@releaseId AND e."InstallationState"='Installed'
+              AND iam.has_field(@subject,'instance.read',d."ProcessId",d."Id",i."SoftwareId")
+              AND (CAST(@after AS uuid) IS NULL OR e."Id">@after) ORDER BY e."Id" LIMIT @take
+            """, new { releaseId, after, subject = Actor.ActorId, take = size + 1 }, token);
         var items = rows.Take(size).ToArray(); return new(items.Select(x => x.View).ToArray(), rows.Count > size ? items[^1].Id : null);
     }
     public async Task<DownloadAuditPage> DownloadsAsync(Guid softwareId, int size, Guid? after, CancellationToken token)
@@ -67,8 +68,10 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         var rows = await session.QueryAsync<DownloadRow>("""
             SELECT d."Id" AS "RequestId",d."PackageId",d."SubjectId",d."ActorKind",d."EmployeeNo",d."StartedAt",d."EndedAt",d."BytesSent",d."State"
             FROM pkg.download_sessions d JOIN pkg.packages p ON p."Id"=d."PackageId"
-            WHERE p."SoftwareId"=@softwareId AND EXISTS(SELECT 1 FROM iam.users u JOIN iam.permissions perm ON perm."SubjectId"=u."Id"
-              WHERE u."Id"=@subject AND u."IsEnabled" AND NOT u."MustChangePassword" AND perm."SoftwareId"=p."SoftwareId" AND perm."Operation"='audit.read')
+            WHERE p."SoftwareId"=@softwareId AND (iam.has_product(@subject,'audit.read',p."SoftwareId") OR
+                (d."ActorKind"='Human' AND d."SubjectId"=@subject AND iam.has_software(@subject,'audit.read',p."SoftwareId")) OR
+                (d."ActorKind"='Instance' AND EXISTS(SELECT 1 FROM ins.instances ai JOIN ins.devices ad ON ad."Id"=ai."DeviceId"
+                  WHERE ai."Id"=d."SubjectId" AND iam.has_field(@subject,'audit.read',ad."ProcessId",ad."Id",ai."SoftwareId"))))
               AND (CAST(@after AS uuid) IS NULL OR d."Id">@after) ORDER BY d."Id" LIMIT @take
             """, new { softwareId, subject = Actor.ActorId, after, take = size + 1 }, token);
         var items = rows.Take(size).ToArray(); return new(items.Select(x => x.View).ToArray(), rows.Count > size ? items[^1].RequestId : null);

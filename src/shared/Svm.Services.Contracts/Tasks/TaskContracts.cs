@@ -34,7 +34,8 @@ public sealed record PauseReason(string Code, string Scope);
 public sealed record DeploymentView(Guid Id, Guid SoftwareId, Guid TargetReleaseId, string Kind, string State,
     Guid AuthorizationSubjectId, TaskWindow Window, TaskParameters Parameters, Guid SelectionId, int SelectedCount,
     int ProcessedCount, int AcceptedCount, int RejectedCount, ResultCounts ResultCounts,
-    IReadOnlyList<PauseReason> PauseReasons, bool ControlPending, long Revision);
+    IReadOnlyList<PauseReason> PauseReasons, bool ControlPending, long Revision)
+{ public IReadOnlyList<string> EffectiveOperations { get; init; } = []; }
 public sealed record AdmissionView(Guid InstanceId, string Decision, string? ReasonCode, Guid? TaskId);
 public sealed record BatchView(Guid Id, int Ordinal, string State, DateTimeOffset? OpenedAt, int TaskCount,
     int DeferredCount, int FailedCount, long FailureRevision, long ReviewedFailureRevision, int TimedOutCount,
@@ -43,7 +44,8 @@ public sealed record ManualClosureView(Guid SubjectId, string Reason, string Ons
 public sealed record TaskView(Guid Id, Guid DeploymentId, Guid? BatchId, Guid InstanceId, Guid TargetReleaseId,
     string State, TaskWindow Window, string? WaitReason, bool IsDeferred, DateTimeOffset? ResponseDeadlineAt,
     Guid? AttemptId, DateTimeOffset? StartAuthorizedAt, DateTimeOffset? MustBeginBefore, string? LastReportedProgress,
-    string? TerminalResult, ManualClosureView? ManualClosure, Guid? RetryOfTaskId, long Revision, Guid? HardwareBindingId = null);
+    string? TerminalResult, ManualClosureView? ManualClosure, Guid? RetryOfTaskId, long Revision, Guid? HardwareBindingId = null)
+{ public IReadOnlyList<string> EffectiveOperations { get; init; } = []; }
 public sealed record FailureReview([property: JsonRequired] Guid BatchId, [property: JsonRequired] long FailureRevision);
 public sealed record StartPreflight([property: JsonRequired] string DownloadedSha256, [property: JsonRequired] bool DataProtectionConfirmed, long? CompatibilityDeclarationRevision = null, string? Note = null);
 public sealed record StartInput([property: JsonRequired] StateReport StateReport, [property: JsonRequired] StartPreflight Preflight);
@@ -81,7 +83,7 @@ public sealed record InstanceTaskFact(Guid Id, Guid SoftwareId, string Lifecycle
 public interface IInstanceTaskFacts
 {
     Task<InstanceTaskFact?> GetAsync(Guid instanceId, bool protect, CancellationToken token);
-    Task<IReadOnlyList<Guid>> SnapshotPageAsync(InstanceFilter filter, Guid? after, int take, CancellationToken token);
+    Task<IReadOnlyList<Guid>> SnapshotPageAsync(InstanceFilter filter, Guid subjectId, Guid? after, int take, CancellationToken token);
 }
 public interface ITargetSnapshotContext { bool IsMaterializing { get; } int TimeoutSeconds { get; } }
 /// <summary>Production time is read from the current database transaction; tests can provide a controlled clock.</summary>

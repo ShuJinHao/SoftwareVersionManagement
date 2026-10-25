@@ -158,6 +158,7 @@ public partial class Program
         app.UseStaticFiles();
         app.MapPersonnelSessions();
         app.MapPersonnelManagement();
+        app.MapRoles();
         app.MapSiteCatalog();
         app.MapInstanceAccess();
         app.MapPackages(packageFiles is not null);

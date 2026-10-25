@@ -17,16 +17,16 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
     public async Task<HardwareView?> GetAsync(Guid id, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
-        return (await session.QueryAsync<HardwareView>(HardwareProjection + " WHERE h.\"Id\"=@id AND pr.\"SiteId\"=@siteId", new { id, siteId = scope.Site.SiteId }, token)).SingleOrDefault();
+        return (await session.QueryAsync<HardwareView>(HardwareProjection + " WHERE h.\"Id\"=@id AND pr.\"SiteId\"=@siteId AND iam.has_field(@subjectId,'asset.read',d.\"ProcessId\",d.\"Id\",NULL)", new { id, siteId = scope.Site.SiteId, subjectId = scope.SubjectId }, token)).SingleOrDefault();
     }
     public async Task<CatalogPage<HardwareView>> ListAsync(Guid deviceId, HardwareListInput input, CancellationToken token)
     {
         await scope.EnsureAsync("asset.read", token);
         var rows = await session.QueryAsync<HardwareView>(HardwareProjection + """
-             WHERE h."DeviceId"=@deviceId AND pr."SiteId"=@siteId
+             WHERE h."DeviceId"=@deviceId AND pr."SiteId"=@siteId AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL)
              AND (CAST(@name AS text) IS NULL OR h."Name" ILIKE @name ESCAPE '\')
              AND (CAST(@afterId AS uuid) IS NULL OR h."Id">@afterId) ORDER BY h."Id" LIMIT @take
-            """, new { deviceId, siteId = scope.Site.SiteId, name = CatalogReadScope.Contains(input.Filter.Name), afterId = input.After?.Id, take = input.PageSize + 1 }, token);
+            """, new { deviceId, siteId = scope.Site.SiteId, subjectId = scope.SubjectId, name = CatalogReadScope.Contains(input.Filter.Name), afterId = input.After?.Id, take = input.PageSize + 1 }, token);
         return CatalogReadScope.Page(rows, input.PageSize, x => new(x.Id.ToString("D"), x.Id));
     }
     public async Task<CatalogPage<HardwareBindingView>> BindingsAsync(Guid hardwareId, HardwareListInput input, CancellationToken token)
@@ -34,11 +34,11 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
         await scope.EnsureAsync("asset.read", token);
         var rows = await session.QueryAsync<HardwareBindingView>("""
             SELECT b."Id",b."HardwareId",h."DeviceId",b."SoftwareId",b."IsActive",
-              CASE WHEN EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=b."SoftwareId" AND p."Operation"='instance.read') THEN b."InstanceId" ELSE NULL END AS "InstanceId",b."Revision"
+              CASE WHEN iam.has_field(@subjectId,'instance.read',d."ProcessId",d."Id",b."SoftwareId") THEN b."InstanceId" ELSE NULL END AS "InstanceId",b."Revision"
             FROM ins.hardware_software_bindings b JOIN ins.hardware h ON h."Id"=b."HardwareId"
             JOIN ins.devices d ON d."Id"=h."DeviceId" JOIN ins.processes pr ON pr."Id"=d."ProcessId"
-            WHERE b."HardwareId"=@hardwareId AND b."IsActive" AND pr."SiteId"=@siteId
-              AND EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=@subjectId AND p."SoftwareId"=b."SoftwareId" AND p."Operation"='software.read')
+            WHERE b."HardwareId"=@hardwareId AND b."IsActive" AND pr."SiteId"=@siteId AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL)
+              AND iam.has_field(@subjectId,'software.read',d."ProcessId",d."Id",b."SoftwareId")
               AND (CAST(@afterId AS uuid) IS NULL OR b."Id">@afterId) ORDER BY b."Id" LIMIT @take
             """, new { hardwareId, siteId = scope.Site.SiteId, subjectId = scope.SubjectId, afterId = input.After?.Id, take = input.PageSize + 1 }, token);
         return CatalogReadScope.Page(rows, input.PageSize, x => new(x.Id.ToString("D"), x.Id));
@@ -58,9 +58,10 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
             AND NOT EXISTS(SELECT 1 FROM ins.hardware_software_bindings h WHERE h."DeviceBindingId"=b."Id" AND h."IsActive")
             AND NOT EXISTS(SELECT 1 FROM ins.instances i WHERE i."DeviceId"=b."DeviceId" AND i."SoftwareId"=b."SoftwareId")
         ), visible AS (
-          SELECT p.* FROM positions p JOIN rel.software s ON s."Id"=p."SoftwareId"
-          WHERE EXISTS(SELECT 1 FROM iam.permissions a JOIN iam.users u ON u."Id"=a."SubjectId" WHERE a."SubjectId"=@subjectId AND a."SoftwareId"=p."SoftwareId" AND a."Operation"='software.read' AND u."IsEnabled" AND NOT u."MustChangePassword")
-            AND EXISTS(SELECT 1 FROM iam.permissions a WHERE a."SubjectId"=@subjectId AND a."SoftwareId"=p."SoftwareId" AND a."Operation"='instance.read')
+          SELECT p.* FROM positions p JOIN rel.software s ON s."Id"=p."SoftwareId" JOIN ins.devices vd ON vd."Id"=p."DeviceId"
+          WHERE iam.has_field(@subjectId,'software.read',vd."ProcessId",vd."Id",p."SoftwareId")
+            AND iam.has_field(@subjectId,'instance.read',vd."ProcessId",vd."Id",p."SoftwareId")
+            AND iam.has_field(@subjectId,'asset.read',vd."ProcessId",vd."Id",NULL)
             AND (CAST(@softwareId AS uuid) IS NULL OR p."SoftwareId"=@softwareId)
             AND (CAST(@hardwareId AS uuid) IS NULL OR p."HardwareId"=@hardwareId)
             AND (CAST(@category AS text) IS NULL OR s."Category"=@category)
@@ -68,7 +69,7 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
         """;
     private const string DevicesFrom = """
          FROM ins.devices d JOIN ins.processes pr ON pr."Id"=d."ProcessId"
-         WHERE pr."SiteId"=@siteId AND (CAST(@processId AS uuid) IS NULL OR pr."Id"=@processId)
+         WHERE pr."SiteId"=@siteId AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL) AND (CAST(@processId AS uuid) IS NULL OR pr."Id"=@processId)
            AND (CAST(@deviceId AS uuid) IS NULL OR d."Id"=@deviceId)
            AND (CAST(@name AS text) IS NULL OR d."Name" ILIKE @name ESCAPE '\' OR d."DeviceNo" ILIKE @name ESCAPE '\')
            AND ((CAST(@softwareId AS uuid) IS NULL AND CAST(@hardwareId AS uuid) IS NULL AND CAST(@category AS text) IS NULL)
@@ -96,7 +97,7 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
          FROM visible v JOIN ins.devices d ON d."Id"=v."DeviceId" JOIN ins.processes pr ON pr."Id"=d."ProcessId"
          JOIN rel.software s ON s."Id"=v."SoftwareId" LEFT JOIN ins.hardware h ON h."Id"=v."HardwareId"
          LEFT JOIN ins.instances i ON i."Id"=v."InstanceId" LEFT JOIN ins.instance_snapshots ss ON ss."InstanceId"=i."Id"
-         WHERE pr."SiteId"=@siteId AND (CAST(@processId AS uuid) IS NULL OR pr."Id"=@processId)
+         WHERE pr."SiteId"=@siteId AND iam.has_field(@subjectId,'asset.read',d."ProcessId",d."Id",NULL) AND (CAST(@processId AS uuid) IS NULL OR pr."Id"=@processId)
            AND (CAST(@deviceId AS uuid) IS NULL OR d."Id"=@deviceId)
            AND (CAST(@name AS text) IS NULL OR d."Name" ILIKE @name ESCAPE '\' OR d."DeviceNo" ILIKE @name ESCAPE '\' OR s."Name" ILIKE @name ESCAPE '\' OR h."Name" ILIKE @name ESCAPE '\')
         """;

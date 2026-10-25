@@ -6,7 +6,7 @@ namespace Svm.Dapper;
 
 public static class UserQueryRegistration
 {
-    public static IServiceCollection AddSvmUserQueries(this IServiceCollection services) => services.AddScoped<IUserQueries, UserQueries>();
+    public static IServiceCollection AddSvmUserQueries(this IServiceCollection services) => services.AddScoped<IUserQueries, UserQueries>().AddScoped<IRoleQueries, RoleQueries>();
 }
 
 internal sealed class UserQueries(ReadQuerySession session) : IUserQueries

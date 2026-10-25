@@ -31,7 +31,11 @@ internal sealed class PersonnelAdministrationRepository(SvmDbContext context, IU
     public async Task<bool> HasOtherEnabledAdministratorAsync(Guid subjectId, CancellationToken token)
     {
         RequireTransaction();
-        return await context.Database.SqlQuery<bool>($"SELECT EXISTS(SELECT 1 FROM iam.users u JOIN iam.permissions p ON p.\"SubjectId\"=u.\"Id\" WHERE u.\"Id\"<>{subjectId} AND u.\"IsEnabled\" AND p.\"SoftwareId\" IS NULL AND p.\"Operation\"='identity.manage') AS \"Value\"").SingleAsync(token);
+        return await context.Database.SqlQuery<bool>($"""
+            SELECT EXISTS(SELECT 1 FROM iam.users u WHERE u."Id"<>{subjectId} AND u."IsEnabled" AND
+              (EXISTS(SELECT 1 FROM iam.permissions p WHERE p."SubjectId"=u."Id" AND p."SoftwareId" IS NULL AND p."Operation"='identity.manage')
+               OR EXISTS(SELECT 1 FROM iam.effective_role_grants g WHERE g."SubjectId"=u."Id" AND g."ScopeKind"='Site' AND g."Operation"='identity.manage'))) AS "Value"
+            """).SingleAsync(token);
     }
     public void AddUser(UserAccount user)
     {

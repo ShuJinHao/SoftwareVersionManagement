@@ -18,5 +18,5 @@ internal sealed class InstanceTaskFacts(IManagedInstanceRepository instances, II
               (await assets.BindingAsync(i.DeviceId, i.SoftwareId, false, ct))?.IsActive == true) position = bindingId;
       }
       return new(id, i.SoftwareId, i.Lifecycle, s.SnapshotJson is null ? null : JsonSerializer.Deserialize<StateReport>(s.SnapshotJson), position); }
-    public Task<IReadOnlyList<Guid>> SnapshotPageAsync(InstanceFilter f, Guid? after, int take, CancellationToken ct) => targets.SnapshotPageAsync(new(f.SoftwareId, f.ProcessId, f.DeviceId, f.DeviceNo, f.ReportedIp, f.InstalledReleaseId, f.Freshness, f.RunningState, f.Lifecycle), after, take, ct);
+    public Task<IReadOnlyList<Guid>> SnapshotPageAsync(InstanceFilter f, Guid subjectId, Guid? after, int take, CancellationToken ct) => targets.SnapshotPageAsync(new(f.SoftwareId, f.ProcessId, f.DeviceId, f.DeviceNo, f.ReportedIp, f.InstalledReleaseId, f.Freshness, f.RunningState, f.Lifecycle), subjectId, after, take, ct);
 }

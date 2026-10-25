@@ -9,7 +9,7 @@ using Svm.Application.Releases;
 namespace Svm.Application.Packages;
 
 internal sealed class PackageAuthorization(IPackages packages, IReleases releases, ISoftwareCatalog software,
-    IUnitOfWork unit, IPersonnelWorkAuthorization personnelWork, IReleaseImports imports, IPackageServiceIdentity? service = null,
+    IUnitOfWork unit, IPersonnelWorkAuthorization personnelWork, IReleaseImports imports, Svm.Application.Personnel.SiteAuthorization scope, IPackageServiceIdentity? service = null,
     IInstanceAccess? access = null, IManagedInstances? instances = null, IAccessProofSource? machineProof = null)
 {
     public async ValueTask<AuthorizationDecision> ExternalAsync(AuthorizationRequest x, PersonnelView? person, CancellationToken token)
@@ -25,7 +25,7 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
             if (identity?.SoftwareId != id || identity.InstanceId != x.Context.Actor.InstanceId) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             if ((await (instances ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid)).GetIdentityAsync(identity.InstanceId!.Value, write, token))?.Lifecycle != "Active") return AuthorizationDecision.Deny(RequestFailure.InstanceSuspended);
         }
-        else if (person is null || !person.Permissions.Any(p => p.SoftwareId == id && p.Operation == x.Policy.Permission))
+        else if (person is null || !await scope.SoftwareAsync(person.Access, x.Policy.Permission!, id.Value, token))
             return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if (!await software.ExistsAsync(id.Value, write, token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         // REL precedes PKG locks for every cross-module operation.

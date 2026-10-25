@@ -8,10 +8,11 @@ namespace Svm.IdentityService;
 
 public static class IdentityRegistration
 {
+    public static IServiceCollection AddSvmRoleAuthorization(this IServiceCollection services) => services.AddScoped<IRoleAuthorization, RoleAuthorization>();
     public static IServiceCollection AddSvmPersonnel(this IServiceCollection services) => services.AddScoped<IPersonnelService, PersonnelService>();
 }
 
-internal sealed class PersonnelService(IPersonnelRepository repository, IPersonnelCrypto crypto, PersonnelPolicy policy) : IPersonnelService
+internal sealed class PersonnelService(IPersonnelRepository repository, IPersonnelCrypto crypto, PersonnelPolicy policy, IRoleAuthorization? roles = null) : IPersonnelService
 {
     public async Task<PersonnelView?> AuthenticateAsync(SessionProof proof, bool protect, CancellationToken cancellationToken)
     {
@@ -94,7 +95,8 @@ internal sealed class PersonnelService(IPersonnelRepository repository, IPersonn
 
     private async Task<PersonnelView> ViewAsync(UserAccount user, CancellationToken cancellationToken) =>
         new(user.Id.Value, user.EmployeeNo, user.DisplayName, user.MustChangePassword,
-            (await repository.PermissionsAsync(user.Id.Value, cancellationToken)).Select(p => new PermissionView(p.SoftwareId, p.Operation)).ToArray());
+            (await repository.PermissionsAsync(user.Id.Value, cancellationToken)).Select(p => new PermissionView(p.SoftwareId, p.Operation)).ToArray())
+        { Authorization = roles is null ? null : await roles.GetAsync(user.Id.Value, cancellationToken) };
     private Task<int> LimitAsync(string account, string address, CancellationToken cancellationToken) =>
         repository.LockRateLimitAsync("a:" + crypto.HashSecret(account), "i:" + crypto.HashSecret(address),
             policy.AccountFailures, policy.AccountWindowSeconds, policy.AddressFailures, policy.AddressWindowSeconds, cancellationToken);

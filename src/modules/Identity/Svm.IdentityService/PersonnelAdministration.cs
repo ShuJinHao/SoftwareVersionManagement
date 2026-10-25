@@ -10,13 +10,13 @@ namespace Svm.IdentityService;
 public static class PersonnelAdministrationRegistration
 {
     public static IServiceCollection AddSvmPersonnelAdministration(this IServiceCollection services) =>
-        services.AddScoped<IPersonnelAdministration, PersonnelAdministration>();
+        services.AddSvmRoleAuthorization().AddScoped<IPersonnelAdministration, PersonnelAdministration>();
     public static IServiceCollection AddSvmPersonnelSoftwareAdministration(this IServiceCollection services) =>
         services.AddScoped<IPersonnelSoftwareAdministration, PersonnelAdministration>();
 }
 
 internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IPersonnelAdministrationRepository administration,
-    IPersonnelCrypto crypto, IUnitOfWork unitOfWork, IOperationContext operations) : IPersonnelAdministration, IPersonnelSoftwareAdministration
+    IPersonnelCrypto crypto, IUnitOfWork unitOfWork, IOperationContext operations, IRoleAuthorization? roles = null) : IPersonnelAdministration, IPersonnelSoftwareAdministration
 {
     public Task ProtectAsync(Guid actorId, Guid? targetId, CancellationToken token) => administration.ProtectAsync(actorId, targetId, token);
     public async Task<UserView> CreateAsync(string employeeNo, string displayName, string temporaryPassword, CancellationToken token)
@@ -30,7 +30,7 @@ internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IP
     public async Task<UserView> UpdateAsync(Guid userId, long expectedRevision, string? displayName, bool? isEnabled, CancellationToken token)
     {
         var user = await ExistingAsync(userId, expectedRevision, token);
-        if (user.IsEnabled && isEnabled == false && (await personnel.PermissionsAsync(userId, token)).Any(IsAdministrator))
+        if (user.IsEnabled && isEnabled == false && await IsAdministratorAsync(userId, null, token))
             await RequireAnotherAdministrator(userId, token);
         user.Update(displayName, isEnabled);
         if (isEnabled == false) await personnel.RevokeSessionsAsync(userId, await personnel.NowAsync(token), token);
@@ -53,7 +53,7 @@ internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IP
         if (!retained.SetEquals(permissions.Where(p => p.SoftwareId is not null)) ||
             permissions.Where(p => p.SoftwareId is null).Any(p => !PersonnelManagementCapabilities.GlobalPermissions.Contains(p.Operation)))
             throw new RequestRejectedException(RequestFailure.ValidationFailed);
-        if (user.IsEnabled && current.Any(IsAdministrator) && !permissions.Any(p => p.SoftwareId is null && p.Operation == "identity.manage"))
+        if (user.IsEnabled && await IsAdministratorAsync(userId, null, token) && !await IsAdministratorAsync(userId, permissions, token))
             await RequireAnotherAdministrator(userId, token);
         await administration.ReplaceGlobalPermissionsAsync(userId, permissions.Where(p => p.SoftwareId is null).Select(p => p.Operation).ToArray(), token);
         await personnel.AdvanceRevisionAsync(userId, token);
@@ -69,7 +69,9 @@ internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IP
         if (permissions.Any(p => !PermissionCatalog.Entries.Any(d => d.Operation == p.Operation && d.Global == (p.SoftwareId is null))))
             throw new RequestRejectedException(RequestFailure.ValidationFailed);
         var current = await personnel.PermissionsAsync(userId, token);
-        if (user.IsEnabled && current.Any(IsAdministrator) && !permissions.Any(p => p.SoftwareId is null && p.Operation == "identity.manage"))
+        if (permissions.Any(p => !RoleOperationCatalog.IsOpen(p.Operation) && !current.Any(c => c.SoftwareId == p.SoftwareId && c.Operation == p.Operation)))
+            throw new RequestRejectedException(RequestFailure.ValidationFailed);
+        if (user.IsEnabled && await IsAdministratorAsync(userId, null, token) && !await IsAdministratorAsync(userId, permissions, token))
             await RequireAnotherAdministrator(userId, token);
         await administration.ReplaceAllPermissionsAsync(userId, permissions.Select(p => new PersonnelPermission(p.SoftwareId, p.Operation)).ToArray(), token);
         await personnel.AdvanceRevisionAsync(userId, token);
@@ -101,7 +103,12 @@ internal sealed class PersonnelAdministration(IPersonnelRepository personnel, IP
     {
         if (!await administration.HasOtherEnabledAdministratorAsync(id, token)) throw new RequestRejectedException(RequestFailure.InvalidState);
     }
-    private static bool IsAdministrator(PersonnelPermission p) => p.SoftwareId is null && p.Operation == "identity.manage";
+    private async Task<bool> IsAdministratorAsync(Guid id, IReadOnlyList<PermissionView>? replacement, CancellationToken token)
+    {
+        var direct = replacement ?? (await personnel.PermissionsAsync(id, token)).Select(p => new PermissionView(p.SoftwareId, p.Operation)).ToArray();
+        var assigned = roles is null ? Array.Empty<RoleAssignmentView>() : (await roles.GetAsync(id, token)).Roles;
+        return new AuthorizationView(id, 0, direct, assigned).Global("identity.manage");
+    }
     private void RequireOperation()
     {
         if (unitOfWork.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting);

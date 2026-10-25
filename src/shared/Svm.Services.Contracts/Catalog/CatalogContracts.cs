@@ -25,10 +25,16 @@ public sealed record DeviceView(Guid Id, string DeviceNo, string Name, Guid Proc
 public sealed record BindingView(Guid Id, Guid DeviceId, Guid SoftwareId, long Revision, bool IsActive);
 public sealed record DeviceSoftwareInventoryItem(SoftwareView Software, BindingView Binding, Svm.Services.Contracts.Instances.InstanceView? Instance = null);
 public sealed record CatalogPosition(string SortKey, Guid Id);
-public sealed record CatalogFilter(string? Code = null, string? Name = null, string? Category = null, Guid? ProcessId = null, Guid? SoftwareId = null);
+public sealed record CatalogFilter(string? Code = null, string? Name = null, string? Category = null, Guid? ProcessId = null, Guid? SoftwareId = null, string? Kind = null);
 public sealed record CatalogListInput(CatalogFilter Filter, int PageSize, CatalogPosition? After = null);
 public sealed record CatalogPage<T>(IReadOnlyList<T> Items, CatalogPosition? Next);
-public sealed record PermissionOptionsPage(IReadOnlyList<SoftwareView> Items, IReadOnlyList<string> SoftwareOperations, CatalogPosition? Next);
+public sealed record PermissionOptionsPage(IReadOnlyList<SoftwareView> Items, IReadOnlyList<string> SoftwareOperations, CatalogPosition? Next)
+{
+    public IReadOnlyList<RoleView> Roles { get; init; } = [];
+    public IReadOnlyList<ProcessView> Processes { get; init; } = [];
+    public IReadOnlyList<DeviceView> Devices { get; init; } = [];
+    public IReadOnlyList<string> Operations { get; init; } = RoleOperationCatalog.All;
+}
 
 public interface ISoftwareCatalog
 {
@@ -83,4 +89,10 @@ public static class CatalogCapabilities
     public static Guid? SoftwareTarget(object request) => request switch
     { GetSoftwareQuery x => x.SoftwareId, UpdateSoftwareCommand x => x.SoftwareId,
       CreateBindingCommand x => x.SoftwareId, RevokeBindingCommand x => x.SoftwareId, _ => null };
+}
+
+/// <summary>INS supplies authoritative membership, without granting permissions or returning other devices.</summary>
+public interface ISiteScopeFacts
+{
+    Task<bool> HasSoftwareAsync(Guid softwareId, bool entireSite, IReadOnlyList<Guid> processes, IReadOnlyList<Guid> devices, CancellationToken token);
 }

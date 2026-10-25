@@ -21,7 +21,7 @@ public sealed class HardwareWorkspaceMigrationTests
         await db.Runner.ApplyAsync(default);
         Assert.True(await probe.CheckAsync(default));
         Assert.True(await probe.CheckAsync(default));
-        Assert.Equal(12, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
+        Assert.Equal(13, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM ins.hardware"));
         Assert.False(await PersistenceDatabase.ScalarAsync<bool>(db.ReaderConnection, "SELECT has_table_privilege(current_user, 'framework.\"__EFMigrationsHistory\"', 'INSERT')"));
     }
@@ -43,7 +43,7 @@ public sealed class HardwareWorkspaceMigrationTests
         Assert.Contains("20261021000100_HardwareWorkspace", script);
         var directory = Path.Combine(OutboxFixture.Root,"artifacts","hardware-workspace"); Directory.CreateDirectory(directory);
         await File.WriteAllTextAsync(Path.Combine(directory,"hardware-workspace-upgrade.sql"),script);
-        var result = await db.Runner.ApplyAsync(default); Assert.Equal(12,result.Applied.Count); Assert.Empty(result.Pending);
+        var result = await db.Runner.ApplyAsync(default); Assert.Equal(13,result.Applied.Count); Assert.Empty(result.Pending);
         Assert.Equal(before,await Digest(db));
         Assert.Equal(0,await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection,"SELECT count(*) FROM ins.hardware"));
         Assert.Equal(0,await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection,"SELECT count(*) FROM ins.hardware_software_bindings"));

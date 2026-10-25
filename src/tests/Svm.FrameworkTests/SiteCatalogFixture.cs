@@ -51,8 +51,15 @@ internal sealed class SiteCatalogFixture(PersonnelManagementFixture personnel, S
     internal async Task<T> SendAsync<T>(IRequest<T> request, SessionProof? proof = null, IInterceptor? interceptor = null, bool auditFailure = false, CancellationToken token = default, SiteCatalogOptions? options = null, bool grantFailure = false)
     { await using var provider = Provider(proof, interceptor, auditFailure, options, grantFailure); await using var scope = provider.CreateAsyncScope(); return await scope.ServiceProvider.GetRequiredService<ISender>().Send(request, token); }
     internal Task<UserView> UserAsync(Guid id) => SendAsync(new GetUserQuery(id));
-    internal Task<OperationResult<SoftwareView>> SoftwareAsync(string code = "FIXTURE-SOFTWARE", string category = "UpperComputer") =>
-        SendAsync(new CreateSoftwareCommand(Guid.NewGuid(), code, "夹具软件", category, "测试资料"));
+    internal async Task<OperationResult<SoftwareView>> SoftwareAsync(string code = "FIXTURE-SOFTWARE", string category = "UpperComputer")
+    {
+        var result = await SendAsync(new CreateSoftwareCommand(Guid.NewGuid(), code, "夹具软件", category, "测试资料"));
+        // Fixtures explicitly grant what their following actions require; creation no longer grants permissions.
+        var user = await UserAsync(Proof.SubjectId);
+        await SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(), user.Id, user.Revision,
+            user.Permissions.Concat(new[] { new PermissionView(result.Value.Id, "software.read"), new(result.Value.Id, "instance.read"), new(result.Value.Id, "instance.manage") }).ToArray(), "夹具显式软件授权"));
+        return result;
+    }
     internal async Task<(ProcessView Process, DeviceView Device)> DeviceAsync(string code = "FIXTURE-P", string number = "FIXTURE-D")
     { var process = (await SendAsync(new CreateProcessCommand(Guid.NewGuid(), code, "夹具工序"))).Value; var device = (await SendAsync(new CreateDeviceCommand(Guid.NewGuid(), process.Id, number, "夹具二期设备"))).Value; return (process, device); }
     internal async Task<SessionProof> PersonAsync(IReadOnlyList<PermissionView> permissions)
