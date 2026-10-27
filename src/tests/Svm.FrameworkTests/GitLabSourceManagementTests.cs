@@ -179,6 +179,10 @@ public sealed class GitLabSourceManagementTests
         await using var db = new PersistenceDatabase(); await db.CreateAsync(false);
         SvmDbContext Context() => new(new DbContextOptionsBuilder<SvmDbContext>().UseNpgsql(db.MigrationConnection, p => p.MigrationsHistoryTable("__EFMigrationsHistory", "framework")).Options);
         await using (var c = Context()) await c.GetService<IMigrator>().MigrateAsync("20261024000100_RolesAndSiteScopes");
+        await PersistenceDatabase.ExecuteAsync(db.MigrationConnection, $"GRANT USAGE ON SCHEMA framework TO {db.ReaderRole}; GRANT SELECT ON framework.\"__EFMigrationsHistory\" TO {db.ReaderRole}");
+        await using var probe = new Svm.Dapper.ReadPersistenceProbe(db.ReaderConnection);
+        Assert.Equal(13, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
+        Assert.False(await probe.CheckAsync(default));
         await PersistenceDatabase.ExecuteAsync(db.MigrationConnection, """
             INSERT INTO rel.software VALUES ('11111111-1111-4111-8111-111111111111','MIGRATION-S','Source migration','Vision',NULL,1);
             INSERT INTO rel.source_bindings ("Id","SoftwareId","SubjectId","BaseUri","ProjectId","PackageName","Initialized")
@@ -186,6 +190,9 @@ public sealed class GitLabSourceManagementTests
             """);
         var before = await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, "SELECT row_to_json(b)::text FROM rel.source_bindings b");
         var result = await db.Runner.ApplyAsync(default); Assert.Equal(14, result.Applied.Count);
+        Assert.True(await probe.CheckAsync(default));
+        Assert.True(await probe.CheckAsync(default));
+        Assert.Equal(14, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         var after = await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, "SELECT row_to_json(b)::text FROM (SELECT \"Id\",\"SoftwareId\",\"SubjectId\",\"BaseUri\",\"ProjectId\",\"PackageName\",\"Initialized\",\"LastSyncedAt\",\"NextScanAt\",\"LatestWorkId\",\"LastErrorCode\" FROM rel.source_bindings) b");
         Assert.Equal(System.Text.Json.Nodes.JsonNode.Parse(before)!.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(after)!.ToJsonString());
         Assert.Equal(1, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM iam.permission_catalog WHERE \"Operation\"='release.source.manage'"));

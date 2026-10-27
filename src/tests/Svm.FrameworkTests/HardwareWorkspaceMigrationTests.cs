@@ -21,7 +21,7 @@ public sealed class HardwareWorkspaceMigrationTests
         await db.Runner.ApplyAsync(default);
         Assert.True(await probe.CheckAsync(default));
         Assert.True(await probe.CheckAsync(default));
-        Assert.Equal(13, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
+        Assert.Equal(14, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         Assert.Equal(0, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM ins.hardware"));
         Assert.False(await PersistenceDatabase.ScalarAsync<bool>(db.ReaderConnection, "SELECT has_table_privilege(current_user, 'framework.\"__EFMigrationsHistory\"', 'INSERT')"));
     }
