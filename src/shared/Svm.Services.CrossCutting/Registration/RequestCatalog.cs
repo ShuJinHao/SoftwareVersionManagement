@@ -77,7 +77,7 @@ public sealed class RequestCatalog
         var mode = type == typeof(SubmitTaskReceiptCommand) ? IdempotencyMode.ReceiptSequence : type == typeof(PutTargetChunkCommand) ? IdempotencyMode.SelectionChunk :
             type == typeof(SubmitStatusReportCommand) ? IdempotencyMode.ReportSequence :
             type == typeof(RegisterInstanceCommand) || type == typeof(RecoverInstanceCommand) ? IdempotencyMode.EnrollmentProtocol :
-            management || catalogWrite || instanceWrite || PackageCapabilities.IsIdempotent(type) || TaskCapabilities.IsIdempotent(type) || type == typeof(RequestReleaseSyncCommand) ? IdempotencyMode.OperationResult : IdempotencyMode.None;
+            management || catalogWrite || instanceWrite || PackageCapabilities.IsIdempotent(type) || TaskCapabilities.IsIdempotent(type) || (type == typeof(RequestReleaseSyncCommand) || type == typeof(ChangeReleaseSourceCommand)) ? IdempotencyMode.OperationResult : IdempotencyMode.None;
         if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite && !instanceWrite && !PackageCapabilities.IsWrite(type) && !TaskCapabilities.IsWrite(type) && !GitLabCapabilities.IsWrite(type)) || policy.Transaction != (type == typeof(UploadContentCommand) ? TransactionMode.PhasedFile : TransactionMode.DatabaseAtomic) ||
                 policy.Idempotency != mode
             : policy.Transaction != TransactionMode.ReadOnly || policy.Idempotency != IdempotencyMode.None)

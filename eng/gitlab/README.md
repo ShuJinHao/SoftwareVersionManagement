@@ -24,20 +24,20 @@ HttpApi 与两个 Worker 使用一致的 `SVM_GITLAB_CONFIG_FILE`，并已配置
     "pageSize": 20,
     "maxPages": 10000,
     "leaseSeconds": 120,
-    "bindings": [{
-      "id": "<稳定绑定 UUID>",
-      "softwareId": "<平台已有软件 UUID>",
-      "subjectId": "<本绑定专用集成主体 UUID>",
+    "bindings": [],
+    "connections": [{
+      "id": "<稳定连接 UUID>",
+      "name": "<页面连接名称>",
       "baseUri": "https://<厂内 GitLab 主机>/",
-      "projectId": 123,
-      "packageName": "<与流水线一致的包名>",
-      "enabled": true
+      "enabled": true,
+      "projects": [{ "id": 123, "name": "<项目名称>", "packages": ["<与流水线一致的包名>"] }]
     }]
   },
-  "credentials": [{
-    "bindingId": "<同上绑定 UUID>",
+  "credentials": [],
+  "connectionCredentials": [{
+    "connectionId": "<同上连接 UUID>",
     "apiToken": "<只读 API token>",
-    "packageToken": "<只读 Deploy token>"
+    "packageToken": "<只读包 Deploy token>"
   }]
 }
 ```
@@ -46,7 +46,24 @@ API token 使用 `read_api` 并只允许访问绑定项目，包 Deploy token �
 
 正常使用操作系统可信证书链；企业私有 CA 可在顶层显式填写绝对 `trustCertificatePath`（只含公有根证书，不含私钥）。专用 CA 模式仍检查主机名、证书期限、链和服务端用途，但不联网查询吊销状态；证书轮换及撤销运营策略须在企业联调中落实，不能使用跳过证书验证的配置。
 
-绑定首次写入后固定项目、地址、包名、主体及软件关系，不允许通过换配置覆盖历史；停用可将 `enabled` 设为 false，轮换凭据不改变绑定标识。同步停用或移除配置会阻止新扫描和导入，已派发的包工作继续依据持久化绑定及不可变来源核验并形成双副本；停止某个版本的执行仍须通过平台版本停用操作。没有配置时未绑定软件沿用人工方式；已持久化绑定的软件不因移除配置退回人工创建。无效配置拒绝启动。
+私有配置只提供可选连接、项目和包，不直接指定新软件绑定。每个连接最多 1000 项目，每项目最多 1000 包，总组合最多 10000。网页候选只返回这些允许项，搜索分页默认 50、最大 200。`release.source.manage` 为新的明确产品权限，需由管理员分配，不自动给已有人员或角色增加。
+
+绑定在软件“版本与来源”保存到数据库。首次为 revision 0；后续启停、改绑必须携带当前 revision。允许更换连接、项目或包，但未结束扫描/导入/首次包处理必须先完成；返回 INVALID_STATE 及相关工作标识。来源变更新建稳定绑定及主体，旧记录不可覆盖，版本、同步工作、任务和履历仍引用原来源。纯启停保持当前绑定/主体，停止新增同步不取消已接受工作。部署移除连接后，需要远端的阶段等待配置恢复；已在本地派发的包工作和历史修复按版本自身来源继续执行，版本停用仍独立生效。新来源的数字版本与旧来源冲突时拒绝覆盖。
+
+保存只是配置持久化，不代表连通或正式版已导入。后台实际核验保护 Tag、成功流水线和双副本后才展示正式版本。移除配置、停用或改绑均不自动恢复人工上传。
+
+### 旧配置转换与显式接管
+
+旧 `import.bindings`/`credentials` 文件仍可运行，数据库已有绑定不会被文件重写。转换工具先预览，不联系数据库或 GitLab，也不输出 token。使用绝对私有路径：
+
+```sh
+eng/node eng/gitlab/source-config.mjs preview /private/path/legacy-gitlab.json
+eng/node eng/gitlab/source-config.mjs apply /private/path/legacy-gitlab.json /private/path/managed-gitlab.json
+```
+
+apply 只写一个不存在的新文件（Unix 0600），保留旧 bindings、credentials、绑定 ID、主体 ID 和启停状态，并为每项增加确定连接及允许项目/包。重复执行不会覆盖已有文件；发现已有同 ID 连接被人工改变时拒绝自动覆盖。审阅后由部署人员将各 Host 切换到新私有文件并重启。之后由具有 release.source.manage 的人员打开软件来源面板，选择相同项目/包、核对 revision 并保存，才显式接管到数据库管理；已有工作未结束时拒绝接管。相同来源接管保留原绑定和主体 ID。已接管软件不再被旧配置 enabled 覆盖；后续只在页面维护该软件。转换文件和原文件均含秘密，禁止提交仓库或公共 CI 产物。
+
+第十四份迁移只在一次性库验证；生产/开发库升级仍需部署人员显式安排，工具不执行迁移。SQL 审阅产物为 artifacts/gitlab-source-management/upgrade.sql。
 
 ## 使用与恢复
 

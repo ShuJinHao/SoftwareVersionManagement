@@ -135,3 +135,29 @@ test('solution retains exactly the approved projects and unique standard folder 
   const nested=text.split('GlobalSection(NestedProjects)')[1].split('EndGlobalSection')[0].split('\n').filter(l=>l.includes(' = '));
   assert.equal(new Set(nested.map(l=>l.split(' = ')[0].trim())).size,nested.length);
 });
+
+test('gitlab source conversion previews without secrets and explicitly writes a private new file', async () => {
+  const { convertFile } = await import('./gitlab/source-config.mjs');
+  const directory = await mkdtemp(join(root, '.cache', 'source-conversion-'));
+  try {
+    const source = join(directory, '旧来源.json'), output = join(directory, '新来源.json');
+    const binding = { id: '11111111-1111-4111-8111-111111111111', subjectId: '22222222-2222-4222-8222-222222222222', softwareId: '33333333-3333-4333-8333-333333333333', baseUri: 'https://gitlab.example.invalid/', projectId: 17, packageName: 'fixture', enabled: false };
+    const config = { import: { bindings: [binding] }, credentials: [{ bindingId: binding.id, apiToken: 'fixture-api-secret', packageToken: 'fixture-package-secret' }] };
+    await writeFile(source, JSON.stringify(config), { mode: 0o600 });
+    const preview = convertFile(source); assert.equal(preview.databaseChanged, false); assert.equal(preview.action, 'preview'); assert.doesNotMatch(JSON.stringify(preview), /secret/);
+    convertFile(source, output); const converted = JSON.parse(await readFile(output, 'utf8'));
+    assert.deepEqual(converted.import.bindings, config.import.bindings); assert.equal(converted.import.connections[0].id, binding.id); assert.equal(converted.connectionCredentials[0].apiToken, config.credentials[0].apiToken);
+    assert.throws(() => convertFile(source, output)); assert.equal(await readFile(source, 'utf8'), JSON.stringify(config));
+    if (process.platform !== 'win32') { const { stat } = await import('node:fs/promises'); assert.equal((await stat(output)).mode & 0o777, 0o600); }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+test('gitlab source conversion rejects conflicting connections and untrusted addresses without echoing input', async () => {
+  const { convertLegacySources } = await import('./gitlab/source-config.mjs');
+  const binding = { id: '11111111-1111-4111-8111-111111111111', baseUri: 'https://gitlab.example.invalid/', projectId: 17, packageName: 'fixture' };
+  const config = { import: { bindings: [binding] }, credentials: [{ bindingId: binding.id, apiToken: 'fixture-api-secret', packageToken: 'fixture-package-secret' }] };
+  for (const baseUri of ['http://example.invalid/', 'https://secret@example.invalid/', 'https://example.invalid/?token=secret']) assert.throws(() => convertLegacySources({ ...config, import: { bindings: [{ ...binding, baseUri }] } }));
+  assert.throws(() => convertLegacySources({ ...config, import: { bindings: [binding, binding] } }));
+  assert.equal(convertLegacySources({ ...config, import: { bindings: [{ ...binding, packageName: '_legacy.pkg' }] } }).import.connections[0].projects[0].packages[0], '_legacy.pkg');
+  const converted = convertLegacySources(config); assert.deepEqual(convertLegacySources(converted), converted);
+  converted.import.connections[0].projects[0].packages.push('manual-change'); assert.throws(() => convertLegacySources(converted));
+});

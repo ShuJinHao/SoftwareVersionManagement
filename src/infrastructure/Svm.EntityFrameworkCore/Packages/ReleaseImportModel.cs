@@ -22,12 +22,25 @@ internal static class ReleaseImportModel
             b.Property<string>("BaseUri").IsRequired();
             b.Property<long>("ProjectId");
             b.Property<string>("PackageName").IsRequired();
+            b.Property<Guid?>("ConnectionId");
+            b.Property<bool>("Managed").HasDefaultValue(false);
+            b.Property<bool>("IsCurrent").HasDefaultValue(true);
+            b.Property<bool>("Enabled").HasDefaultValue(true);
+            b.Property<long>("Revision").HasDefaultValue(1L);
+            b.Property<long>("SourceRevision").HasDefaultValue(1L);
             b.Property<bool>("Initialized");
             b.Property<DateTimeOffset?>("LastSyncedAt");
             b.Property<DateTimeOffset?>("NextScanAt");
             b.Property<Guid?>("LatestWorkId");
             b.Property<string>("LastErrorCode");
-            b.HasKey("Id"); b.HasIndex("SoftwareId").IsUnique(); b.HasIndex("SubjectId").IsUnique(); b.ToTable("source_bindings", "rel");
+            b.HasKey("Id"); b.HasIndex("SoftwareId", "IsCurrent").IsUnique().HasFilter("\"IsCurrent\""); b.HasIndex("SubjectId").IsUnique(); b.ToTable("source_bindings", "rel");
+        });
+        model.Entity<ReleaseSourceChange>(b =>
+        {
+            b.Property<Guid>("Id").ValueGeneratedNever(); b.Property<Guid>("BindingId"); b.Property<long>("Revision");
+            b.Property<bool>("Enabled"); b.Property<DateTimeOffset>("CreatedAt");
+            b.HasKey("Id"); b.HasIndex("BindingId", "Revision").IsUnique(); b.ToTable("source_changes", "rel");
+            b.HasOne<ReleaseSourceBinding>().WithMany().HasForeignKey(x => x.BindingId).OnDelete(DeleteBehavior.Restrict).HasConstraintName("source_changes_BindingId_fkey");
         });
         model.Entity<ReleaseSyncWork >(b =>
         {

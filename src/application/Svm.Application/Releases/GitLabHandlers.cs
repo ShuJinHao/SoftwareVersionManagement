@@ -37,17 +37,19 @@ internal sealed class RenewGitLabWorkCommandHandler(IReleaseImports imports, IUn
 { public async Task<OperationResult<bool>> Handle(RenewGitLabWorkCommand x, CancellationToken token) { await imports.ProtectAsync(x.Lease, token); return OperationResult<bool>.Completed(unit.CurrentOperationId!.Value, true, x.Lease.WorkId); } }
 internal sealed class DelayGitLabWorkCommandHandler(IReleaseImports imports, IUnitOfWork unit) : IRequestHandler<DelayGitLabWorkCommand, OperationResult<bool>>
 { public async Task<OperationResult<bool>> Handle(DelayGitLabWorkCommand x, CancellationToken token) { await imports.DelayAsync(x.Lease, x.Code, token); return OperationResult<bool>.Completed(unit.CurrentOperationId!.Value, true, x.Lease.WorkId); } }
-internal sealed class BeginGitLabImportCommandHandler(IReleaseImports imports, IPackages packages, GitLabImportOptions options, IUnitOfWork unit, IAuditWriter audit, ICallContext calls, PackageDispatch dispatch, IIntegrationEventOutbox outbox)
+internal sealed class BeginGitLabImportCommandHandler(IReleaseImports imports, IPackages packages, IUnitOfWork unit, IAuditWriter audit, ICallContext calls, PackageDispatch dispatch, IIntegrationEventOutbox outbox)
     : IRequestHandler<BeginGitLabImportCommand, OperationResult<GitLabImportReceipt>>
 {
     public async Task<OperationResult<GitLabImportReceipt>> Handle(BeginGitLabImportCommand x, CancellationToken token)
     {
-        var before = await imports.ProtectAsync(x.Lease, token); var newPackageId = Guid.NewGuid();
+        var before = await imports.ProtectAsync(x.Lease, token);
+        var binding = await imports.ResolveBindingAsync(before.SoftwareId, before.BindingId, false, token) ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        var newPackageId = Guid.NewGuid();
         var release = await imports.RegisterAsync(x.Lease, x.Facts, newPackageId, token);
         if (release.PackageId == newPackageId)
         {
             var m = x.Facts.Manifest;
-            await packages.CreateAsync(newPackageId, release.Id, release.SoftwareId, options.Require(release.SoftwareId).SubjectId, new(m.FileName, m.SizeBytes, m.Sha256), token);
+            await packages.CreateAsync(newPackageId, release.Id, release.SoftwareId, binding.SubjectId, new(m.FileName, m.SizeBytes, m.Sha256), token);
             audit.Append(new(unit.CurrentOperationId!.Value, calls.Current!.Actor.ActorId, "Service", null, null, "rel.gitlab.registered", release.Id, "succeeded", "verified protected tag and build", calls.Current.CorrelationId));
         }
         var p = await packages.GetAsync(release.PackageId, false, true, token); UploadReceipt? upload = null;
@@ -59,7 +61,7 @@ internal sealed class BeginGitLabImportCommandHandler(IReleaseImports imports, I
         else if (p.State is "Ready" or "Verifying" or "Copying") await imports.ReceivedAsync(x.Lease, token);
         else if (p.State == "Failed" && p.SizeBytes is not null)
         {
-            var sending = await packages.RetryAsync(p.Id, p.Revision, options.Require(release.SoftwareId).SubjectId, token);
+            var sending = await packages.RetryAsync(p.Id, p.Revision, binding.SubjectId, token);
             await outbox.EnqueueAsync(dispatch.Create(sending), token); await imports.ReceivedAsync(x.Lease, token);
         }
         else

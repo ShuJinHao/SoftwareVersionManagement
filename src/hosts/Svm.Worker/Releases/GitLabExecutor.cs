@@ -17,25 +17,48 @@ internal sealed class GitLabExecutor(IServiceScopeFactory scopes, ScopedRequestE
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            foreach (var binding in options.Bindings.Where(b => b.Enabled))
+            try
             {
-                try
+                // Legacy configuration remains usable until explicitly taken over. Managed bindings are database-owned.
+                foreach (var legacy in options.Bindings)
                 {
-                    try { await Send(binding, binding.Id, new ScheduleGitLabScanCommand(binding.SoftwareId), stoppingToken); }
-                    catch (PersistenceException e) when (e.Failure == PersistenceFailure.CommitOutcomeUnknown)
-                    {
-                        await Send(binding, binding.Id, new GetGitLabSourceQuery(binding.SoftwareId), stoppingToken);
-                        continue;
-                    }
-                    IReadOnlyList<Guid> pending;
-                    await using (var scope = scopes.CreateAsyncScope()) pending = await scope.ServiceProvider.GetRequiredService<IReleaseImports>().PendingAsync(binding.SoftwareId, stoppingToken);
-                    foreach (var id in pending) await Execute(binding, id, stoppingToken);
+                    await using var scope = scopes.CreateAsyncScope();
+                    var binding = await scope.ServiceProvider.GetRequiredService<IReleaseImports>().ResolveBindingAsync(legacy.SoftwareId, null, false, stoppingToken);
+                    if (binding is { ConnectionId: null }) await Process(binding, stoppingToken);
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-                catch (Exception error) { logger.LogWarning("GitLab binding {BindingId} scan stopped {FailureType}", binding.Id, error.GetType().Name); }
+                Guid? afterId = null;
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    await using var scope = scopes.CreateAsyncScope();
+                    var page = await scope.ServiceProvider.GetRequiredService<IReleaseImports>().BindingsAsync(afterId, 100, stoppingToken);
+                    foreach (var binding in page.Where(b => b.ConnectionId is not null)) await Process(binding, stoppingToken);
+                    if (page.Count < 100) break;
+                    afterId = page[^1].Id;
+                }
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception error) { logger.LogWarning("GitLab source enumeration paused {FailureType}", error.GetType().Name); }
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
         }
+    }
+    private async Task Process(GitLabBinding binding, CancellationToken token)
+    {
+        if (!options.IsAvailable(binding)) return;
+        try
+        {
+            if (binding.Enabled)
+            {
+                try { await Send(binding, binding.Id, new ScheduleGitLabScanCommand(binding.SoftwareId), token); }
+                catch (PersistenceException e) when (e.Failure == PersistenceFailure.CommitOutcomeUnknown)
+                { await Send(binding, binding.Id, new GetGitLabSourceQuery(binding.SoftwareId), token); return; }
+            }
+            // Disabling automatic synchronization does not orphan work already accepted under this source.
+            IReadOnlyList<Guid> pending;
+            await using (var scope = scopes.CreateAsyncScope()) pending = await scope.ServiceProvider.GetRequiredService<IReleaseImports>().PendingAsync(binding.SoftwareId, token);
+            foreach (var id in pending) await Execute(binding, id, token);
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+        catch (Exception error) { logger.LogWarning("GitLab binding {BindingId} scan stopped {FailureType}", binding.Id, error.GetType().Name); }
     }
     private async Task Execute(GitLabBinding binding, Guid id, CancellationToken token)
     {

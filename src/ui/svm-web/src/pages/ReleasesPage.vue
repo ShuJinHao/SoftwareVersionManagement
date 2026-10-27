@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, onBeforeRouteLeave } from 'vue-router'
 import { ApiError, request } from '../api'
 import { useSession } from '../session'
@@ -8,13 +8,13 @@ import { categoryName, type Page, type Software } from '../catalog'
 import { releaseState, packageStage, uploadPackage, type Release, type Package, type ReleaseUpload, type TestEvidence, type DownloadAudit } from '../packages'
 import { pendingWriteKey } from '../mutation'
 import { hashFile } from '../packages/hashFile'
-import type { ReleaseSource, ReleaseSyncWork } from '../packages'
+import type { ReleaseSource, ReleaseSyncWork, ReleaseSourceOption, ReleaseSourceOptions } from '../packages'
 import { createReadScope } from '../reading'
 import OperationStatus from '../components/OperationStatus.vue'
 
 const route = useRoute(), session = useSession(), mutation = useProtectedMutation()
 const { busy, uncertain, error } = mutation
-const globalPending = inject(pendingWriteKey, ref(false)), pendingAction = ref<'retry' | 'disable' | 'publish' | 'sync' | null>(null)
+const globalPending = inject(pendingWriteKey, ref(false)), pendingAction = ref<'retry' | 'disable' | 'publish' | 'sync' | 'source' | null>(null)
 const softwareId = typeof route.query.softwareId === 'string' ? route.query.softwareId : ''
 const software = ref<Software | null>(null), channel = ref(route.query.channel === 'Formal' ? 'Formal' : 'Test'), items = ref<Release[]>([]), selected = ref<Release | null>(null)
 const evidenceNext = ref<string | null>(null), auditNext = ref<string | null>(null)
@@ -25,6 +25,13 @@ const file = ref<File | null>(null), digest = ref(''), hashedBytes = ref(0), has
 const registered = ref<ReleaseUpload | null>(null), maxBytes = ref<number | null>(null), actionReason = ref('')
 const chosenEvidence = ref(''), publishReason = ref(''), publishConclusion = ref('')
 const source = ref<ReleaseSource | null>(null), syncWork = ref<ReleaseSyncWork | null>(null), historicalTag = ref('')
+const canManageSource = computed(() => session.can('release.source.manage', softwareId))
+const sourceDialog = ref<HTMLDialogElement | null>(null), sourceOptions = ref<ReleaseSourceOption[]>([])
+const sourceSearch = ref(''), sourceAppliedSearch = ref(''), sourceNextPage = ref<number | null>(null), sourceOptionsLoading = ref(false)
+const sourceDraft = ref<{ softwareId: string; softwareName: string; revision: number; stamp: string; selected: ReleaseSourceOption | null; enabled: boolean; reason: string; blocking: string[] } | null>(null)
+const sourceStamp = computed(() => JSON.stringify([session.current?.subjectId, session.access]))
+const sourceDraftValid = computed(() => canManageSource.value && sourceDraft.value?.stamp === sourceStamp.value)
+let sourceReturnFocus: HTMLElement | null = null
 const canSync = computed(() => source.value?.kind === 'GitLab' && source.value.enabled && session.can('release.upload', softwareId))
 const canPublish = computed(() => source.value?.kind === 'Manual' && session.can('release.publish', softwareId))
 const publishReady = computed(() => selected.value?.state === 'Test' && pkg.value?.state === 'Ready' && pkg.value.healthyReplicaCount === 2 && pkg.value.sizeBytes === pkg.value.expectedSize && pkg.value.sha256 === pkg.value.expectedSha256)
@@ -33,7 +40,8 @@ const canUpload = computed(() => source.value?.kind === 'Manual' && session.can(
 const canRead = computed(() => session.can('software.read', softwareId)), canAudit = computed(() => session.can('audit.read', softwareId))
 const detailLoading = ref(false), evidenceLoading = ref(false), auditLoading = ref(false), syncLoading = ref(false)
 const listRead = createReadScope(), detailRead = createReadScope(), evidenceRead = createReadScope(), auditRead = createReadScope(), sourceRead = createReadScope(), syncRead = createReadScope(), initialRead = createReadScope(), uploadVerificationRead = createReadScope()
-const readScopes = [listRead, detailRead, evidenceRead, auditRead, sourceRead, syncRead, initialRead, uploadVerificationRead]
+const sourceOptionsRead = createReadScope()
+const readScopes = [sourceOptionsRead,listRead, detailRead, evidenceRead, auditRead, sourceRead, syncRead, initialRead, uploadVerificationRead]
 type ReadTicket = ReturnType<typeof listRead.capture>
 let selectedId: string | null = null, detailGeneration = 0
 function startRead(scope: typeof listRead) { scope.invalidate(); return scope.capture() }
@@ -62,6 +70,51 @@ async function loadSource() {
     }
     return true
   } catch (e) { if (current(ticket)) await failed(e); return false } finally { ticket.finish() }
+}
+async function fetchSourceOptions(page: number, search: string) {
+  if (disposed || !canManageSource.value || sourceOptionsLoading.value) return null
+  const ticket = startRead(sourceOptionsRead), stamp = sourceStamp.value
+  sourceOptionsLoading.value = true
+  try {
+    const result = await read<ReleaseSourceOptions>(`/api/v1/manage/software/${softwareId}/release-source-options?` + new URLSearchParams({ search, page: String(page), pageSize: '50' }), ticket)
+    if (disposed || !ticket.current() || !canManageSource.value || stamp !== sourceStamp.value) return null
+    sourceOptions.value = page === 1 ? result.items : mergeRows(sourceOptions.value, result.items, x => `${x.connectionId}/${x.projectId}/${x.packageName}`)
+    sourceAppliedSearch.value = search; sourceNextPage.value = result.nextPage
+    return result
+  } catch (e) { if (!disposed && ticket.current() && stamp === sourceStamp.value) await failed(e); return null }
+  finally { if (ticket.current()) sourceOptionsLoading.value = false; ticket.finish() }
+}
+async function openSource() {
+  if (locked.value || !canManageSource.value) return
+  sourceReturnFocus = document.activeElement as HTMLElement | null
+  sourceSearch.value = ''; failure.value = ''; mutation.error.value = ''
+  const result = await fetchSourceOptions(1, '')
+  if (!result) return
+  const info = result.current
+  const known = result.items.find(x => x.connectionId === info.connectionId && x.projectId === info.projectId && x.packageName === info.packageName)
+  sourceDraft.value = { softwareId, softwareName: software.value?.name ?? '当前软件', revision: info.revision ?? 0, stamp: sourceStamp.value,
+    selected: known ?? (info.connectionId && info.projectId && info.packageName ? { connectionId: info.connectionId, connectionName: '当前连接', baseUri: info.baseUri ?? '', projectId: info.projectId, projectName: String(info.projectId), packageName: info.packageName } : null),
+    enabled: info.kind === 'Manual' ? true : info.enabled, reason: '', blocking: info.blockingWorkIds ?? [] }
+  await nextTick(); sourceDialog.value?.showModal()
+}
+function closeSource() {
+  if (locked.value) return
+  sourceOptionsRead.invalidate(); sourceOptionsLoading.value = false; sourceDialog.value?.close(); sourceDraft.value = null; sourceOptions.value = []
+  sourceReturnFocus?.focus()
+}
+async function saveSource() {
+  if (uncertain.value) { if (pendingAction.value === 'source') await verifyOriginal(); return }
+  const draft = sourceDraft.value, selected = draft?.selected
+  if (!draft || !selected || !sourceDraftValid.value || !draft.reason.trim() || !session.current || locked.value) return
+  pendingAction.value = 'source'
+  const result = await mutation.perform<ReleaseSource>(`/api/v1/manage/software/${draft.softwareId}/release-source`, 'PUT',
+    { connectionId: selected.connectionId, projectId: selected.projectId, packageName: selected.packageName, enabled: draft.enabled, expectedRevision: draft.revision, reason: draft.reason }, session.current.csrfToken)
+  if (mutation.completed.value && result) {
+    if (sourceDraftValid.value) source.value = result
+    notice.value = '来源设置已保存，后台将核验实际发布；保存设置不代表 GitLab 已连接或版本已导入。'
+    closeSource(); if (canRead.value) await loadSource()
+  } else if (mutation.errorCode.value === 'REVISION_CONFLICT') failure.value = '来源已被修改，请关闭表单后重新读取，核对新来源再提交。'
+  else if (mutation.errorCode.value === 'INVALID_STATE') failure.value = '仍有同步、导入或首次包处理工作未结束；可先停用新增同步，待相关工作完成后再改绑。'
 }
 async function synchronize() {
   if (!session.current || uncertain.value && pendingAction.value !== 'sync') return
@@ -150,7 +203,8 @@ async function moreAudit() {
 async function verifyOriginal() {
   const operation = mutation.pending.value
   if (!operation || !session.current || busy.value) return
-  await mutation.perform(operation.path, operation.method, operation.body, session.current.csrfToken)
+  const result = await mutation.perform<ReleaseSource>(operation.path, operation.method, operation.body, session.current.csrfToken)
+  if (mutation.completed.value && pendingAction.value === 'source') { if (canManageSource.value && result) source.value = result; closeSource(); if (canRead.value) await loadSource() }
   if (mutation.completed.value) notice.value = '已按原操作编号和正文核实结果；详情仍需当前查看权限。'
   await session.load()
 }
@@ -249,6 +303,7 @@ async function tick() {
 onBeforeRouteLeave(() => { if (uploading.value || uploadUnknown.value) { failure.value = '请先等待或核实当前上传，再离开此页面。'; return false } hashAbort?.abort() })
 const unload = (event: BeforeUnloadEvent) => { if (uploading.value || uploadUnknown.value) { event.preventDefault(); event.returnValue = '' } }
 watch([mutation.blocked, uploading, uploadUnknown], ([write, stream, unknown]) => { globalPending.value = write || stream || unknown }, { flush: 'sync' })
+watch(sourceStamp, () => { sourceOptionsRead.invalidate(); sourceOptionsLoading.value = false; sourceOptions.value = []; sourceNextPage.value = null }, { flush: 'sync' })
 watch(creating, value => { if (!value) hashAbort?.abort() })
 watch([() => session.current?.subjectId, canRead, canAudit], ([subject, allowed], previous) => {
   for (const scope of readScopes) scope.invalidate()
@@ -284,12 +339,28 @@ onUnmounted(() => { disposed = true; for (const scope of readScopes) scope.inval
     <section v-if="source?.kind === 'GitLab'" class="panel gitlab-source" aria-label="GitLab 正式版本来源">
       <h2>GitLab 正式版本</h2><p>研发测试与正式发布在 GitLab 完成。平台核对来源和双副本后开放下载，设备投放由人员另行创建。</p>
       <p class="muted">{{ source.baseUri }} · 项目 {{ source.projectId }} · 包 {{ source.packageName }} · {{ source.enabled ? '同步已启用' : '同步未启用' }}</p>
+      <p v-if="source.configurationAvailable === false" class="error">来源配置当前不可用，请由部署人员核对连接及允许的项目；已有版本和历史仍保留。</p>
       <p v-if="source.lastSyncedAt">最近同步核对：{{ new Date(source.lastSyncedAt).toLocaleString() }}</p><p v-if="source.lastErrorCode" class="error">{{ source.lastErrorCode }}</p>
       <form v-if="canSync || uncertain && pendingAction === 'sync'" @submit.prevent="synchronize"><label>历史 Tag（留空扫描正式发布）<input v-model="historicalTag" maxlength="34" placeholder="v1.2.3" :disabled="locked" /></label><button class="primary" :disabled="busy || uncertain && pendingAction !== 'sync'">{{ uncertain ? '核实原同步操作' : '立即同步' }}</button></form>
       <p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">原操作键和正文保留在本页内存中，请人工核实，页面不会自动重发。</p>
       <div v-if="syncWork"><p>{{ syncWork.tag ?? '发布扫描' }} · {{ syncStages[syncWork.stage] ?? syncWork.stage }}</p><p v-if="syncWork.lastErrorCode" class="error">{{ syncWork.lastErrorCode }}</p><p v-if="syncWork.stage === 'Completed'" class="muted">同步已完成；可刷新版本列表或查看导入版本，当前查看对象不会自动切换。</p><button :disabled="busy || syncLoading" @click="refreshSync">核对同步进度</button><button v-if="syncWork.releaseId" :disabled="locked" @click="detail(syncWork.releaseId)">查看导入版本</button></div>
     </section>
-    <p v-if="source?.kind === 'Manual'" class="state-card" aria-label="版本来源配置">当前为人工来源，尚未绑定 GitLab。GitLab 项目绑定由部署管理员配置，配置后在此查看正式版本及同步进度。</p>
+    <p v-if="source?.kind === 'Manual'" class="state-card" aria-label="版本来源配置">尚未绑定 GitLab。来源管理员可选择允许的项目及安装包；现有人工版本与历史继续保留。</p>
+    <div class="dialog-actions"><button v-if="canManageSource" :disabled="locked || sourceOptionsLoading" @click="openSource">{{ source?.kind === 'GitLab' ? '管理 GitLab 来源' : '关联 GitLab 来源' }}</button></div>
+    <dialog v-if="sourceDraft" ref="sourceDialog" @cancel.prevent="closeSource" aria-labelledby="source-dialog-title">
+      <h2 id="source-dialog-title">GitLab 来源设置</h2><p>{{ sourceDraft.softwareName }} · 修订 {{ sourceDraft.revision }}</p>
+      <p v-if="!sourceDraftValid" class="error" role="alert">人员或权限已变化，请重新打开表单；原未知操作仍可人工核实。</p>
+      <p v-if="sourceDraft.blocking.length" class="muted">有 {{ sourceDraft.blocking.length }} 项未结束工作，当前可启停同步；完成后才能更换来源。</p>
+      <form @submit.prevent="saveSource"><fieldset :disabled="locked || !sourceDraftValid">
+        <label>查找允许的来源<input v-model="sourceSearch" maxlength="200" placeholder="连接、项目或安装包" /></label><div class="dialog-actions"><button type="button" :disabled="sourceOptionsLoading" @click="fetchSourceOptions(1, sourceSearch)">查询来源</button></div>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="允许的 GitLab 来源"><table><thead><tr><th>连接</th><th>项目</th><th>安装包</th><th>选择</th></tr></thead><tbody><tr v-for="option in sourceOptions" :key="`${option.connectionId}/${option.projectId}/${option.packageName}`"><td>{{ option.connectionName }}</td><td>{{ option.projectName }}</td><td>{{ option.packageName }}</td><td><button type="button" @click="sourceDraft.selected = option">选择此来源</button></td></tr></tbody></table></div>
+        <p v-if="!sourceOptions.length && !sourceOptionsLoading" class="muted">没有匹配的允许来源，请调整搜索或由部署管理员配置连接及项目范围。</p><p v-if="sourceOptionsLoading" role="status">正在读取来源候选…</p>
+        <button v-if="sourceNextPage" type="button" :disabled="sourceOptionsLoading" @click="fetchSourceOptions(sourceNextPage, sourceAppliedSearch)">更多来源</button>
+        <dl v-if="sourceDraft.selected"><dt>已选连接</dt><dd>{{ sourceDraft.selected.connectionName }}</dd><dt>项目</dt><dd>{{ sourceDraft.selected.projectName }}</dd><dt>安装包</dt><dd>{{ sourceDraft.selected.packageName }}</dd></dl>
+        <label class="check"><input v-model="sourceDraft.enabled" type="checkbox" />启用自动同步</label><label>修改原因<textarea v-model="sourceDraft.reason" required maxlength="256" /></label>
+      </fieldset><p class="muted">更换来源保留历史版本及机台安装事实，不自动更新设备。</p><p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="failure" class="error" role="alert">{{ failure }}</p>
+      <OperationStatus :mutation="mutation" /><div class="dialog-actions"><button type="button" :disabled="locked" @click="closeSource">取消</button><button class="primary" :disabled="busy || !uncertain && (!sourceDraftValid || !sourceDraft.selected || !sourceDraft.reason.trim())">{{ uncertain ? '核实原来源操作' : '保存来源' }}</button></div></form>
+    </dialog>
     <div class="tab-row"><button :aria-pressed="channel === 'Test'" :disabled="locked" @click="channel = 'Test'; changeChannel()">测试版本</button><button :aria-pressed="channel === 'Formal'" :disabled="locked" @click="channel = 'Formal'; changeChannel()">正式版本</button></div>
     <div class="dialog-actions"><button :disabled="locked || loading" @click="load(true)">刷新列表</button><button v-if="software?.latestAvailableFormalReleaseId" :disabled="locked" @click="latestFormal">查看最新可用正式版</button></div>
     <div class="account-layout">

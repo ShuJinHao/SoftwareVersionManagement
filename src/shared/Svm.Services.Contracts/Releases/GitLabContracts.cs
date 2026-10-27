@@ -5,11 +5,19 @@ using Svm.Services.Contracts.Packages;
 
 namespace Svm.Services.Contracts.Releases;
 
-// Contains no credentials. Binding identity is deployment configuration, never request input.
-public sealed record GitLabBinding(Guid Id, Guid SoftwareId, Guid SubjectId, string BaseUri, long ProjectId, string PackageName, bool Enabled = true);
-public sealed record GitLabImportOptions(IReadOnlyList<GitLabBinding> Bindings, int PollSeconds = 300, int PageSize = 20, int MaxPages = 10000, int LeaseSeconds = 120)
+// Contains no credentials. Binding identity comes from trusted configuration or persisted source facts.
+public sealed record GitLabBinding(Guid Id, Guid SoftwareId, Guid SubjectId, string BaseUri, long ProjectId, string PackageName, bool Enabled = true, Guid? ConnectionId = null, long SourceRevision = 1);
+public sealed record GitLabImportOptions(IReadOnlyList<GitLabBinding> Bindings, int PollSeconds = 300, int PageSize = 20, int MaxPages = 10000, int LeaseSeconds = 120, IReadOnlyList<GitLabConnection>? Connections = null)
 {
     public static GitLabImportOptions Disabled { get; } = new([]);
+    public IReadOnlyList<GitLabConnection> Sources => Connections ?? [];
+    public bool IsAvailable(GitLabBinding binding) => binding.ConnectionId is { } connectionId
+        ? Sources.Any(c => c.Id == connectionId && c.Enabled && c.BaseUri == binding.BaseUri && c.Projects.Any(p => p.Id == binding.ProjectId && p.Packages.Contains(binding.PackageName)))
+        : Bindings.Any(b => b.Id == binding.Id && b.SoftwareId == binding.SoftwareId && b.SubjectId == binding.SubjectId && b.BaseUri == binding.BaseUri && b.ProjectId == binding.ProjectId && b.PackageName == binding.PackageName);
+    public GitLabSourceOption Source(Guid connectionId, long projectId, string packageName) => Sources.Where(c => c.Enabled && c.Id == connectionId)
+        .SelectMany(c => c.Projects.Where(p => p.Id == projectId).SelectMany(p => p.Packages.Where(n => n == packageName)
+            .Select(n => new GitLabSourceOption(c.Id, c.Name, c.BaseUri, p.Id, p.Name, n)))).SingleOrDefault()
+        ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
     public GitLabBinding Require(Guid softwareId) => Bindings.SingleOrDefault(b => b.SoftwareId == softwareId && b.Enabled)
         ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
 }
@@ -37,7 +45,8 @@ public static class GitLabVersions
 public sealed record GitLabReleaseFacts(GitLabManifestV1 Manifest, string ReleaseName, string PipelineUrl, DateTimeOffset ReleasedAt);
 public sealed record GitLabScanPage(IReadOnlyList<string> Tags, int? NextPage);
 public sealed record ReleaseSourceView(Guid SoftwareId, string Kind, bool Enabled, string? BaseUri, long? ProjectId,
-    string? PackageName, DateTimeOffset? LastSyncedAt, string? LastErrorCode, Guid? LatestWorkId);
+    string? PackageName, DateTimeOffset? LastSyncedAt, string? LastErrorCode, Guid? LatestWorkId, Guid? BindingId = null, Guid? ConnectionId = null, long Revision = 0,
+    bool ConfigurationAvailable = false, bool Managed = false, Guid? ChangeId = null, IReadOnlyList<Guid>? BlockingWorkIds = null);
 public sealed record ReleaseSyncWorkView(Guid Id, Guid SoftwareId, string Kind, string? Tag, string Stage,
     string? LastErrorCode, Guid? ReleaseId, DateTimeOffset CreatedAt, DateTimeOffset? CompletedAt, long Revision);
 public sealed record GitLabWork(Guid Id, Guid BindingId, Guid SoftwareId, string Kind, string? Tag, string Stage,
@@ -55,6 +64,10 @@ public interface IGitLabReleaseClient
 }
 public interface IReleaseImports
 {
+    Task<ReleaseSourceView> ChangeSourceAsync(Guid softwareId, Guid connectionId, long projectId, string packageName, bool enabled, long revision, CancellationToken token);
+    Task<ReleaseSourceView> ChangeResultAsync(Guid changeId, CancellationToken token);
+    Task<GitLabBinding?> ResolveBindingAsync(Guid softwareId, Guid? bindingId, bool protect, CancellationToken token);
+    Task<IReadOnlyList<GitLabBinding>> BindingsAsync(Guid? afterId, int count, CancellationToken token);
     Task<bool> IsBoundAsync(Guid softwareId, CancellationToken token);
     Task<bool> AuthorizesPackageAsync(Guid releaseId, Guid subjectId, Guid softwareId, CancellationToken token);
     Task<ReleaseSourceView> SourceAsync(Guid softwareId, CancellationToken token);
@@ -71,7 +84,7 @@ public interface IReleaseImports
     Task DelayAsync(GitLabLease lease, string code, CancellationToken token);
     Task CompleteReleaseAsync(Guid releaseId, Guid packageId, CancellationToken token);
 }
-public interface IGitLabServiceIdentity { Guid? BindingId { get; } }
+public interface IGitLabServiceIdentity { Guid? BindingId { get; } long SourceRevision => 1; }
 public interface IReleaseImportQueries
 {
     Task<ReleaseSourceView> SourceAsync(Guid softwareId, CancellationToken token);

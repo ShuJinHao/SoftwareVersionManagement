@@ -11,6 +11,16 @@ public sealed class ReleaseSourceBinding
     public string BaseUri { get; private set; } = "";
     public long ProjectId { get; private set; }
     public string PackageName { get; private set; } = "";
+    public Guid? ConnectionId { get; private set; }
+    public bool Managed { get; private set; }
+    public bool IsCurrent { get; private set; } = true;
+    public bool Enabled { get; private set; } = true;
+    public long Revision { get; private set; } = 1;
+    public long SourceRevision { get; private set; } = 1;
+    public void Manage(Guid connectionId, bool enabled, long revision)
+    { ConnectionId = connectionId; Managed = true; Enabled = enabled; Revision = revision; SourceRevision = revision; }
+    public void SetEnabled(bool enabled) { Enabled = enabled; Revision++; }
+    public void Retire() { IsCurrent = false; }
     public bool Initialized { get; private set; }
     public DateTimeOffset? LastSyncedAt { get; private set; }
     public DateTimeOffset? NextScanAt { get; private set; }
@@ -68,6 +78,11 @@ public sealed class ReleaseSyncWork
 
 public interface IReleaseImportRepository
 {
+    Task<ReleaseSourceBinding?> BindingByIdAsync(Guid bindingId, bool protect, CancellationToken token);
+    Task<IReadOnlyList<ReleaseSourceBinding>> BindingsAsync(Guid? afterId, int count, CancellationToken token);
+    Task<IReadOnlyList<Guid>> BlockingWorkIdsAsync(Guid bindingId, CancellationToken token);
+    Task<ReleaseSourceChange?> ChangeAsync(Guid changeId, CancellationToken token);
+    void Add(ReleaseSourceChange change);
     Task<ReleaseSourceBinding?> BindingAsync(Guid softwareId, bool protect, CancellationToken token);
     Task<ReleaseSyncWork?> WorkAsync(Guid id, bool protect, CancellationToken token);
     Task<ReleaseSyncWork?> FindAsync(Guid bindingId, string? tag, bool activeOnly, CancellationToken token);
@@ -76,4 +91,17 @@ public interface IReleaseImportRepository
     Task<SoftwareRelease?> TagAsync(Guid bindingId, string tag, CancellationToken token);
     void Add(ReleaseSourceBinding binding);
     void Add(ReleaseSyncWork work);
+}
+
+// Stable, non-secret result reference: replays never modify the current binding.
+public sealed class ReleaseSourceChange
+{
+    private ReleaseSourceChange() { }
+    public ReleaseSourceChange(Guid id, Guid bindingId, long revision, bool enabled, DateTimeOffset createdAt)
+    { Id = id; BindingId = bindingId; Revision = revision; Enabled = enabled; CreatedAt = createdAt; }
+    public Guid Id { get; private set; }
+    public Guid BindingId { get; private set; }
+    public long Revision { get; private set; }
+    public bool Enabled { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
 }

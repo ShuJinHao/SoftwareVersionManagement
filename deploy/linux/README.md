@@ -76,7 +76,7 @@ cd artifacts/linux-demo/my-demo
 
 svm.sh 可在准备好的 Linux 目录独立运行，不依赖源码、SDK 或 Node。prepare 对发布物摘要进行复核后，生成独立构建上下文与运行配置。build 仅以固定 ASP.NET 运行镜像构建，不在镜像中安装开发工具。
 
-初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 12 份迁移（最后为 HardwareWorkspace） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
+初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 14 份迁移（最后为 GitLabSourceManagement） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
 
 登录资料在私有 operator.json；初始账号仅有播种规则规定的权限，首次登录改密，再按职责明确分配资产和软件权限。工具不将真实账号或凭据输出到公共日志。不要公开这个目录、operator.json、连接配置、CA 私钥或服务私钥。
 
@@ -191,3 +191,5 @@ eng/node deploy/linux/verify-audit.mjs --deployment artifacts/linux-demo/audit-c
 本批定向浏览器入口：`eng/node deploy/linux/verify-roles.mjs --deployment artifacts/linux-demo/roles-and-site-scopes --results artifacts/test-results/roles-and-site-scopes/linux-demo`。仅允许明确 full/demo 环境。真实 HTTPS/API 准备两个工序、共用程序、独立实例和正式演示包，四类人员登录查看各自现场、产品权限、角色维护及本人权限；使用测试协议报告，不执行厂家安装。脚本保留私有 roles-fixture.json 和原操作检查点，未知写入停止，不自动重做；--resume 仅继续已确认阶段，--display-only 要求前次全部完成。凭据只在专属目录保管，公开证据无密码。
 
 CI 对本批精确网页选集和 verify-roles 执行浏览器验证；历史 verify-hardware 仅对应原硬件批次。按需复用未改变的消息与文件恢复证据；四角色演示不代表完整生产权限治理或现场验收。保留演示与故障/一次性资源分别登记。
+
+GitLab 私有配置现在提供连接/项目/包允许目录；数据库保存人员维护的软件绑定。所有 HttpApi 与 Worker 应使用同一允许目录，配置变更后重启对应进程。升级第十四份迁移后，先预览旧文件转换，再显式接管软件来源；操作命令、文件权限及历史保留说明见 [GitLab 接入](../../eng/gitlab/README.md)。不要使用旧文件覆盖网页绑定；停止自动同步仍允许已有工作完成，删除连接可能暂停远端阶段。

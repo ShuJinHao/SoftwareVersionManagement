@@ -40,7 +40,7 @@ public static class RoleOperationCatalog
     public static IReadOnlyList<string> Platform { get; } = ["identity.manage"];
     public static IReadOnlyList<string> Field { get; } = ["asset.read", "asset.create", "asset.manage", "software.create", "binding.manage",
         "software.read", "instance.read", "instance.manage", "enrollment.manage", "deployment.create", "deployment.control", "task.closeUnknown", "audit.read"];
-    public static IReadOnlyList<string> Product { get; } = ["software.read", "release.upload", "release.publish", "release.disable", "audit.read"];
+    public static IReadOnlyList<string> Product { get; } = ["software.read", "release.source.manage", "release.upload", "release.publish", "release.disable", "audit.read"];
     public static IReadOnlyList<string> All { get; } = Platform.Concat(Field).Concat(Product).Distinct().Order(StringComparer.Ordinal).ToArray();
     public static bool IsOpen(string operation) => All.Contains(operation);
 }

@@ -10,11 +10,31 @@ internal sealed class ReleaseImportRepository(SvmDbContext context, IUnitOfWork 
     public async Task<ReleaseSourceBinding?> BindingAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();
-        var local = context.Set<ReleaseSourceBinding>().Local.SingleOrDefault(x => x.SoftwareId == id);
+        var local = context.Set<ReleaseSourceBinding>().Local.SingleOrDefault(x => x.SoftwareId == id && x.IsCurrent);
         if (local is not null && protect) return local;
-        var q = context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"SoftwareId\"={0}" + (protect ? " FOR UPDATE" : ""), id);
+        var q = context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"SoftwareId\"={0} AND \"IsCurrent\"" + (protect ? " FOR UPDATE" : ""), id);
         return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token) ?? local;
     }
+    public async Task<ReleaseSourceBinding?> BindingByIdAsync(Guid id, bool protect, CancellationToken token)
+    {
+        if (protect) Require();
+        var local = context.Set<ReleaseSourceBinding>().Local.SingleOrDefault(x => x.Id == id);
+        if (local is not null && protect) return local;
+        var q = context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
+        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token) ?? local;
+    }
+    public async Task<IReadOnlyList<ReleaseSourceBinding>> BindingsAsync(Guid? afterId, int count, CancellationToken token) =>
+        await context.Set<ReleaseSourceBinding>().AsNoTracking().Where(x => x.IsCurrent && (afterId == null || x.Id.CompareTo(afterId.Value) > 0))
+            .OrderBy(x => x.Id).Take(count).ToListAsync(token);
+    public async Task<IReadOnlyList<Guid>> BlockingWorkIdsAsync(Guid bindingId, CancellationToken token) =>
+        await context.Set<ReleaseSyncWork>().FromSqlRaw("""
+            SELECT w.* FROM rel.sync_works w WHERE w."BindingId"={0} AND
+            (w."Stage" NOT IN ('Completed','Conflict','Historical') OR EXISTS
+                (SELECT 1 FROM rel.releases r WHERE r."Id"=w."ReleaseId" AND r."State"='Staging'))
+            """, bindingId).AsNoTracking().OrderBy(x => x.Id).Take(20).Select(x => x.Id).ToListAsync(token);
+    public Task<ReleaseSourceChange?> ChangeAsync(Guid id, CancellationToken token) =>
+        context.Set<ReleaseSourceChange>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token);
+    public void Add(ReleaseSourceChange change) { Require(); context.Add(change); }
     public async Task<ReleaseSyncWork?> WorkAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();

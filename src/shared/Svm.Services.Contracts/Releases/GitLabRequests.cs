@@ -53,9 +53,9 @@ public sealed record GetGitLabSourceQuery(Guid SoftwareId) : IQuery<ReleaseSourc
 
 public static class GitLabCapabilities
 {
-    public static bool IsWrite(Type type) => type == typeof(RequestReleaseSyncCommand) || type == typeof(ScheduleGitLabScanCommand) || type == typeof(ClaimGitLabWorkCommand) || type == typeof(ApplyGitLabScanCommand) || type == typeof(BeginGitLabImportCommand) || type == typeof(FinishGitLabImportCommand) || type == typeof(RenewGitLabWorkCommand) || type == typeof(DelayGitLabWorkCommand);
-    public static bool IsQuery(Type type) => type == typeof(GetReleaseSourceQuery) || type == typeof(GetReleaseSyncWorkQuery) || type == typeof(GetGitLabWorkQuery) || type == typeof(GetGitLabSourceQuery);
-    public static bool IsInternal(Type type) => IsWrite(type) && type != typeof(RequestReleaseSyncCommand) || type == typeof(GetGitLabWorkQuery) || type == typeof(GetGitLabSourceQuery);
+    public static bool IsWrite(Type type) => type == typeof(ChangeReleaseSourceCommand) || type == typeof(RequestReleaseSyncCommand) || type == typeof(ScheduleGitLabScanCommand) || type == typeof(ClaimGitLabWorkCommand) || type == typeof(ApplyGitLabScanCommand) || type == typeof(BeginGitLabImportCommand) || type == typeof(FinishGitLabImportCommand) || type == typeof(RenewGitLabWorkCommand) || type == typeof(DelayGitLabWorkCommand);
+    public static bool IsQuery(Type type) => type == typeof(GetReleaseSourceOptionsQuery) || type == typeof(GetReleaseSourceQuery) || type == typeof(GetReleaseSyncWorkQuery) || type == typeof(GetGitLabWorkQuery) || type == typeof(GetGitLabSourceQuery);
+    public static bool IsInternal(Type type) => IsWrite(type) && type != typeof(RequestReleaseSyncCommand) && type != typeof(ChangeReleaseSourceCommand) || type == typeof(GetGitLabWorkQuery) || type == typeof(GetGitLabSourceQuery);
     public static bool Contains(Type type) => IsWrite(type) || IsQuery(type);
     public static ModuleOwner Owner(Type type) => type == typeof(FinishGitLabImportCommand) || type == typeof(BeginGitLabImportCommand) ? ModuleOwner.Packages : ModuleOwner.Releases;
 }

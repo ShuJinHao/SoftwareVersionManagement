@@ -23,7 +23,7 @@ public sealed class PersonnelTransactionBehavior<TRequest, TResponse>(RequestCat
             if (unitOfWork is null || unitOfWork.CurrentOperationId is not null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
             return await next();
         }
-        if (PersonnelManagementCapabilities.Contains(request.GetType()) || CatalogCapabilities.IsWrite(request.GetType()) || InstanceCapabilities.IsWrite(request.GetType()) || PackageCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsProtocol(request.GetType()) || request is RequestReleaseSyncCommand)
+        if (PersonnelManagementCapabilities.Contains(request.GetType()) || CatalogCapabilities.IsWrite(request.GetType()) || InstanceCapabilities.IsWrite(request.GetType()) || PackageCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsProtocol(request.GetType()) || request is RequestReleaseSyncCommand or ChangeReleaseSourceCommand)
         {
             // The idempotency coordinator already owns and reauthorizes this root transaction.
             if (policy.Idempotency is not (IdempotencyMode.OperationResult or IdempotencyMode.EnrollmentProtocol or IdempotencyMode.ReportSequence or IdempotencyMode.ReceiptSequence or IdempotencyMode.SelectionChunk) || unitOfWork?.CurrentOperationId is null)

@@ -28,7 +28,7 @@ public sealed class RoleScopeTests
             """);
         var digest=await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection,"SELECT md5(string_agg(to_jsonb(p)::text,'|' ORDER BY p.\"Id\")) FROM iam.permissions p");
         var before = await PersistenceDatabase.ScalarAsync<long>(db.MigrationConnection,"SELECT count(*) FROM iam.permissions");
-        var result = await db.Runner.ApplyAsync(default); Assert.Equal(13,result.Applied.Count);
+        var result = await db.Runner.ApplyAsync(default); Assert.Equal(14,result.Applied.Count);
         Assert.Equal(before,await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection,"SELECT count(*) FROM iam.permissions"));
         Assert.Equal(digest,await PersistenceDatabase.ScalarAsync<string>(db.ReaderConnection,"SELECT md5(string_agg(to_jsonb(p)::text,'|' ORDER BY p.\"Id\")) FROM iam.permissions p"));
         Assert.True(await PersistenceDatabase.ScalarAsync<bool>(db.ReaderConnection,"SELECT iam.has_global('11111111-1111-4111-8111-111111111111','identity.manage')"));

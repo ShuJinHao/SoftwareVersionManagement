@@ -16,12 +16,12 @@ internal sealed class GitLabAuthorization(IReleaseImports imports, GitLabImportO
             FinishGitLabImportCommand c => c.Lease.WorkId, RenewGitLabWorkCommand c => c.Lease.WorkId, DelayGitLabWorkCommand c => c.Lease.WorkId, _ => (Guid?)null };
         var work = workId is { } id ? await imports.WorkAsync(id, false, token) : null;
         var softwareId = request.Request switch {
-            GetReleaseSourceQuery q => q.SoftwareId, GetGitLabSourceQuery q => q.SoftwareId, RequestReleaseSyncCommand c => c.SoftwareId, ScheduleGitLabScanCommand c => c.SoftwareId,
+            ChangeReleaseSourceCommand c => c.SoftwareId, GetReleaseSourceOptionsQuery q => q.SoftwareId, GetReleaseSourceQuery q => q.SoftwareId, GetGitLabSourceQuery q => q.SoftwareId, RequestReleaseSyncCommand c => c.SoftwareId, ScheduleGitLabScanCommand c => c.SoftwareId,
             _ => work?.SoftwareId ?? Guid.Empty };
         if (GitLabCapabilities.IsInternal(request.Request.GetType()))
         {
-            var binding = options.Bindings.SingleOrDefault(b => b.SoftwareId == softwareId && b.Enabled);
-            if (binding is null || service?.BindingId != binding.Id || request.Context.Actor.Kind != ActorKind.Service ||
+            var binding = await imports.ResolveBindingAsync(softwareId, work?.BindingId, unit.CurrentOperationId is not null, token);
+            if (binding is null || !options.IsAvailable(binding) || service?.BindingId != binding.Id || service.SourceRevision != binding.SourceRevision || request.Context.Actor.Kind != ActorKind.Service ||
                 request.Context.Actor.ActorId != binding.SubjectId || request.Context.Actor.SoftwareId != softwareId ||
                 request.Context.Actor.WorkId != (workId ?? binding.Id) || request.Context.Actor.WorkOwner != request.Policy.Owner || work is not null && work.BindingId != binding.Id)
                 return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
@@ -30,7 +30,7 @@ internal sealed class GitLabAuthorization(IReleaseImports imports, GitLabImportO
             return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if (!await software.ExistsAsync(softwareId, unit.CurrentOperationId is not null, token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         return GitLabCapabilities.IsInternal(request.Request.GetType())
-            ? AuthorizationDecision.Allow(AuthorizationTarget.Work(request.Policy.Owner, workId ?? options.Require(softwareId).Id, softwareId))
+            ? AuthorizationDecision.Allow(AuthorizationTarget.Work(request.Policy.Owner, workId ?? service!.BindingId!.Value, softwareId))
             : AuthorizationDecision.Allow(AuthorizationTarget.Software(softwareId));
     }
 }

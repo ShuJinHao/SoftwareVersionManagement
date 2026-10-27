@@ -116,6 +116,7 @@ public static class ApplicationRegistration
         if (packageAccess)
         {
             services.AddScoped<GitLabAuthorization>();
+            services.AddScoped<IIdempotencyRequestAdapter<ChangeReleaseSourceCommand, OperationResult<ReleaseSourceView>>, ChangeReleaseSourceAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<RequestReleaseSyncCommand, OperationResult<ReleaseSyncWorkView>>, RequestReleaseSyncAdapter>();
             services.AddScoped<PackageAuthorization>(); services.AddScoped<PackageDispatch>();
             services.AddScoped<IIdempotencyRequestAdapter<CreateReleaseCommand, OperationResult<ReleaseUploadResult>>, CreateReleaseAdapter>();
