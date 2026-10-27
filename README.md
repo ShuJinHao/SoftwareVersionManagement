@@ -8,7 +8,7 @@
 
 2026-10-27：GitLab 网页来源维护已实现。新增软件级来源权限、允许候选、首次绑定/启停/保留历史的改绑，以及旧私有配置预览转换和显式接管。Architecture 79、定向后端 18、网页 9、工具 2 项通过；编译、网页类型检查和构建通过。第十四份 SQL 为 `artifacts/gitlab-source-management/upgrade.sql`，只在一次性库验证。9450 继续保留上一批演示，本批未替换；真实 GitLab 和整体系统回归仍待执行。验证细节和失败修正记录见框架设计第 11.1 节。
 
-本批 CI 曾因数据库健康探针仍要求第十三份迁移而阻止 Linux 容器就绪。已对齐第十四份迁移，并补齐升级前后、重复只读探测的验证：完整 Architecture 79、定向迁移 2 项通过（其中 1 项为上述已通过用例的补充复验，不重复累加）。一次性测试库及角色为 0，专用 PostgreSQL 恢复停止，开发库未升级。修复提交及远端最终检查见 [PR #18](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/18)。
+本批 CI 曾因数据库健康探针仍要求第十三份迁移而阻止 Linux 容器就绪。修复提交 `8e4741d` 已对齐第十四份迁移：完整 Architecture 79、定向迁移 2 项通过（其中 1 项为上述已通过用例的补充复验，不重复累加）。[五项远端检查](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/40530779754) 通过；本次增量 CI 按影响跳过网页和浏览器组，另用干净 Release 在独立 Linux arm64 容器核对两个 API、两个 Worker 均就绪，两个 HTTPS 登录页、静态资源和匿名会话均返回 200，未重跑业务回归或浏览器交互。临时容器、网络、镜像、数据及私有材料已清理，保留完整 Release 和脱敏证据；一次性测试库及角色为 0，专用 PostgreSQL 恢复停止，开发库和 9450 演示不变。[PR #18](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/18) 保持审阅。
 
 上一批（2026-10-25）验证：Architecture 79、定向后端 37、网页 47、工具 2 项通过；类型检查、构建、完整开发验证 Release 及独立 Linux arm64 四角色 HTTPS 演示完成。演示地址 https://localhost:9450/，仅本机虚构数据，保留及停止说明见 artifacts/linux-demo/roles-and-site-scopes/RETAINED.md。第十三份审阅 SQL 位于 artifacts/roles-and-site-scopes/roles-and-site-scopes-upgrade.sql；开发库未升级。依赖审计新增告警与未覆盖范围见框架设计第 11.1 节，依赖锁未改。
 

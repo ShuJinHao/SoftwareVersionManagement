@@ -92,7 +92,7 @@ preview 只启动管理 API 与数据库，直接通过 HTTPS 访问；没有包
 - DataProtection 的 svm/ ApplicationName、保护证书与数据库密钥跨节点共享且稳定，不依赖安装路径。
 - SVM_HOST_CONFIG_FILE 提供公用 HTTPS 证书、KnownProxies 和私有 HealthPort。--validate-config 校验配置/注册后退出，不启动监听、消费者、业务循环或 DDL。
 - /health/live、/health/ready 仅在独立私有监听提供。--healthcheck 从容器内访问，运行镜像不需 curl/Node。
-- 数据库未达到 12 份迁移及 HardwareWorkspace 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
+- 数据库未达到当前 14 份迁移及 GitLabSourceManagement 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
 - 证书角色覆盖与完整性增强仍暂缓；当前链验证、指纹、有效性和 mTLS 继续保留。
 
 直接执行 --validate-config 仍需完整挂载配置和准备日志目录；它不验证网络可达性。status、依赖 healthcheck 与后续 HTTPS 流程用于确认网络和数据库事实。
