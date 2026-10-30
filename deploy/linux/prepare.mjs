@@ -11,6 +11,7 @@ if (args.length !== 7 || args[0] !== '--demo' || args[1] !== '--settings' || arg
   throw new Error('Usage: eng/node deploy/linux/prepare.mjs --demo --settings file --release folder --output new-folder');
 const settings = JSON.parse(await readFile(resolve(args[2]), 'utf8'));
 const release = resolve(args[4]), output = resolve(args[6]);
+if(settings.plc && (!Number.isInteger(settings.plc.uploadCredentialMaxLifetimeSeconds)||settings.plc.uploadCredentialMaxLifetimeSeconds<1||settings.plc.uploadCredentialMaxLifetimeSeconds>31536000))throw new Error('Invalid PLC credential lifetime limit.');
 const packageExecution = {peerResponseSeconds:15,downloadAuthorizationSeconds:20,...settings.packageExecution};
 if (!Number.isInteger(packageExecution.peerResponseSeconds) || packageExecution.peerResponseSeconds < 1 ||
     !Number.isInteger(packageExecution.downloadAuthorizationSeconds) || packageExecution.downloadAuthorizationSeconds >= 30 ||
@@ -100,6 +101,7 @@ for (const node of ['node-a','node-b']) {
   await file(directory+'/instances.json',{enrollmentMaxLifetimeSeconds:86400,enrollmentMaxCount:100,recoveryMaxLifetimeSeconds:1800});
   await file(directory+'/host.json',{publicCertificatePath:'/svm/config/certs/server-'+node+'.pfx',publicCertificatePassword:password,knownProxies:[settings.gatewayAddress],healthPort:8081});
   if (settings.mode==='full') {
+    if (settings.plc) await file(directory+'/plc.json',settings.plc);
     await file(directory+'/messaging.json',messaging); await file(directory+'/tasks.json',settings.task);
     await file(directory+'/package.json',{nodeId:node,rootPath:'/svm/packages',serviceSubjectId:randomUUID(),internalListenAddress:'0.0.0.0',internalListenPort:7444,
       serverCertificatePath:'/svm/config/certs/server-'+node+'.pfx',serverCertificatePassword:password,clientCertificatePath:'/svm/config/certs/peer-'+node+'.pfx',clientCertificatePassword:password,
@@ -142,6 +144,7 @@ await file('deployment.env',Object.entries({SVM_PROJECT:project,SVM_CODE_COMMIT:
   SVM_PUBLIC_BIND:settings.publicBind,SVM_HTTPS_PORT:settings.httpsPort,SVM_SECONDARY_HTTPS_PORT:settings.secondaryHttpsPort,
   SVM_NETWORK_SUBNET:settings.networkSubnet,SVM_GATEWAY_ADDRESS:settings.gatewayAddress,
   SVM_PACKAGE_CONFIG_FILE:settings.mode==='full'?'/svm/config/package.json':'',SVM_MESSAGING_CONFIG_FILE:settings.mode==='full'?'/svm/config/messaging.json':'',
+  SVM_PLC_CONFIG_FILE:settings.mode==='full'&&settings.plc?'/svm/config/plc.json':'',
   SVM_TASK_CONFIG_FILE:settings.mode==='full'?'/svm/config/tasks.json':''}).map(([k,v])=>k+'='+v).join('\n')+'\n');
 await file('.svm-demo',project+'\n');
 await file('operator.json',{url:'https://'+settings.publicHost+':'+settings.httpsPort,secondaryUrl:'https://'+settings.publicHost+':'+settings.secondaryHttpsPort,

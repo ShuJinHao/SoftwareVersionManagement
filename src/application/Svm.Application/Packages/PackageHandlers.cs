@@ -168,15 +168,16 @@ internal sealed class GetPackageAuthorityQueryHandler(IPackages packages) : IReq
 { public Task<PackageWorkAuthority> Handle(GetPackageAuthorityQuery x, CancellationToken token) => packages.AuthorityAsync(x.WorkId, false, token); }
 
 internal sealed class AuthorizeDownloadCommandHandler(IPackages packages, IPackageDownloadProof proofs, IPersonnelService personnel, Svm.Application.Personnel.SiteAuthorization scope,
-    IInstanceAccess access, IManagedInstances instances, ISoftwareCatalog catalog, IReleases releases, IUnitOfWork unit, IAuditWriter audit, ICallContext calls)
+    IInstanceAccess access, IManagedInstances instances, IHardwareAssets hardware, ISoftwareCatalog catalog, IReleases releases, IUnitOfWork unit, IAuditWriter audit, ICallContext calls)
     : IRequestHandler<AuthorizeDownloadCommand, OperationResult<DownloadAuthorization>>
 {
     public async Task<OperationResult<DownloadAuthorization>> Handle(AuthorizeDownloadCommand x, CancellationToken token)
     {
         var software = await packages.SoftwareForAsync("package", x.PackageId, false, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
-        Guid subject; string actor; string? employee = null;
+        Guid subject; string actor; string? employee = null; long? plcRevision = null;
         if (proofs.Instance is { } machine)
         {
+            if (x.PlcBindingId is not null) throw new RequestRejectedException(RequestFailure.PermissionDenied);
             var identity = await access.AuthenticateAsync(machine, true, token) ?? throw new RequestRejectedException(RequestFailure.CredentialInvalid);
             if (identity.Kind != ActorKind.Instance || identity.SoftwareId != software) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
             var instance = await instances.GetIdentityAsync(identity.InstanceId!.Value, true, token);
@@ -188,12 +189,26 @@ internal sealed class AuthorizeDownloadCommandHandler(IPackages packages, IPacka
             var person = await personnel.AuthenticateAsync(proofs.Person ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired), true, token)
                 ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
             if (person.MustChangePassword || !await scope.SoftwareAsync(person.Access, "software.read", software, token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+            if (x.PlcBindingId is { } bindingId)
+            {
+                var binding = await hardware.BindingAsync(bindingId, false, token);
+                if (!binding.IsActive || binding.SoftwareId != software || (await hardware.GetAsync(binding.HardwareId,false,token)).Type != "PLC" ||
+                    !await scope.DeviceAsync(person.Access,"software.read",binding.DeviceId,software,token) || !await scope.DeviceAsync(person.Access,"asset.read",binding.DeviceId,null,token))
+                    throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+                plcRevision = binding.Revision;
+            }
             subject = person.SubjectId; actor = "Human"; employee = person.EmployeeNo;
         }
         if (!await catalog.ExistsAsync(software, true, token)) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         var package = await packages.GetAsync(x.PackageId, false, false, token);
         if ((await releases.GetAsync(package.ReleaseId, true, token)).State is not ("Test" or "Formal")) throw new RequestRejectedException(RequestFailure.InvalidState);
-        var authorization = await packages.AuthorizeDownloadAsync(x.PackageId, x.RequestId, x.NodeId, x.WorkerGeneration, x.Head, subject, actor, employee, token, x.VerifiedNode);
+        if (x.PlcBindingId is { } protectedBinding)
+        {
+            var current = await hardware.BindingAsync(protectedBinding,true,token);
+            if (!current.IsActive || current.SoftwareId != software || current.Revision != plcRevision)
+                throw new RequestRejectedException(RequestFailure.RevisionConflict);
+        }
+        var authorization = await packages.AuthorizeDownloadAsync(x.PackageId, x.RequestId, x.NodeId, x.WorkerGeneration, x.Head, subject, actor, employee, token, x.VerifiedNode, x.PlcBindingId, plcRevision);
         var op = unit.CurrentOperationId!.Value;
         if (authorization.NewSession) audit.Append(new(op, subject, actor, employee, null, "pkg.download.started", x.RequestId, "authorized", "protected GET", calls.Current!.CorrelationId));
         return OperationResult<DownloadAuthorization>.Completed(op, authorization, x.PackageId);

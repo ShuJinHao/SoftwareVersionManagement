@@ -1,0 +1,37 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { request } from '../api'
+import { useSession } from '../session'
+import { useOwnedReads } from '../ownedReads'
+import { useProtectedMutation } from '../protectedMutation'
+import { type Installation,type WorkspacePage,queryString,mergeRows } from '../hardware'
+import type { Page } from '../catalog'
+import { type Release,releaseState } from '../packages'
+import { type PlcUsage,localTime } from '../plc'
+import OperationStatus from '../components/OperationStatus.vue'
+const route=useRoute(),session=useSession(),mutation=useProtectedMutation()
+const hardwareId=String(route.query.hardwareId??''),bindingId=String(route.query.bindingId??''),softwareId=String(route.query.softwareId??'')
+const row=ref<Installation|null>(null),history=ref<PlcUsage[]>([]),next=ref<string|null>(null),failure=ref(''),notice=ref('')
+const releases=ref<Release[]>([]),releaseNext=ref<string|null>(null),channel=ref('Formal')
+const dialog=ref<HTMLDialogElement|null>(null),draft=ref<{row:Installation;epoch:number;revision:number;correction:PlcUsage|null}|null>(null)
+const releaseId=ref(''),fieldAt=ref(''),note=ref(''),materials=ref('');let focus:HTMLElement|null=null
+const reads=useOwnedReads(()=>{row.value=null;history.value=[];next.value=null;releases.value=[];releaseNext.value=null})
+const valid=computed(()=>draft.value?.epoch===reads.epoch.value)
+const canRecord=computed(()=>!!row.value&&session.canAt('plc.usage.record',softwareId,row.value.device.processId,row.value.device.id))
+const get=<T,>(url:string,s:AbortSignal)=>request<T>(url,'GET',undefined,undefined,undefined,{signal:s})
+const fail=(e:unknown)=>{failure.value=e instanceof Error?e.message:'读取失败，请重试。'}
+async function load(){await reads.run('state',true,async s=>{const [p,h]=await Promise.all([get<WorkspacePage<Installation>>('/api/v1/manage/workspace/installations?'+queryString({hardwareId,softwareId}),s),get<Page<PlcUsage>>(`/api/v1/manage/hardware/${hardwareId}/plc-usage?pageSize=50`,s)]);return {p,h}},({p,h})=>{row.value=p.items.find(r=>r.position?.id===bindingId)??null;history.value=h.items;next.value=h.nextCursor},fail)}
+async function more(){if(!next.value)return;const cursor=next.value;await reads.run('history',false,s=>get<Page<PlcUsage>>(`/api/v1/manage/hardware/${hardwareId}/plc-usage?${queryString({},cursor)}`,s),p=>{history.value=mergeRows(history.value,p.items,x=>x.id);next.value=p.nextCursor},fail)}
+async function versions(cursor?:string|null){const c=channel.value;await reads.run('versions',!cursor,s=>get<Page<Release>>(`/api/v1/manage/software/${softwareId}/releases?${queryString({channel:c},cursor)}`,s),p=>{releases.value=cursor?mergeRows(releases.value,p.items,x=>x.id):p.items;releaseNext.value=p.nextCursor},fail)}
+async function open(correction:PlcUsage|null=null){if(!canRecord.value||mutation.blocked.value||!row.value)return;focus=document.activeElement as HTMLElement|null;draft.value={row:structuredClone(JSON.parse(JSON.stringify(row.value))),epoch:reads.epoch.value,revision:row.value.plcUsage?.revision??0,correction};releaseId.value='';fieldAt.value=correction?localTime(correction.fieldAt):'';note.value='';materials.value='';await nextTick();dialog.value?.showModal();await versions()}
+function close(){if(mutation.blocked.value)return;dialog.value?.close();draft.value=null;reads.invalidate('versions');focus?.focus()}
+async function save(){const d=draft.value;if(!d||!mutation.uncertain.value&&(!valid.value||!releaseId.value||!Number.isFinite(Date.parse(fieldAt.value))))return;const result=await mutation.perform<PlcUsage>(`/api/v1/manage/hardware-bindings/${d.row.position!.id}/plc-usage`,'POST',{bindingRevision:d.row.position!.revision,expectedRevision:d.revision,releaseId:releaseId.value,fieldAt:d.correction?.fieldAt??new Date(fieldAt.value).toISOString(),note:note.value,materials:materials.value,correctsId:d.correction?.id??null},session.current!.csrfToken);if(result&&mutation.completed.value){close();notice.value='现场记录已保存。历史补记不会倒退当前确认版本。';await load()}}
+onMounted(load)
+</script>
+<template>
+<section class="panel plc-usage"><div class="page-heading"><div><h2>PLC 现场使用</h2><p v-if="row" class="muted">{{ row.device.name }} / {{ row.hardware?.name }} · {{ row.software.name }}</p></div><button v-if="canRecord" class="primary" :disabled="mutation.blocked.value" @click="open()">登记现场使用</button></div><p v-if="failure" class="error">{{ failure }}</p><p v-if="notice" class="success">{{ notice }}</p><p>当前人工确认版本：<strong>{{ row?.plcUsage?.current?.version??'待人工确认' }}</strong>。下载归档后请在现场确认，平台不会连接或下装 PLC。</p><button :disabled="reads.busy.value||mutation.blocked.value" @click="load">刷新记录</button>
+<div class="table-scroll" tabindex="0" role="region" aria-label="PLC 使用历史"><table><thead><tr><th>版本 / 状态</th><th>现场时间</th><th>登记人员 / 时间</th><th>说明与材料</th><th>更正</th></tr></thead><tbody><tr v-for="r in history" :key="r.id"><td>{{ r.version }}<small>{{ releaseState(r.releaseState) }}</small></td><td>{{ new Date(r.fieldAt).toLocaleString() }}</td><td>{{ r.employeeNo }}<small>{{ new Date(r.recordedAt).toLocaleString() }}</small></td><td>{{ r.note }}<small>{{ r.materials }}</small></td><td><span v-if="r.correctsId">追加更正</span><button v-if="canRecord && r.bindingId===row?.position?.id && r.bindingRevision===row.position.revision" :disabled="mutation.blocked.value" @click="open(r)">更正此记录</button></td></tr></tbody></table><p v-if="!history.length" class="empty">暂无人工使用记录。</p></div><button v-if="next" :disabled="reads.busy.value" @click="more">更多历史</button>
+<dialog ref="dialog" @cancel.prevent="close" aria-labelledby="plc-usage-title"><template v-if="draft"><h2 id="plc-usage-title">{{ draft.correction?'追加更正':'登记现场使用' }}</h2><p>{{ draft.row.device.name }} / {{ draft.row.hardware?.name }} / {{ draft.row.software.name }}</p><form @submit.prevent="save"><fieldset :disabled="mutation.blocked.value||!valid"><label>版本分类<select v-model="channel" @change="releaseId='';versions()"><option>Formal</option><option>Test</option></select></label><label>实际使用版本<select v-model="releaseId" required><option value="" disabled>选择现场实际版本</option><option v-for="r in releases" :key="r.id" :value="r.id">{{ r.version }} · {{ releaseState(r.state) }}</option></select></label><button v-if="releaseNext" type="button" @click="versions(releaseNext)">更多版本</button><label>现场时间<input v-model="fieldAt" type="datetime-local" required :disabled="!!draft.correction" /></label><label>说明<textarea v-model="note" required maxlength="2000" /></label><label>材料说明或引用<textarea v-model="materials" required maxlength="2000" /></label></fieldset><p v-if="!valid" class="error">人员或权限已变化，原草稿不能继续；未知写入仍可核实原操作。</p><p class="muted">如实记录 Test 或已停用版本不会发布该版本，也不会开启下载。更正保留原记录及原现场时间。</p><p v-if="mutation.error.value" class="error">{{ mutation.error.value }}</p><OperationStatus :mutation="mutation" /><div class="dialog-actions"><button type="button" :disabled="mutation.blocked.value" @click="close">取消</button><button class="primary" :disabled="mutation.busy.value||!valid&&!mutation.uncertain.value">{{ mutation.uncertain.value?'核实原操作':'保存记录' }}</button></div></form></template></dialog></section>
+</template>
+<style scoped>.plc-usage{padding:1.5rem}fieldset{display:grid;gap:1rem;border:0;padding:0}small{display:block;color:#64748b}td{max-width:24rem;overflow-wrap:anywhere}dialog{max-width:42rem;width:calc(100% - 3rem)}</style>

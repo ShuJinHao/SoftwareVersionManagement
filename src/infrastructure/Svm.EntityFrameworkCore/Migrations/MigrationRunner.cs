@@ -153,6 +153,10 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE UPDATE, DELETE ON TABLE rel.source_changes FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.source_bindings FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE iam.registrations,ins.installation_evidence,ins.report_stream_receipts FROM {writer};");
+        sql.AppendLine($"REVOKE SELECT ON iam.plc_upload_credentials FROM {reader};");
+        sql.AppendLine($"GRANT SELECT (\"Id\",\"SoftwareId\",\"Name\",\"ScopeJson\",\"ExpiresAt\",\"RevokedAt\",\"CreatedBy\",\"CreatedAt\",\"Revision\") ON iam.plc_upload_credentials TO {reader};");
+        sql.AppendLine($"REVOKE UPDATE, DELETE ON ins.plc_usage_records,rel.plc_publications FROM {writer};");
+        sql.AppendLine($"REVOKE DELETE ON iam.plc_upload_credentials,ins.plc_usage_state FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.releases,pkg.packages,pkg.works,pkg.replicas,pkg.download_sessions,pkg.dispatches,pkg.receive_attempts FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE pkg.dispatches,pkg.receive_attempts FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.integration_materials,tsk.target_selections,tsk.target_members,tsk.selection_chunks,tsk.deployments,tsk.admission_items,tsk.batches,tsk.tasks,tsk.attempts,tsk.receipts,tsk.works,tsk.dispatches,tsk.control_items FROM {writer};");

@@ -73,7 +73,7 @@ internal sealed class CreateHardwareBindingCommandValidator : AbstractValidator<
         RuleFor(x => x.HardwareId).NotEmpty();
         RuleFor(x => x.SoftwareId).Must(x => x != Guid.Empty);
         RuleFor(x => x).Must(x => (x.SoftwareId is null) != (x.NewSoftware is null));
-        RuleFor(x => x.NewSoftware).Must(x => x is null || !string.IsNullOrWhiteSpace(x.Name) && x.Name.Length <= 128 && x.Category is "UpperComputer" or "Vision" && x.Description?.Length is not > 2000);
+        RuleFor(x => x.NewSoftware).Must(x => x is null || !string.IsNullOrWhiteSpace(x.Name) && x.Name.Length <= 128 && x.Category is "UpperComputer" or "Vision" or "PLC" && x.Description?.Length is not > 2000);
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(256);
     }
 }
@@ -104,6 +104,6 @@ internal static class HardwareValidation
 {
     internal static bool List(HardwareListInput? x) => x is not null && x.Filter is not null && x.PageSize is > 0 and <= 200 &&
         x.Filter.DeviceId != Guid.Empty && x.Filter.ProcessId != Guid.Empty && x.Filter.HardwareId != Guid.Empty && x.Filter.SoftwareId != Guid.Empty &&
-        x.Filter.Name?.Length is not > 128 && x.Filter.Category is null or "UpperComputer" or "Vision" &&
+        x.Filter.Name?.Length is not > 128 && x.Filter.Category is null or "UpperComputer" or "Vision" or "PLC" &&
         (x.After is null || x.After.Id != Guid.Empty && x.After.SortKey.Length is > 0 and <= 128);
 }

@@ -12,6 +12,7 @@ public static class CatalogQueryRegistration
     public static IServiceCollection AddSvmCatalogQueries(this IServiceCollection services)
     {
         services.AddScoped<CatalogReadScope>();
+        services.AddScoped<Svm.Services.Contracts.Plc.IPlcQueries, PlcQueries>();
         services.AddScoped<IInstanceQueries, InstanceQueries>();
         services.AddScoped<IHardwareQueries, HardwareQueries>();
         services.AddScoped<ISoftwareCatalogQueries, SoftwareCatalogQueries>();

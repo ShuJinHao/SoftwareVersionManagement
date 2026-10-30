@@ -39,7 +39,7 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
     public string Version => $"{Major}.{Minor}.{Patch}";
     public void OpenTest()
     {
-        if (SourceKind != "Manual") throw new InvalidOperationException("Imported releases cannot enter testing.");
+        if (SourceKind is not ("Manual" or "PLC")) throw new InvalidOperationException("Imported releases cannot enter testing.");
         if (State == "Test") return;
         if (State != "Staging") throw new InvalidOperationException("Release cannot open for testing.");
         State = "Test"; Revision++;
@@ -53,6 +53,21 @@ public sealed class SoftwareRelease : AggregateRoot<StrongId<SoftwareRelease>>
         TestEvidenceId = evidenceId; PublishReason = reason; PublishConclusion = conclusion;
         PublishedBy = actorId; PublishedEmployeeNo = employeeNo; PublishedAt = now.ToUniversalTime();
         State = "Formal"; Revision++;
+    }
+    public Guid? PlcUploadBindingId { get; private set; }
+    public long? PlcUploadBindingRevision { get; private set; }
+    public void BindPlcUpload(Guid binding, long revision)
+    { if (SourceKind != "PLC" || State != "Staging" || PlcUploadBindingId is not null) throw new InvalidOperationException("Upload scope is immutable."); PlcUploadBindingId = binding; PlcUploadBindingRevision = revision; }
+    public Guid? PlcEvidenceId { get; private set; }
+    public void SetPlcSource()
+    { if (State != "Staging" || SourceKind != "Manual") throw new InvalidOperationException("Source is immutable."); SourceKind = "PLC"; }
+    public void PublishPlc(Guid evidence, string reason, string conclusion, Guid actor, string employeeNo, DateTimeOffset now)
+    {
+        if (SourceKind != "PLC" || State != "Test" || PublishedAt is not null || evidence == Guid.Empty || actor == Guid.Empty ||
+            string.IsNullOrWhiteSpace(employeeNo) || string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(conclusion))
+            throw new InvalidOperationException("PLC publication facts are required.");
+        PlcEvidenceId = evidence; PublishReason = reason; PublishConclusion = conclusion;
+        PublishedBy = actor; PublishedEmployeeNo = employeeNo; PublishedAt = now; State = "Formal"; Revision++;
     }
     public void SetGitLabSource(Guid binding, string tag, string facts)
     {

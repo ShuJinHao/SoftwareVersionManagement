@@ -10,7 +10,7 @@ namespace Svm.Application.Packages;
 
 internal sealed class PackageAuthorization(IPackages packages, IReleases releases, ISoftwareCatalog software,
     IUnitOfWork unit, IPersonnelWorkAuthorization personnelWork, IReleaseImports imports, Svm.Application.Personnel.SiteAuthorization scope, IPackageServiceIdentity? service = null,
-    IInstanceAccess? access = null, IManagedInstances? instances = null, IAccessProofSource? machineProof = null)
+    IInstanceAccess? access = null, IManagedInstances? instances = null, IAccessProofSource? machineProof = null, Svm.Services.Contracts.Plc.IPlcUploadProvenance? plc = null)
 {
     public async ValueTask<AuthorizationDecision> ExternalAsync(AuthorizationRequest x, PersonnelView? person, CancellationToken token)
     {
@@ -33,6 +33,7 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
         if (release is { } r)
         {
             var selected = await releases.GetAsync(r, write, token);
+            if (selected.SourceKind == "PLC" && x.Request is PublishReleaseCommand) return AuthorizationDecision.Deny(RequestFailure.InvalidState);
             if (selected.SourceKind == "GitLab" && x.Request is UploadContentCommand or BeginUploadCommand or FinishUploadCommand or FailUploadCommand or RetryPackageCommand)
                 return AuthorizationDecision.Deny(RequestFailure.InvalidState);
         }
@@ -66,7 +67,7 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
                 var source = await releases.GetAsync(w.ReleaseId, false, token);
                 if (w.Kind != "Repair" && !(source.SourceKind == "GitLab"
                     ? await imports.AuthorizesPackageAsync(w.ReleaseId, w.InitiatorId, w.SoftwareId, token)
-                    : await personnelWork.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
+                    : source.SourceKind == "PLC" && source.CreatedBy == w.InitiatorId && await (plc ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid)).IsAcceptedUploaderAsync(w.InitiatorId, w.SoftwareId, token) || await personnelWork.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
                     return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 await ProtectPackage(w.PackageId, w.SoftwareId, protect, token);
                 if ((await releases.GetAsync(w.ReleaseId, protect, token)).State == "Disabled") return AuthorizationDecision.Deny(RequestFailure.InvalidState);

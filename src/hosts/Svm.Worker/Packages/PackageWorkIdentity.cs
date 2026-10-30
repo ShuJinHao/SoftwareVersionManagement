@@ -20,7 +20,7 @@ internal sealed class PackageWorkerIdentity(PackageFileOptions options) : IPacka
     private sealed class Exit(Action exit) : IDisposable { public void Dispose() => exit(); }
 }
 internal sealed class PackageWorkAuthorizer(PackageFileOptions files, SiteCatalogOptions site, IPackages packages,
-    IReleases releases, ISoftwareCatalog software, IPersonnelWorkAuthorization personnel, IReleaseImports imports) : IIntegrationWorkAuthorizer
+    IReleases releases, ISoftwareCatalog software, IPersonnelWorkAuthorization personnel, IReleaseImports imports, Svm.Services.Contracts.Plc.IPlcUploadProvenance plc) : IIntegrationWorkAuthorizer
 {
     public async ValueTask<IntegrationWorkAuthority> AuthorizeAsync(IIntegrationEvent message, ModuleOwner owner, bool protect, CancellationToken token)
     {
@@ -30,7 +30,7 @@ internal sealed class PackageWorkAuthorizer(PackageFileOptions files, SiteCatalo
         var source = await releases.GetAsync(w.ReleaseId, false, token);
         if (w.Kind != "Repair" && !(source.SourceKind == "GitLab"
             ? await imports.AuthorizesPackageAsync(w.ReleaseId, w.InitiatorId, w.SoftwareId, token)
-            : await personnel.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
+            : source.SourceKind == "PLC" && source.CreatedBy == w.InitiatorId && await plc.IsAcceptedUploaderAsync(w.InitiatorId,w.SoftwareId,token) || await personnel.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
             throw new IntegrationConsumptionException(ConsumptionFailure.PermissionDenied);
         if (!await software.ExistsAsync(w.SoftwareId, protect, token) || (await releases.GetAsync(w.ReleaseId, protect, token)).State == "Disabled")
             throw new IntegrationConsumptionException(ConsumptionFailure.PermissionDenied);

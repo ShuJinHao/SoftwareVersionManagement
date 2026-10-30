@@ -69,6 +69,7 @@ internal sealed class InstanceAuthorization(IInstanceAccess access,IManagedInsta
             return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         await assets.EnsureDeploymentAsync(Protect,token);
         if(!await software.ExistsAsync(sid,Protect,token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+        if ((await software.GetAsync(sid,false,token)).Category == "PLC") return AuthorizationDecision.Deny(RequestFailure.InvalidState);
         if(instanceId is { } instance)
         {
             // Protect the device/position before the instance, consistently with registration and reference protection.

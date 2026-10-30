@@ -17,7 +17,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         SELECT r."Id",r."SoftwareId",r."Major",r."Minor",r."Patch",r."State",r."ChangeLevel",r."ChangeSummary",r."ChangeReason",r."PackageId",
           r."CreatedBy",r."CreatedAt",r."DisabledAt",r."DisableReason",r."Revision",p."SizeBytes",p."Sha256",
           r."PublishedBy",r."PublishedEmployeeNo",r."PublishedAt",r."TestEvidenceId",r."PublishReason",r."PublishConclusion",
-          r."SourceKind",r."SourceFactsJson",
+          r."SourceKind",r."SourceFactsJson",r."PlcEvidenceId",
           (r."State" IN ('Test','Formal') AND p."State"='Ready' AND NOT p."Disabled" AND EXISTS
              (SELECT 1 FROM pkg.replicas cp WHERE cp."PackageId"=p."Id" AND cp."State"='Healthy'
                 AND cp."CheckedAt">clock_timestamp()-make_interval(secs=>@freshSeconds))) AS "DownloadAvailable"
@@ -44,7 +44,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
     private Task<IReadOnlyList<Row>> Rows(ReleaseListInput input, bool available, CancellationToken token) => session.QueryAsync<Row>(
         "SELECT * FROM (" + Projection + " WHERE r.\"SoftwareId\"=@software AND " + Visible + """
           AND (CAST(@state AS text) IS NULL OR r."State"=@state)
-          AND (CAST(@channel AS text) IS NULL OR (@channel='Formal' AND r."PublishedAt" IS NOT NULL) OR (@channel='Test' AND r."SourceKind"='Manual' AND r."PublishedAt" IS NULL))
+          AND (CAST(@channel AS text) IS NULL OR (@channel='Formal' AND r."PublishedAt" IS NOT NULL) OR (@channel='Test' AND r."SourceKind" IN ('Manual','PLC') AND r."PublishedAt" IS NULL))
           AND (CAST(@afterId AS uuid) IS NULL OR (r."Major",r."Minor",r."Patch",r."Id")<(@major,@minor,@patch,@afterId))
         ) s WHERE (NOT @available OR s."DownloadAvailable") ORDER BY s."Major" DESC,s."Minor" DESC,s."Patch" DESC,s."Id" DESC LIMIT @take
         """, new { software = input.SoftwareId, state = input.State, channel = input.Channel, afterId = input.After?.Id,
@@ -66,7 +66,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
     public async Task<DownloadAuditPage> DownloadsAsync(Guid softwareId, int size, Guid? after, CancellationToken token)
     {
         var rows = await session.QueryAsync<DownloadRow>("""
-            SELECT d."Id" AS "RequestId",d."PackageId",d."SubjectId",d."ActorKind",d."EmployeeNo",d."StartedAt",d."EndedAt",d."BytesSent",d."State"
+            SELECT d."Id" AS "RequestId",d."PackageId",d."SubjectId",d."ActorKind",d."EmployeeNo",d."StartedAt",d."EndedAt",d."BytesSent",d."State",d."PlcBindingId",d."PlcBindingRevision"
             FROM pkg.download_sessions d JOIN pkg.packages p ON p."Id"=d."PackageId"
             WHERE p."SoftwareId"=@softwareId AND (iam.has_product(@subject,'audit.read',p."SoftwareId") OR
                 (d."ActorKind"='Human' AND d."SubjectId"=@subject AND iam.has_software(@subject,'audit.read',p."SoftwareId")) OR
@@ -89,7 +89,8 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         public Guid RequestId { get; set; } public Guid PackageId { get; set; } public Guid? SubjectId { get; set; }
         public string ActorKind { get; set; } = ""; public string? EmployeeNo { get; set; } public DateTimeOffset StartedAt { get; set; }
         public DateTimeOffset? EndedAt { get; set; } public long? BytesSent { get; set; } public string State { get; set; } = "";
-        public DownloadAuditView View => new(RequestId, PackageId, SubjectId, ActorKind, EmployeeNo, StartedAt, EndedAt, BytesSent, State);
+        public Guid? PlcBindingId { get; set; } public long? PlcBindingRevision { get; set; }
+        public DownloadAuditView View => new(RequestId, PackageId, SubjectId, ActorKind, EmployeeNo, StartedAt, EndedAt, BytesSent, State, PlcBindingId, PlcBindingRevision);
     }
     private sealed class Row
     {
@@ -100,10 +101,11 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         public Guid? PublishedBy { get; set; } public string? PublishedEmployeeNo { get; set; } public DateTimeOffset? PublishedAt { get; set; }
         public Guid? TestEvidenceId { get; set; } public string? PublishReason { get; set; } public string? PublishConclusion { get; set; }
         public long? SizeBytes { get; set; } public string? Sha256 { get; set; }
+        public Guid? PlcEvidenceId { get; set; }
         public string SourceKind { get; set; } = "Manual"; public string? SourceFactsJson { get; set; }
         public ReleaseView View => new(Id, SoftwareId, $"{Major}.{Minor}.{Patch}", State, ChangeLevel, ChangeSummary, ChangeReason,
             PackageId, DownloadAvailable, CreatedBy, CreatedAt, DisabledAt, DisableReason, Revision,
-            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion, SourceKind, GitLabFacts.Decode(SourceFactsJson));
+            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion, SourceKind, GitLabFacts.Decode(SourceFactsJson), PlcEvidenceId);
         public ReleasePosition Position => new(Major, Minor, Patch, Id);
     }
 }

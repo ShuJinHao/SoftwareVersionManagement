@@ -10,7 +10,11 @@ public sealed record NewHardwareSoftware(string Name, string Category, string? D
 public sealed record WorkspaceDeviceView(DeviceView Device, int HardwareCount, int InstallationCount,
     int PendingLocationCount, int NeverReportedCount, int UnknownCount);
 public sealed record WorkspaceInstallationView(Guid RowId, DeviceView Device, HardwareView? Hardware,
-    HardwareBindingView? Position, SoftwareView Software, InstanceView? Instance, string LocationState);
+    HardwareBindingView? Position, SoftwareView Software, InstanceView? Instance, string LocationState)
+{
+    public Svm.Services.Contracts.Plc.PlcUsageSummary? PlcUsage { get; init; }
+    public string? LatestFormalVersion { get; init; }
+}
 public sealed record HardwareFilter(Guid? ProcessId = null, Guid? DeviceId = null, Guid? HardwareId = null,
     Guid? SoftwareId = null, string? Name = null, string? Category = null);
 public sealed record HardwareListInput(HardwareFilter Filter, int PageSize = 50, CatalogPosition? After = null);

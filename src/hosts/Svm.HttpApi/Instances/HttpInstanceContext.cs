@@ -12,7 +12,7 @@ internal sealed class HttpAccessProofSource(IHttpContextAccessor accessor) : IAc
         {
             var http=accessor.HttpContext;
             var kind=http?.GetEndpoint()?.Metadata.GetMetadata<PersonnelEndpointKind>()?.Kind;
-            var actor=kind switch { RequestKind.Client=>ActorKind.Instance,RequestKind.Enrollment=>ActorKind.EnrollmentGrant,RequestKind.Recovery=>ActorKind.RecoveryGrant,_=>ActorKind.Anonymous };
+            var actor=kind switch { RequestKind.PlcUpload=>ActorKind.PlcUpload,RequestKind.Client=>ActorKind.Instance,RequestKind.Enrollment=>ActorKind.EnrollmentGrant,RequestKind.Recovery=>ActorKind.RecoveryGrant,_=>ActorKind.Anonymous };
             if(actor==ActorKind.Anonymous || http is null || !http.Request.Headers.TryGetValue("Authorization",out var header) || header.Count!=1) return null;
             var text=header[0];
             if(text is null || text.Length>200 || !text.StartsWith("Bearer ",StringComparison.OrdinalIgnoreCase)) return null;
@@ -20,7 +20,7 @@ internal sealed class HttpAccessProofSource(IHttpContextAccessor accessor) : IAc
             return parts.Length==2 && Guid.TryParseExact(parts[0],"D",out var id) && id!=Guid.Empty && InstanceValidation.Secret(parts[1]) ? new(actor,id,parts[1]) : null;
         }
     }
-    internal static bool IsMachine(HttpContext http) => http.GetEndpoint()?.Metadata.GetMetadata<PersonnelEndpointKind>()?.Kind is RequestKind.Client or RequestKind.Enrollment or RequestKind.Recovery;
+    internal static bool IsMachine(HttpContext http) => http.GetEndpoint()?.Metadata.GetMetadata<PersonnelEndpointKind>()?.Kind is RequestKind.PlcUpload or RequestKind.Client or RequestKind.Enrollment or RequestKind.Recovery;
     internal const string IdentityItem="svm.verified-instance-identity";
     internal static async Task Authenticate(HttpContext http,Func<Task> next)
     {
@@ -29,7 +29,14 @@ internal sealed class HttpAccessProofSource(IHttpContextAccessor accessor) : IAc
             if(!http.Request.IsHttps) throw new RequestRejectedException(RequestFailure.PermissionDenied);
             var source=http.RequestServices.GetRequiredService<IAccessProofSource>();
             var proof=source.Proof ?? throw new RequestRejectedException(RequestFailure.CredentialInvalid);
-            var identity=await http.RequestServices.GetRequiredService<IInstanceAccess>().AuthenticateAsync(proof,false,http.RequestAborted)
+            AccessIdentity identity;
+            if(proof.Kind==ActorKind.PlcUpload)
+            {
+                var c=await http.RequestServices.GetRequiredService<Svm.Services.Contracts.Plc.IPlcUploadAccess>().AuthenticateAsync(proof,false,http.RequestAborted)
+                    ?? throw new RequestRejectedException(RequestFailure.CredentialInvalid);
+                identity=new(ActorKind.PlcUpload,c.Id,c.SoftwareId,null);
+            }
+            else identity=await http.RequestServices.GetRequiredService<IInstanceAccess>().AuthenticateAsync(proof,false,http.RequestAborted)
                 ?? throw new RequestRejectedException(RequestFailure.CredentialInvalid);
             http.Items[IdentityItem]=identity;
         }

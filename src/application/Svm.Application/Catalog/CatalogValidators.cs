@@ -83,7 +83,7 @@ internal sealed class CreateSoftwareCommandValidator : AbstractValidator<CreateS
         RuleFor(x => x.Key).NotEmpty();
         RuleFor(x => x.Code).MaximumLength(64).Must(x => x is null || x.Length > 0 && !x.Any(char.IsControl) && x.Trim() == x);
         RuleFor(x => x.Name).NotEmpty().MaximumLength(128);
-        RuleFor(x => x.Category).Must(x => x is "UpperComputer" or "Vision");
+        RuleFor(x => x.Category).Must(x => x is "UpperComputer" or "Vision" or "PLC");
         RuleFor(x => x.Description).MaximumLength(2000);
     }
 }
@@ -169,6 +169,6 @@ internal static class CatalogValidation
 {
     internal static bool Valid(CatalogListInput? input, int maximum) => input is not null && input.Filter is not null &&
         input.PageSize > 0 && input.PageSize <= maximum && input.Filter.Code?.Length is not > 64 && input.Filter.Name?.Length is not > 128 &&
-        (input.Filter.Kind is null or "Software" or "Role" or "Process" or "Device") && (input.Filter.Category is null or "UpperComputer" or "Vision") && input.Filter.ProcessId != Guid.Empty && input.Filter.SoftwareId != Guid.Empty &&
+        (input.Filter.Kind is null or "Software" or "Role" or "Process" or "Device") && (input.Filter.Category is null or "UpperComputer" or "Vision" or "PLC") && input.Filter.ProcessId != Guid.Empty && input.Filter.SoftwareId != Guid.Empty &&
         (input.After is null || input.After.Id != Guid.Empty && input.After.SortKey.Length is > 0 and <= 64);
 }

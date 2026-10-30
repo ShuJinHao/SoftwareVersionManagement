@@ -17,12 +17,13 @@ public sealed class HardwareAsset(StrongId<HardwareAsset> id, StrongId<Productio
 }
 
 public sealed class HardwareSoftwareBinding(StrongId<HardwareSoftwareBinding> id,
-    StrongId<HardwareAsset> hardwareId, StrongId<DeviceSoftwareBinding> deviceBindingId, Guid softwareId)
+    StrongId<HardwareAsset> hardwareId, StrongId<DeviceSoftwareBinding> deviceBindingId, Guid softwareId, string hardwareType = "IPC")
     : AggregateRoot<StrongId<HardwareSoftwareBinding>>(id)
 {
     public StrongId<HardwareAsset> HardwareId { get; private set; } = hardwareId;
     public StrongId<DeviceSoftwareBinding> DeviceBindingId { get; private set; } = deviceBindingId;
     public Guid SoftwareId { get; private set; } = softwareId;
+    public string HardwareType { get; private set; } = hardwareType;
     public bool IsActive { get; private set; } = true;
     public long Revision { get; private set; } = 1;
     public Guid? InstanceId { get; private set; }
@@ -42,6 +43,7 @@ public interface IHardwareRepository
     Task<HardwareAsset?> HardwareAsync(Guid id, bool protect, CancellationToken token);
     Task<HardwareSoftwareBinding?> BindingAsync(Guid id, bool protect, CancellationToken token);
     Task<HardwareSoftwareBinding?> BindingAsync(Guid hardwareId, Guid softwareId, bool protect, CancellationToken token);
+    Task<bool> HasActivePlcBindingAsync(Guid hardwareId, CancellationToken token);
     void Add(HardwareAsset hardware);
     void Add(HardwareSoftwareBinding binding);
 }

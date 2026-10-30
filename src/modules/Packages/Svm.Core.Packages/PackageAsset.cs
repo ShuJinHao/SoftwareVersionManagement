@@ -95,7 +95,7 @@ public sealed class PackageReplica(Guid id, Guid packageId, string nodeId)
     public void Check(string state, DateTimeOffset at) { State = state; CheckedAt = at; }
 }
 public sealed class PackageDownload(Guid id, Guid packageId, string nodeId, Guid workerGeneration,
-    Guid subjectId, string actorKind, string? employeeNo, DateTimeOffset startedAt)
+    Guid subjectId, string actorKind, string? employeeNo, DateTimeOffset startedAt, Guid? plcBindingId = null, long? plcBindingRevision = null)
 {
     public Guid Id { get; private set; } = id;
     public Guid PackageId { get; private set; } = packageId;
@@ -104,6 +104,8 @@ public sealed class PackageDownload(Guid id, Guid packageId, string nodeId, Guid
     public Guid SubjectId { get; private set; } = subjectId;
     public string ActorKind { get; private set; } = actorKind;
     public string? EmployeeNo { get; private set; } = employeeNo;
+    public Guid? PlcBindingId { get; private set; } = plcBindingId;
+    public long? PlcBindingRevision { get; private set; } = plcBindingRevision;
     public DateTimeOffset StartedAt { get; private set; } = startedAt;
     public DateTimeOffset? EndedAt { get; private set; }
     public long? BytesSent { get; private set; }

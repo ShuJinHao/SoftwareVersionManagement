@@ -143,7 +143,7 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
         repository.Add(new PackageDispatch(w.DispatchEventId, w.Id.Value, w.DispatchSequence)); return Authority(w, p);
     }
     public async Task<DownloadAuthorization> AuthorizeDownloadAsync(Guid id, Guid requestId, string node, Guid generation,
-        bool head, Guid subject, string actor, string? employee, CancellationToken token, string? verifiedNode = null)
+        bool head, Guid subject, string actor, string? employee, CancellationToken token, string? verifiedNode = null, Guid? plcBindingId = null, long? plcBindingRevision = null)
     {
         RequireWrite(); nodes.Require(node); if (verifiedNode is not null) nodes.Require(verifiedNode);
         if (!head && verifiedNode is null) throw new RequestRejectedException(RequestFailure.ValidationFailed);
@@ -156,14 +156,14 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
         {
             var existing = await repository.DownloadAsync(requestId, true, token);
             if (existing is not null)
-            { if (existing.PackageId != id || existing.SubjectId != subject || existing.ActorKind != actor || existing.NodeId != node || existing.WorkerGeneration != generation)
+            { if (existing.PackageId != id || existing.SubjectId != subject || existing.ActorKind != actor || existing.NodeId != node || existing.WorkerGeneration != generation || existing.PlcBindingId != plcBindingId || existing.PlcBindingRevision != plcBindingRevision)
                     throw new RequestRejectedException(RequestFailure.IdempotencyConflict); }
             else
             {
                 // Nginx completion timestamps have millisecond precision. Persist the start
                 // at that same resolution so a fast range response in the same millisecond is valid.
                 var started = DateTimeOffset.FromUnixTimeMilliseconds(clock.GetUtcNow().ToUnixTimeMilliseconds());
-                repository.Add(new PackageDownload(requestId, id, node, generation, subject, actor, employee, started)); created = true;
+                repository.Add(new PackageDownload(requestId, id, node, generation, subject, actor, employee, started, plcBindingId, plcBindingRevision)); created = true;
             }
         }
         return new(requestId, id, healthy.NodeId, p.SizeBytes!.Value, p.Sha256!, $"/__svm_replicas/{healthy.NodeId}/{id:D}.bin", created);

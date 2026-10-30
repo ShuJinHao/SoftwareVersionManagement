@@ -1,3 +1,4 @@
+using Svm.Services.Contracts.Plc;
 using MediatR;
 using Svm.Services.Contracts.Releases;
 using Svm.Services.Contracts.Tasks;
@@ -18,12 +19,12 @@ public sealed class PersonnelTransactionBehavior<TRequest, TResponse>(RequestCat
     {
         var policy = catalog.GetPolicy(request.GetType());
         if (policy.Transaction == TransactionMode.ReadOnly) return await next();
-        if (request is UploadContentCommand)
+        if (request is UploadContentCommand or PlcUploadContentCommand)
         {
             if (unitOfWork is null || unitOfWork.CurrentOperationId is not null) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
             return await next();
         }
-        if (PersonnelManagementCapabilities.Contains(request.GetType()) || CatalogCapabilities.IsWrite(request.GetType()) || InstanceCapabilities.IsWrite(request.GetType()) || PackageCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsProtocol(request.GetType()) || request is RequestReleaseSyncCommand or ChangeReleaseSourceCommand)
+        if (PlcCapabilities.IsIdempotent(request.GetType()) || PersonnelManagementCapabilities.Contains(request.GetType()) || CatalogCapabilities.IsWrite(request.GetType()) || InstanceCapabilities.IsWrite(request.GetType()) || PackageCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsIdempotent(request.GetType()) || TaskCapabilities.IsProtocol(request.GetType()) || request is RequestReleaseSyncCommand or ChangeReleaseSourceCommand)
         {
             // The idempotency coordinator already owns and reauthorizes this root transaction.
             if (policy.Idempotency is not (IdempotencyMode.OperationResult or IdempotencyMode.EnrollmentProtocol or IdempotencyMode.ReportSequence or IdempotencyMode.ReceiptSequence or IdempotencyMode.SelectionChunk) || unitOfWork?.CurrentOperationId is null)

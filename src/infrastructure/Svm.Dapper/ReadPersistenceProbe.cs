@@ -18,7 +18,7 @@ public sealed class ReadPersistenceProbe : IAsyncDisposable
     {
         try
         {
-            var result = await _query.QueryAsync<bool>("SELECT count(*) = 14 AND max(\"MigrationId\") = '20261025000100_GitLabSourceManagement' FROM framework.\"__EFMigrationsHistory\"", null, token);
+            var result = await _query.QueryAsync<bool>("SELECT count(*) = 15 AND max(\"MigrationId\") = '20261028000100_PlcArchives' FROM framework.\"__EFMigrationsHistory\"", null, token);
             return result.Count == 1 && result[0];
         }
         catch (Exception e) when (e is Svm.Services.Contracts.Framework.PersistenceException or IOException or OperationCanceledException) { return false; }

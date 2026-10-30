@@ -50,7 +50,7 @@ internal sealed class CreateHardwareBindingCommandHandler(IHardwareAssets hardwa
                 product = await software.CreateAsync(null, draft.Name, draft.Category, draft.Description, token);
             }
             else product = await software.GetAsync(x.SoftwareId!.Value, true, token);
-            if (product.Category is not ("UpperComputer" or "Vision")) throw new RequestRejectedException(RequestFailure.InvalidState);
+            if (((await hardware.GetAsync(x.HardwareId, false, token)).Type == "PLC") != (product.Category == "PLC")) throw new RequestRejectedException(RequestFailure.InvalidState);
             return await hardware.BindAsync(x.HardwareId, product.Id, token);
         }, h => h.Id, token);
 }

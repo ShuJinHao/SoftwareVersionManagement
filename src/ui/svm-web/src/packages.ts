@@ -6,7 +6,7 @@ export interface Release {
   downloadAvailable: boolean; createdBy: string; createdAt: string; disabledAt: string | null; disableReason: string | null; revision: number
   publishedBy: string | null; publishedEmployeeNo: string | null; publishedAt: string | null
   testEvidenceId: string | null; publishReason: string | null; publishConclusion: string | null
-  sourceKind?: 'Manual' | 'GitLab'; source?: { manifest: { tag: string; commitSha: string; pipelineId: number; jobId: number }; pipelineUrl: string; releasedAt: string } | null
+  plcEvidenceId?: string | null; sourceKind?: 'Manual' | 'GitLab' | 'PLC'; source?: { manifest: { tag: string; commitSha: string; pipelineId: number; jobId: number }; pipelineUrl: string; releasedAt: string } | null
 }
 export interface ReleaseSource { softwareId: string; kind: 'Manual' | 'GitLab'; enabled: boolean; baseUri: string | null; projectId: number | null; packageName: string | null; lastSyncedAt: string | null; lastErrorCode: string | null; latestWorkId: string | null; bindingId?: string | null; connectionId?: string | null; revision?: number; configurationAvailable?: boolean; managed?: boolean; changeId?: string | null; blockingWorkIds?: string[] }
 export interface ReleaseSyncWork { id: string; softwareId: string; kind: string; tag: string | null; stage: string; lastErrorCode: string | null; releaseId: string | null; createdAt: string; completedAt: string | null; revision: number }

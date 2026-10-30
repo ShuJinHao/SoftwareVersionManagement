@@ -10,7 +10,7 @@ public sealed record ReleaseView(Guid Id, Guid SoftwareId, string Version, strin
     DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? DisableReason, long Revision,
     Guid? PublishedBy = null, string? PublishedEmployeeNo = null, DateTimeOffset? PublishedAt = null,
     Guid? TestEvidenceId = null, string? PublishReason = null, string? PublishConclusion = null,
-    string SourceKind = "Manual", Svm.Services.Contracts.Releases.GitLabReleaseFacts? Source = null);
+    string SourceKind = "Manual", Svm.Services.Contracts.Releases.GitLabReleaseFacts? Source = null, Guid? PlcEvidenceId = null);
 public sealed record ReleaseUploadResult(ReleaseView Release, Guid UploadId, string UploadPath);
 public sealed record PackageView(Guid Id, Guid ReleaseId, string State, long? SizeBytes, string? Sha256,
     long ExpectedSize, string ExpectedSha256, int HealthyReplicaCount, bool DownloadAvailable,
@@ -28,7 +28,7 @@ public sealed record EvidencePage(IReadOnlyList<TestEvidenceView> Items, Guid? N
 public sealed record ClientReleaseView(Guid Id, string Version, string State, string ChangeSummary,
     string ChangeReason, Guid PackageId, long SizeBytes, string Sha256, string DownloadPath);
 public sealed record DownloadAuditView(Guid RequestId, Guid PackageId, Guid? SubjectId, string ActorKind,
-    string? EmployeeNo, DateTimeOffset StartedAt, DateTimeOffset? EndedAt, long? BytesSent, string State);
+    string? EmployeeNo, DateTimeOffset StartedAt, DateTimeOffset? EndedAt, long? BytesSent, string State, Guid? PlcBindingId = null, long? PlcBindingRevision = null);
 public sealed record DownloadAuditPage(IReadOnlyList<DownloadAuditView> Items, Guid? Next);
 
 /// <summary>REL owns numbering and state. Cross-module package facts enter only through Application.</summary>
@@ -37,7 +37,7 @@ public interface IReleases
     Task<IReadOnlyList<ReleaseView>> FormalCandidatesAsync(Guid softwareId, CancellationToken token);
     Task<Guid?> SoftwareForAsync(Guid releaseId, bool protect, CancellationToken token);
     Task<ReleaseView> GetAsync(Guid releaseId, bool protect, CancellationToken token);
-    Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token);
+    Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token, Svm.Services.Contracts.Plc.PlcScope? plcUploadScope = null);
     Task<ReleaseView> DisableAsync(Guid id, long revision, string reason, CancellationToken token);
     Task<ReleaseView> PublishAsync(PublishReleaseCommand input, Guid actorId, string employeeNo, CancellationToken token);
     Task OpenTestAsync(Guid releaseId, Guid packageId, CancellationToken token);
@@ -104,7 +104,7 @@ public interface IPackages
     Task<PackageWorkAuthority?> CheckReplicasAsync(Guid packageId, IReadOnlyList<ReplicaFact> facts, CancellationToken token);
     Task<IReadOnlyList<Guid>> ReadyAsync(int take, Guid? after, CancellationToken token);
     Task<DownloadAuthorization> AuthorizeDownloadAsync(Guid packageId, Guid requestId, string nodeId,
-        Guid workerGeneration, bool head, Guid subjectId, string actorKind, string? employeeNo, CancellationToken token, string? verifiedNode = null);
+        Guid workerGeneration, bool head, Guid subjectId, string actorKind, string? employeeNo, CancellationToken token, string? verifiedNode = null, Guid? plcBindingId = null, long? plcBindingRevision = null);
     Task<bool> EndDownloadAsync(DownloadEnd end, CancellationToken token);
     Task<DownloadEnd?> FindDownloadEndAsync(Guid id, string nodeId, Guid workerGeneration, CancellationToken token);
 }

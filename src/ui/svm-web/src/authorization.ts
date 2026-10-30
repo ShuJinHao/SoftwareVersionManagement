@@ -5,17 +5,18 @@ export interface Role { id: string; name: string; isEnabled: boolean; revision: 
 export interface RoleAssignment { roleId: string; name: string; isEnabled: boolean; revision: number; operations: string[]; scopes: AccessScope[] }
 export interface Authorization { subjectId: string; revision: number; directPermissions: Permission[]; roles: RoleAssignment[]; softwareNames?: Record<string,string> }
 export interface AssignmentInput { roleId: string; scopes: AccessScope[] }
-export const fieldOperations = ['asset.read','asset.create','asset.manage','software.create','binding.manage','software.read','instance.read','instance.manage','enrollment.manage','deployment.create','deployment.control','task.closeUnknown','audit.read']
-export const productOperations = ['software.read','release.source.manage','release.upload','release.publish','release.disable','audit.read']
+export const fieldOperations = ['asset.read','asset.create','asset.manage','software.create','binding.manage','software.read','instance.read','instance.manage','enrollment.manage','deployment.create','deployment.control','task.closeUnknown','audit.read','plc.verify','plc.usage.record']
+export const productOperations = ['software.read','release.source.manage','release.upload','release.publish','release.disable','audit.read','plc.uploadCredential.manage']
 export const operationGroups = [
   { name:'平台管理', operations:['identity.manage'] },
   { name:'现场职责', operations:fieldOperations },
-  { name:'产品管理（须另选具体软件）', operations:['release.source.manage','release.upload','release.publish','release.disable'] },
+  { name:'产品管理（须另选具体软件）', operations:['release.source.manage','release.upload','release.publish','release.disable','plc.uploadCredential.manage'] },
 ]
 export const operationLabels:Record<string,string> = {
   'identity.manage':'管理人员、角色与授权','asset.read':'查看现场台账','asset.create':'创建工序、设备和硬件','asset.manage':'修改现场台账',
   'software.create':'创建软件','binding.manage':'维护软件关联','software.read':'查看版本与下载','instance.read':'查看安装与状态','instance.manage':'管理实例接入状态',
   'enrollment.manage':'管理登记许可与凭据','deployment.create':'创建更新','deployment.control':'控制更新','task.closeUnknown':'人工关闭未知结果',
+  'plc.verify':'验证 PLC 现场程序','plc.usage.record':'登记 PLC 现场使用','plc.uploadCredential.manage':'管理 PLC 上传凭据',
   'release.source.manage':'管理 GitLab 来源','release.upload':'维护产品、上传与同步','release.publish':'发布正式版','release.disable':'停用版本','audit.read':'查看审计',
 }
 export const label = (op:string) => operationLabels[op] ?? op
