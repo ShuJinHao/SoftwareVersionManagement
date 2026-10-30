@@ -11,27 +11,84 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     public async Task<bool> IsBoundAsync(Guid id, CancellationToken token) => options.Bindings.Any(b => b.SoftwareId == id) || await repository.BindingAsync(id, false, token) is not null;
     public async Task<bool> AuthorizesPackageAsync(Guid releaseId, Guid subject, Guid softwareId, CancellationToken token)
     {
-        var stored = await repository.BindingAsync(softwareId, false, token);
-        if (stored is null || stored.SubjectId != subject) return false;
         var release = await releases.GetAsync(releaseId, false, token);
-        // Synchronization settings gate new imports; dispatched work retains its immutable persisted authority.
-        return release is not null && release.SoftwareId == softwareId && release.SourceBindingId == stored.Id &&
-            release.SourceKind == "GitLab" && release.CreatedBy == subject;
+        if (release is null || release.SoftwareId != softwareId || release.SourceKind != "GitLab" || release.SourceBindingId is not { } bindingId) return false;
+        var stored = await repository.BindingByIdAsync(bindingId, false, token);
+        return stored is not null && stored.SoftwareId == softwareId && stored.SubjectId == subject && release.CreatedBy == subject;
     }
     public async Task<ReleaseSourceView> SourceAsync(Guid id, CancellationToken token)
     {
-        var configured = options.Bindings.SingleOrDefault(b => b.SoftwareId == id);
         var stored = await repository.BindingAsync(id, false, token);
-        return new(id, configured is not null || stored is not null ? "GitLab" : "Manual",
-            configured?.Enabled == true && (stored is null || Matches(stored, configured)), configured?.BaseUri ?? stored?.BaseUri,
-            configured?.ProjectId ?? stored?.ProjectId, configured?.PackageName ?? stored?.PackageName,
-            stored?.LastSyncedAt, stored?.LastErrorCode, stored?.LatestWorkId);
+        if (stored is not null) return View(stored) with { BlockingWorkIds = await repository.BlockingWorkIdsAsync(stored.Id, token) };
+        var configured = options.Bindings.SingleOrDefault(b => b.SoftwareId == id);
+        return new(id, configured is null ? "Manual" : "GitLab", configured?.Enabled == true, configured?.BaseUri,
+            configured?.ProjectId, configured?.PackageName, null, null, null, configured?.Id,
+            ConfigurationAvailable: configured is not null);
+    }
+    public async Task<GitLabBinding?> ResolveBindingAsync(Guid softwareId, Guid? bindingId, bool protect, CancellationToken token)
+    {
+        if (protect)
+        {
+            RequireWrite();
+            if (await software.GetAsync(softwareId, true, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        }
+        var stored = bindingId is { } id ? await repository.BindingByIdAsync(id, protect, token) : await repository.BindingAsync(softwareId, protect, token);
+        if (stored is not null) return stored.SoftwareId == softwareId ? ToBinding(stored) : null;
+        var configured = options.Bindings.SingleOrDefault(b => b.SoftwareId == softwareId && (bindingId is null || b.Id == bindingId));
+        if (configured is not null && protect) repository.Add(new ReleaseSourceBinding(configured.Id, configured.SoftwareId, configured.SubjectId, configured.BaseUri, configured.ProjectId, configured.PackageName));
+        return configured;
+    }
+    public async Task<IReadOnlyList<GitLabBinding>> BindingsAsync(Guid? afterId, int count, CancellationToken token)
+    {
+        if (count is < 1 or > 200) throw new RequestRejectedException(RequestFailure.ValidationFailed);
+        var rows = await repository.BindingsAsync(afterId, count, token);
+        return rows.Select(ToBinding).ToArray();
+    }
+    public async Task<ReleaseSourceView> ChangeSourceAsync(Guid softwareId, Guid connectionId, long projectId, string packageName, bool enabled, long revision, CancellationToken token)
+    {
+        RequireWrite();
+        if (await software.GetAsync(softwareId, true, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        var current = await repository.BindingAsync(softwareId, true, token);
+        var option = !enabled && current is { Managed: true } && current.ConnectionId == connectionId && current.ProjectId == projectId && current.PackageName == packageName
+            ? new GitLabSourceOption(connectionId, "", current.BaseUri, projectId, "", packageName)
+            : options.Source(connectionId, projectId, packageName);
+        if ((current?.Revision ?? 0) != revision) throw new RequestRejectedException(RequestFailure.RevisionConflict);
+        var same = current is not null && current.BaseUri == option.BaseUri && current.ProjectId == projectId && current.PackageName == packageName &&
+            (!current.Managed || current.ConnectionId == connectionId);
+        if (current is not null && (!same || !current.Managed))
+        {
+            var blocking = await repository.BlockingWorkIdsAsync(current.Id, token);
+            if (blocking.Count != 0) throw new RequestRejectedException(RequestFailure.InvalidState,
+                blocking.Select(id => new ValidationIssue("workId", "WORK_IN_PROGRESS", id.ToString("D"))));
+        }
+        if (same)
+        {
+            if (current!.Managed) current.SetEnabled(enabled);
+            else current.Manage(connectionId, enabled, revision + 1);
+        }
+        else
+        {
+            current?.Retire();
+            var legacy = current is null ? options.Bindings.SingleOrDefault(b => b.SoftwareId == softwareId && b.BaseUri == option.BaseUri && b.ProjectId == projectId && b.PackageName == packageName) : null;
+            current = new(legacy?.Id ?? Guid.NewGuid(), softwareId, legacy?.SubjectId ?? Guid.NewGuid(), option.BaseUri, projectId, packageName);
+            current.Manage(connectionId, enabled, revision + 1); repository.Add(current);
+        }
+        var change = new ReleaseSourceChange(Guid.NewGuid(), current!.Id, current.Revision, current.Enabled, clock.GetUtcNow()); repository.Add(change);
+        return View(current) with { ChangeId = change.Id };
+    }
+    public async Task<ReleaseSourceView> ChangeResultAsync(Guid changeId, CancellationToken token)
+    {
+        var change = await repository.ChangeAsync(changeId, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        var binding = await repository.BindingByIdAsync(change.BindingId, false, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        return View(binding) with { ChangeId = change.Id, Revision = change.Revision, Enabled = change.Enabled };
     }
     public async Task<ReleaseSyncWorkView> ViewAsync(Guid id, CancellationToken token) => View(await Existing(id, false, token));
     public async Task<GitLabWork> WorkAsync(Guid id, bool protect, CancellationToken token) => Work(await Existing(id, protect, token));
     public async Task<ReleaseSyncWorkView> ScheduleAsync(Guid id, string? tag, bool automatic, CancellationToken token)
     {
-        var binding = await Binding(id, token); var now = clock.GetUtcNow();
+        var binding = await Binding(id, token);
+        if (!ToBinding(binding).Enabled) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        var now = clock.GetUtcNow();
         var existing = await repository.FindAsync(binding.Id, tag, tag is null, token);
         if (existing is not null)
         { if (!automatic && tag is not null) { existing.Retry(now); binding.Track(existing.Id); } return View(existing); }
@@ -42,12 +99,12 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     public Task<IReadOnlyList<Guid>> PendingAsync(Guid id, CancellationToken token) => repository.PendingAsync(id, clock.GetUtcNow(), token);
     public async Task<GitLabWork?> ClaimAsync(Guid id, Guid leaseToken, CancellationToken token)
     {
-        var known = await Existing(id, false, token); await Binding(known.SoftwareId, token);
+        var known = await Existing(id, false, token); await WorkBinding(known, token);
         var work = await Existing(id, true, token); return work.Claim(leaseToken, clock.GetUtcNow(), options.LeaseSeconds) ? Work(work) : null;
     }
     public async Task<GitLabWork> ProtectAsync(GitLabLease lease, CancellationToken token)
     {
-        var known = await Existing(lease.WorkId, false, token); await Binding(known.SoftwareId, token);
+        var known = await Existing(lease.WorkId, false, token); await WorkBinding(known, token);
         var work = await Existing(lease.WorkId, true, token);
         if (!work.Owns(lease.Token, lease.Generation, clock.GetUtcNow())) throw new RequestRejectedException(RequestFailure.InvalidState);
         work.Renew(clock.GetUtcNow().AddSeconds(options.LeaseSeconds)); return Work(work);
@@ -56,10 +113,10 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     {
         await ProtectAsync(lease, token); var work = await Existing(lease.WorkId, true, token);
         if (work.Kind != "Scan" || next is { } page && (page != work.Page + 1 || page > options.MaxPages)) throw new RequestRejectedException(RequestFailure.InvalidState);
-        var binding = await Binding(work.SoftwareId, token); var candidate = GitLabFacts.Decode(work.CandidateJson);
+        var binding = await WorkBinding(work, token); var candidate = GitLabFacts.Decode(work.CandidateJson);
         foreach (var fact in facts)
         {
-            ValidateFact(options.Require(work.SoftwareId), fact);
+            ValidateFact(ToBinding(binding), fact);
             if (work.InitialScan)
             { if (candidate is null || GitLabVersions.Compare(fact.Manifest.Version, candidate.Manifest.Version) > 0) candidate = fact; }
         }
@@ -95,7 +152,7 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     public async Task<ReleaseView> RegisterAsync(GitLabLease lease, GitLabReleaseFacts facts, Guid packageId, CancellationToken token)
     {
         await ProtectAsync(lease, token); var work = await Existing(lease.WorkId, true, token);
-        var config = options.Require(work.SoftwareId); ValidateFact(config, facts);
+        var config = ToBinding(await WorkBinding(work, token)); ValidateFact(config, facts);
         if (work.Kind != "Import" || work.Tag != facts.Manifest.Tag) throw new RequestRejectedException(RequestFailure.InvalidState);
         var existing = await repository.TagAsync(config.Id, work.Tag, token);
         if (existing is not null)
@@ -117,7 +174,7 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     public async Task DelayAsync(GitLabLease lease, string code, CancellationToken token)
     {
         await ProtectAsync(lease, token); var work = await Existing(lease.WorkId, true, token);
-        (await Binding(work.SoftwareId, token)).Error(code);
+        (await WorkBinding(work, token)).Error(code);
         work.Delay(code, clock.GetUtcNow().AddSeconds(options.PollSeconds), code == "VERSION_CONFLICT");
     }
     public async Task CompleteReleaseAsync(Guid id, Guid packageId, CancellationToken token)
@@ -125,7 +182,7 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
         RequireWrite(); var release = await releases.GetAsync(id, true, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         if (release.SourceKind != "GitLab" || release.PackageId != packageId || release.State == "Disabled") throw new RequestRejectedException(RequestFailure.InvalidState);
         if (await software.GetAsync(release.SoftwareId, true, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
-        var binding = await repository.BindingAsync(release.SoftwareId, true, token);
+        var binding = release.SourceBindingId is { } sourceId ? await repository.BindingByIdAsync(sourceId, true, token) : null;
         if (binding is null || binding.Id != release.SourceBindingId || binding.SubjectId != release.CreatedBy)
             throw new RequestRejectedException(RequestFailure.InvalidState);
         if (release.State == "Staging") release.OpenImportedFormal(clock.GetUtcNow());
@@ -135,15 +192,25 @@ internal sealed class ReleaseImports(IReleaseImportRepository repository, IRelea
     }
     private async Task<ReleaseSourceBinding> Binding(Guid id, CancellationToken token)
     {
-        RequireWrite(); var config = options.Require(id);
-        if (await software.GetAsync(id, true, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
-        var binding = await repository.BindingAsync(id, true, token);
-        if (binding is null) { binding = new(config.Id, id, config.SubjectId, config.BaseUri, config.ProjectId, config.PackageName); repository.Add(binding); }
-        else if (!Matches(binding, config)) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
-        return binding;
+        var resolved = await ResolveBindingAsync(id, null, true, token);
+        if (resolved is null || !options.IsAvailable(resolved)) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        return await repository.BindingByIdAsync(resolved.Id, true, token) ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
     }
-    private static bool Matches(ReleaseSourceBinding stored, GitLabBinding config) => stored.Id == config.Id && stored.SubjectId == config.SubjectId &&
-        stored.BaseUri == config.BaseUri && stored.ProjectId == config.ProjectId && stored.PackageName == config.PackageName;
+    private async Task<ReleaseSourceBinding> WorkBinding(ReleaseSyncWork work, CancellationToken token)
+    {
+        var resolved = await ResolveBindingAsync(work.SoftwareId, work.BindingId, true, token);
+        if (resolved is null || !options.IsAvailable(resolved)) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+        return await repository.BindingByIdAsync(work.BindingId, true, token) ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
+    }
+    private GitLabBinding ToBinding(ReleaseSourceBinding stored) => new(stored.Id, stored.SoftwareId, stored.SubjectId, stored.BaseUri,
+        stored.ProjectId, stored.PackageName, stored.Managed ? stored.Enabled : options.Bindings.Any(b => b.Id == stored.Id && b.Enabled),
+        stored.ConnectionId, stored.SourceRevision);
+    private ReleaseSourceView View(ReleaseSourceBinding stored)
+    {
+        var binding = ToBinding(stored); var available = options.IsAvailable(binding);
+        return new(stored.SoftwareId, "GitLab", binding.Enabled && available, stored.BaseUri, stored.ProjectId, stored.PackageName,
+            stored.LastSyncedAt, stored.LastErrorCode, stored.LatestWorkId, stored.Id, stored.ConnectionId, stored.Revision, available, stored.Managed);
+    }
     private static void ValidateFact(GitLabBinding binding, GitLabReleaseFacts facts)
     {
         if (!facts.Manifest.IsValid() || facts.Manifest.ProjectId != binding.ProjectId || facts.Manifest.PackageName != binding.PackageName ||

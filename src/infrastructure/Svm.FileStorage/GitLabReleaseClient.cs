@@ -97,8 +97,8 @@ public sealed class GitLabReleaseClient : IGitLabReleaseClient, IDisposable
     private async Task<HttpResponseMessage> Get(GitLabBinding binding, string path, bool package, CancellationToken token)
     {
         if (unit.CurrentOperationId is not null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting);
-        if (!options.Import.Bindings.Contains(binding) || !binding.Enabled) throw new RequestRejectedException(RequestFailure.PermissionDenied);
-        var credential = options.Credentials.Single(c => c.BindingId == binding.Id);
+        if (!options.Import.IsAvailable(binding)) throw new RequestRejectedException(RequestFailure.PermissionDenied);
+        var credential = options.Credential(binding);
         using var request = new HttpRequestMessage(HttpMethod.Get, Address(binding, path));
         request.Headers.Add(package ? "DEPLOY-TOKEN" : "PRIVATE-TOKEN", package ? credential.PackageToken : credential.ApiToken);
         HttpResponseMessage response;

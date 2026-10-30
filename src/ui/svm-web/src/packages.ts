@@ -8,7 +8,7 @@ export interface Release {
   testEvidenceId: string | null; publishReason: string | null; publishConclusion: string | null
   sourceKind?: 'Manual' | 'GitLab'; source?: { manifest: { tag: string; commitSha: string; pipelineId: number; jobId: number }; pipelineUrl: string; releasedAt: string } | null
 }
-export interface ReleaseSource { softwareId: string; kind: 'Manual' | 'GitLab'; enabled: boolean; baseUri: string | null; projectId: number | null; packageName: string | null; lastSyncedAt: string | null; lastErrorCode: string | null; latestWorkId: string | null }
+export interface ReleaseSource { softwareId: string; kind: 'Manual' | 'GitLab'; enabled: boolean; baseUri: string | null; projectId: number | null; packageName: string | null; lastSyncedAt: string | null; lastErrorCode: string | null; latestWorkId: string | null; bindingId?: string | null; connectionId?: string | null; revision?: number; configurationAvailable?: boolean; managed?: boolean; changeId?: string | null; blockingWorkIds?: string[] }
 export interface ReleaseSyncWork { id: string; softwareId: string; kind: string; tag: string | null; stage: string; lastErrorCode: string | null; releaseId: string | null; createdAt: string; completedAt: string | null; revision: number }
 export interface Package {
   id: string; releaseId: string; state: 'Uploading' | 'Verifying' | 'Ready' | 'Failed'; sizeBytes: number | null; sha256: string | null
@@ -35,3 +35,6 @@ export async function uploadPackage(path: string, file: File, csrf: string, sign
   }
   try { return await response.json() as Package } catch { throw new ApiError(0, 'CONNECTION_UNKNOWN') }
 }
+
+export interface ReleaseSourceOption { connectionId: string; connectionName: string; baseUri: string; projectId: number; projectName: string; packageName: string }
+export interface ReleaseSourceOptions { items: ReleaseSourceOption[]; nextPage: number | null; current: ReleaseSource }

@@ -35,13 +35,13 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
         try { var u = await f.Instances.Site.UserAsync(f.Instances.Site.Proof.SubjectId); await f.Instances.Site.SendAsync(new ReplaceUserPermissionsCommand(Guid.NewGuid(), u.Id, u.Revision, u.Permissions.Concat(new[] { "release.upload", "release.disable", "audit.read" }.Select(o => new PermissionView(f.SoftwareId, o))).ToArray(), "版本包夹具显式授权")); return f; }
         catch { await f.DisposeAsync(); throw; }
     }
-    internal ServiceProvider Provider(SessionProof? person = null, AccessProof? access = null, Guid? instance = null, Guid? work = null, string role = "Executor", string node = "node-a", IInterceptor? interceptor = null, bool auditFailure = false, GitLabImportOptions? gitLab = null, bool importer = false, ModuleOwner importOwner = ModuleOwner.Releases)
+    internal ServiceProvider Provider(SessionProof? person = null, AccessProof? access = null, Guid? instance = null, Guid? work = null, string role = "Executor", string node = "node-a", IInterceptor? interceptor = null, bool auditFailure = false, GitLabImportOptions? gitLab = null, bool importer = false, ModuleOwner importOwner = ModuleOwner.Releases, GitLabBinding? importBinding = null)
     {
         var s = new ServiceCollection(); if (importer) s.AddSvmPackageWorkerApplication(); else s.AddSvmPackageApplication();
         s.AddSvmPostgres(Database.WriterConnection).AddSvmReadPersistence(Database.ReaderConnection).AddSvmUserQueries().AddSvmCatalogQueries().AddSvmReleaseQueries();
         s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmPersonnelWorkAuthorization().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Instances.Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases().AddSvmPackages();
         s.AddSingleton(new PersonnelManagementOptions()); s.AddSingleton(Instances.Site.Options); s.AddSingleton(InstanceFixture.Limits); s.AddSingleton<TimeProvider>(Instances.Clock); s.AddSingleton(Limits); s.AddSingleton(Execution); s.AddSingleton(Nodes);
-        var context = new Context(person ?? Instances.Site.Proof, access, SoftwareId, instance, work, role, node, importer ? gitLab!.Bindings.Single() : null, importOwner);
+        var context = new Context(person ?? Instances.Site.Proof, access, SoftwareId, instance, work, role, node, importer ? importBinding ?? gitLab!.Bindings.Single() : null, importOwner);
         if (gitLab is not null) s.AddSingleton(gitLab); s.AddScoped<IGitLabServiceIdentity>(_ => context);
         s.AddScoped<ITrustedCallContextSource>(_ => context); s.AddScoped<ISessionProofSource>(_ => context); s.AddScoped<IAccessProofSource>(_ => context); s.AddScoped<IPackageServiceIdentity>(_ => context); s.AddScoped<IPackageDownloadProof>(_ => context); s.AddScoped<IPackageFiles, NoFiles>();
         s.AddSvmMessaging(OutboxFixture.Options(Instances.Site.Options.SiteId), delivery: false);
@@ -66,6 +66,7 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
     {
         private static readonly Guid Service = Guid.Parse("86c64021-789c-40a8-963d-6f3245174138");
         public Guid? BindingId => binding?.Id;
+        public long SourceRevision => binding?.SourceRevision ?? 1;
         public Guid SubjectId => Service; public string NodeId => node; public string Role => role; public SessionProof? Person => access is null ? human : null; public AccessProof? Instance => access;
         SessionProof? ISessionProofSource.Proof => access is null ? human : null; AccessProof? IAccessProofSource.Proof => access; public string SourceAddress => "package-fixture";
         public CallContextSnapshot GetCurrent() => binding is not null ? new(new(ActorKind.Service, binding.SubjectId, binding.SoftwareId, workOwner: importOwner, workId: work ?? binding.Id), RequestKind.Internal, Guid.NewGuid().ToString("N")) : work is not null ? new(new(ActorKind.Service, Service, workOwner: ModuleOwner.Packages, workId: work), RequestKind.Internal, Guid.NewGuid().ToString("N")) : access is not null ? new(new(access.Kind, instance, software, instance), RequestKind.Client, Guid.NewGuid().ToString("N")) : new(new(ActorKind.Human, human.SubjectId), RequestKind.Manage, Guid.NewGuid().ToString("N"));
