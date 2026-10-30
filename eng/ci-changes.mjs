@@ -8,7 +8,7 @@ export function changeImpact(files) {
   const code = changed.some(f => /^(src\/|eng\/|build\/|deploy\/|\.github\/|global\.json$|Directory\..*|SoftwareVersionManagement\.sln$|NuGet\.Config$)/.test(f));
   const tools = changed.some(f => /^(eng\/(bootstrap|toolchain|run|publish|test|delivery\.test|ci-changes)\.mjs$|Directory\.Build\.targets$|global\.json$|\.github\/)/.test(f));
   const web = changed.some(f => /^src\/ui\/svm-web\//.test(f));
-  const browser = changed.some(f => /^src\/ui\/svm-web\/(src\/|tests\/browser\/)/.test(f) || /^deploy\/linux\/verify-(ui|hardware|roles)\.mjs$/.test(f));
+  const browser = changed.some(f => /^src\/ui\/svm-web\/(src\/|tests\/browser\/)/.test(f) || /^deploy\/linux\/verify-(ui|hardware|roles|plc)\.mjs$/.test(f));
   return { code, tools, web, browser };
 }
 

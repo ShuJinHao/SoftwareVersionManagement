@@ -15,6 +15,8 @@ public static class InstanceAccessRegistration
     public static IServiceCollection AddSvmInstanceAccess(this IServiceCollection services)
     {
         services.TryAddSingleton(new InstanceAccessOptions());
+        services.TryAddSingleton(new Svm.Services.Contracts.Plc.PlcOptions());
+        services.AddScoped<Svm.Services.Contracts.Plc.IPlcUploadAccess, PlcUploadAccess>();
         return services.AddScoped<IInstanceAccess, InstanceAccess>();
     }
 }

@@ -1,3 +1,4 @@
+using Svm.Services.Contracts.Plc;
 using System.Reflection;
 using FluentValidation;
 using MediatR;
@@ -77,8 +78,8 @@ public sealed class RequestCatalog
         var mode = type == typeof(SubmitTaskReceiptCommand) ? IdempotencyMode.ReceiptSequence : type == typeof(PutTargetChunkCommand) ? IdempotencyMode.SelectionChunk :
             type == typeof(SubmitStatusReportCommand) ? IdempotencyMode.ReportSequence :
             type == typeof(RegisterInstanceCommand) || type == typeof(RecoverInstanceCommand) ? IdempotencyMode.EnrollmentProtocol :
-            management || catalogWrite || instanceWrite || PackageCapabilities.IsIdempotent(type) || TaskCapabilities.IsIdempotent(type) || (type == typeof(RequestReleaseSyncCommand) || type == typeof(ChangeReleaseSourceCommand)) ? IdempotencyMode.OperationResult : IdempotencyMode.None;
-        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite && !instanceWrite && !PackageCapabilities.IsWrite(type) && !TaskCapabilities.IsWrite(type) && !GitLabCapabilities.IsWrite(type)) || policy.Transaction != (type == typeof(UploadContentCommand) ? TransactionMode.PhasedFile : TransactionMode.DatabaseAtomic) ||
+            PlcCapabilities.IsIdempotent(type) || management || catalogWrite || instanceWrite || PackageCapabilities.IsIdempotent(type) || TaskCapabilities.IsIdempotent(type) || (type == typeof(RequestReleaseSyncCommand) || type == typeof(ChangeReleaseSourceCommand)) ? IdempotencyMode.OperationResult : IdempotencyMode.None;
+        if (isCommand ? (!PersonnelWriteCapabilities.Contains(type) && !management && !catalogWrite && !instanceWrite && !PackageCapabilities.IsWrite(type) && !TaskCapabilities.IsWrite(type) && !GitLabCapabilities.IsWrite(type) && !PlcCapabilities.IsWrite(type)) || policy.Transaction != (type == typeof(UploadContentCommand) || type == typeof(PlcUploadContentCommand) ? TransactionMode.PhasedFile : TransactionMode.DatabaseAtomic) ||
                 policy.Idempotency != mode
             : policy.Transaction != TransactionMode.ReadOnly || policy.Idempotency != IdempotencyMode.None)
             throw new InvalidOperationException("Only the closed personnel, catalog, instance-access and package writes are activated.");
@@ -103,6 +104,7 @@ public sealed class RequestCatalog
     {
         RequestKind.Session => actor is ActorKind.Anonymous or ActorKind.Human,
         RequestKind.Manage => actor is ActorKind.Human or ActorKind.ManagementSystem,
+        RequestKind.PlcUpload => actor == ActorKind.PlcUpload,
         RequestKind.Client => actor == ActorKind.Instance,
         RequestKind.Enrollment => actor == ActorKind.EnrollmentGrant,
         RequestKind.Recovery => actor == ActorKind.RecoveryGrant,

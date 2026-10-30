@@ -1,8 +1,8 @@
 namespace Svm.Services.Contracts.Framework;
 
 public enum ModuleOwner { Identity = 1, Releases, Packages, Instances, Tasks, Audit }
-public enum RequestKind { Session = 1, Manage, Client, Enrollment, Recovery, Internal }
-public enum ActorKind { Anonymous = 1, Human, ManagementSystem, Instance, EnrollmentGrant, RecoveryGrant, Service }
+public enum RequestKind { Session = 1, Manage, Client, Enrollment, Recovery, Internal, PlcUpload }
+public enum ActorKind { Anonymous = 1, Human, ManagementSystem, Instance, EnrollmentGrant, RecoveryGrant, Service, PlcUpload }
 public enum RequestScope { Global = 1, Software, Instance, InternalWork }
 public enum ValidationMode { Required = 1, ExplicitlyNone }
 public enum TransactionMode { ReadOnly = 1, DatabaseAtomic, PhasedFile }

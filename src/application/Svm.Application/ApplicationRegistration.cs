@@ -1,3 +1,5 @@
+using Svm.Services.Contracts.Plc;
+using Svm.Application.Plc;
 using Microsoft.Extensions.DependencyInjection;
 using Svm.Services.Contracts.Framework;
 using Svm.Services.CrossCutting.Registration;
@@ -64,7 +66,7 @@ public static class ApplicationRegistration
                 management && (PersonnelManagementCapabilities.Contains(b.RequestType) && !RoleCapabilities.IsWrite(b.RequestType) || b.RequestType == typeof(GetUserQuery) || b.RequestType == typeof(ListUsersQuery)) || siteCatalog && (RoleCapabilities.IsWrite(b.RequestType) || RoleCapabilities.IsQuery(b.RequestType)) ||
                 siteCatalog && (CatalogCapabilities.IsWrite(b.RequestType) || CatalogCapabilities.IsQuery(b.RequestType)) ||
                 instanceAccess && (InstanceCapabilities.IsWrite(b.RequestType) || InstanceCapabilities.IsQuery(b.RequestType)) ||
-                packageAccess && (PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType) || GitLabCapabilities.Contains(b.RequestType) && !GitLabCapabilities.IsInternal(b.RequestType)) || taskAccess && TaskCapabilities.Contains(b.RequestType))).ToArray());
+                packageAccess && (PlcCapabilities.Contains(b.RequestType) || PackageCapabilities.IsWrite(b.RequestType) || PackageCapabilities.IsQuery(b.RequestType) || GitLabCapabilities.Contains(b.RequestType) && !GitLabCapabilities.IsInternal(b.RequestType)) || taskAccess && TaskCapabilities.Contains(b.RequestType))).ToArray());
         services.AddScoped<IRequestAuthorizer, PersonnelAuthorization>();
         services.AddScoped<PersonnelCompletion>();
         if (management)
@@ -115,6 +117,16 @@ public static class ApplicationRegistration
         }
         if (packageAccess)
         {
+            services.AddScoped<PlcAuthorization>(); services.AddScoped<PlcUploadCompletion>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreatePlcCredentialCommand, OperationResult<PlcCredentialView>>, CreatePlcCredentialAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RevokePlcCredentialCommand, OperationResult<PlcCredentialView>>, RevokePlcCredentialAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<PublishPlcReleaseCommand, OperationResult<ReleaseView>>, PublishPlcReleaseAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RecordPlcUsageCommand, OperationResult<PlcUsageView>>, RecordPlcUsageAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<CreatePlcArchiveCommand, OperationResult<ReleaseUploadResult>>, CreatePlcArchiveAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<PlcBeginUploadCommand, OperationResult<UploadReceipt>>, PlcBeginUploadAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<PlcFinishUploadCommand, OperationResult<PackageView>>, PlcFinishUploadAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<PlcFailUploadCommand, OperationResult<PackageView>>, PlcFailUploadAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<PlcRetryPackageCommand, OperationResult<PackageView>>, PlcRetryPackageAdapter>();
             services.AddScoped<GitLabAuthorization>();
             services.AddScoped<IIdempotencyRequestAdapter<ChangeReleaseSourceCommand, OperationResult<ReleaseSourceView>>, ChangeReleaseSourceAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<RequestReleaseSyncCommand, OperationResult<ReleaseSyncWorkView>>, RequestReleaseSyncAdapter>();

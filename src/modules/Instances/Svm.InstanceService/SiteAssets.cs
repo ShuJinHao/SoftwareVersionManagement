@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Svm.Core.Instances;
 using Svm.Services.Contracts.Catalog;
 using Svm.Services.Contracts.Framework;
@@ -8,7 +9,11 @@ namespace Svm.InstanceService;
 
 public static class SiteAssetRegistration
 {
-    public static IServiceCollection AddSvmSiteAssets(this IServiceCollection services) => services.AddScoped<ISiteAssets, SiteAssets>().AddScoped<IHardwareAssets, HardwareAssets>().AddScoped<ISiteScopeFacts, SiteScopeFacts>();
+    public static IServiceCollection AddSvmSiteAssets(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        return services.AddScoped<ISiteAssets, SiteAssets>().AddScoped<IHardwareAssets, HardwareAssets>().AddScoped<Svm.Services.Contracts.Plc.IPlcUsage, PlcUsageService>().AddScoped<ISiteScopeFacts, SiteScopeFacts>();
+    }
 }
 internal sealed class SiteAssets(ISiteAssetRepository repository, IUnitOfWork unitOfWork, SiteCatalogOptions options) : ISiteAssets
 {

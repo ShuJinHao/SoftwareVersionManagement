@@ -76,7 +76,7 @@ cd artifacts/linux-demo/my-demo
 
 svm.sh 可在准备好的 Linux 目录独立运行，不依赖源码、SDK 或 Node。prepare 对发布物摘要进行复核后，生成独立构建上下文与运行配置。build 仅以固定 ASP.NET 运行镜像构建，不在镜像中安装开发工具。
 
-初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 14 份迁移（最后为 GitLabSourceManagement） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
+初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 15 份迁移（最后为 PlcArchives） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
 
 登录资料在私有 operator.json；初始账号仅有播种规则规定的权限，首次登录改密，再按职责明确分配资产和软件权限。工具不将真实账号或凭据输出到公共日志。不要公开这个目录、operator.json、连接配置、CA 私钥或服务私钥。
 
@@ -92,7 +92,7 @@ preview 只启动管理 API 与数据库，直接通过 HTTPS 访问；没有包
 - DataProtection 的 svm/ ApplicationName、保护证书与数据库密钥跨节点共享且稳定，不依赖安装路径。
 - SVM_HOST_CONFIG_FILE 提供公用 HTTPS 证书、KnownProxies 和私有 HealthPort。--validate-config 校验配置/注册后退出，不启动监听、消费者、业务循环或 DDL。
 - /health/live、/health/ready 仅在独立私有监听提供。--healthcheck 从容器内访问，运行镜像不需 curl/Node。
-- 数据库未达到当前 14 份迁移及 GitLabSourceManagement 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
+- 数据库未达到当前 15 份迁移及 PlcArchives 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
 - 证书角色覆盖与完整性增强仍暂缓；当前链验证、指纹、有效性和 mTLS 继续保留。
 
 直接执行 --validate-config 仍需完整挂载配置和准备日志目录；它不验证网络可达性。status、依赖 healthcheck 与后续 HTTPS 流程用于确认网络和数据库事实。
@@ -190,6 +190,23 @@ eng/node deploy/linux/verify-audit.mjs --deployment artifacts/linux-demo/audit-c
 
 本批定向浏览器入口：`eng/node deploy/linux/verify-roles.mjs --deployment artifacts/linux-demo/roles-and-site-scopes --results artifacts/test-results/roles-and-site-scopes/linux-demo`。仅允许明确 full/demo 环境。真实 HTTPS/API 准备两个工序、共用程序、独立实例和正式演示包，四类人员登录查看各自现场、产品权限、角色维护及本人权限；使用测试协议报告，不执行厂家安装。脚本保留私有 roles-fixture.json 和原操作检查点，未知写入停止，不自动重做；--resume 仅继续已确认阶段，--display-only 要求前次全部完成。凭据只在专属目录保管，公开证据无密码。
 
-CI 对本批精确网页选集和 verify-roles 执行浏览器验证；历史 verify-hardware 仅对应原硬件批次。按需复用未改变的消息与文件恢复证据；四角色演示不代表完整生产权限治理或现场验收。保留演示与故障/一次性资源分别登记。
+角色批次曾对精确网页选集和 verify-roles 执行浏览器验证；当前 PLC 批次使用下文 verify-plc，未受影响的角色与硬件证据继续保留。按需复用未改变的消息与文件恢复证据；四角色演示不代表完整生产权限治理或现场验收。保留演示与故障/一次性资源分别登记。
 
 GitLab 私有配置现在提供连接/项目/包允许目录；数据库保存人员维护的软件绑定。所有 HttpApi 与 Worker 应使用同一允许目录，配置变更后重启对应进程。升级第十四份迁移后，先预览旧文件转换，再显式接管软件来源；操作命令、文件权限及历史保留说明见 [GitLab 接入](../../eng/gitlab/README.md)。不要使用旧文件覆盖网页绑定；停止自动同步仍允许已有工作完成，删除连接可能暂停远端阶段。
+
+
+## PLC 归档配置与定向验证
+
+PLC 使用现有 full 部署的 API、Worker、PostgreSQL、RabbitMQ 和 Nginx，无新增服务或对 PLC 的网络连接。升级第十五份 PlcArchives 后，由管理员明确授予产品上传/发布/停用、plc.uploadCredential.manage 与现场 plc.verify、plc.usage.record；迁移不自动授权。已有目录、关联查看规则仍适用。
+
+API 启动时读取私有 `SVM_PLC_CONFIG_FILE`，JSON 仅包含 `uploadCredentialMaxLifetimeSeconds`（整数 1～31536000 秒）。部署人员显式选择上限；凭据每次签发还必须填写具体 expiresAt，不能以配置上限替代到期时间。缺少此配置拒绝新签发，不改变已有凭据期限或已接收工作的事实；错误字段/无效值明确返回 CONFIGURATION_INVALID。PLC 归档接口同时要求已有包能力完整配置，不因配置这个上限就打开包能力。秘密不放入公开模板或网页持久存储。
+
+独立演示在私有 settings 中增加 `"plc":{"uploadCredentialMaxLifetimeSeconds":86400}`；这是一日上限的演示选择，不是生产默认。prepare.mjs 为两个节点生成私有 plc.json 并设置上述环境变量。然后按本文 full 初始化流程执行迁移、播种、配置校验及启动。验证机运行：
+
+~~~sh
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node deploy/linux/verify-plc.mjs --deployment artifacts/linux-demo/plc-demo --results artifacts/test-results/plc-demo
+~~~
+
+verify-plc 只允许明确 full/demo 环境及虚构数据，依次验证固定控制器/主程序库、API 上传和双副本、协议范围、控制器下载、网页人工发布、独立现场登记、网页上传及凭据吊销。HEAD、Range 和完整下载校验 SHA-256；浏览器仅信任本演示叶证书 SPKI，API 正常验证 CA/主机名。私有 plc-fixture.json 保存原操作检查点和随机上传秘密，不公开；出现未知写入停止，`--resume` 只恢复已确认阶段，不能删检查点或更换键重做未核实写入。脱敏 summary.json 与截图可保留。
+
+该流程没有 PLC 在线状态、下装或更新任务，现场时间/使用内容由虚构人员提交，不等同真实控制器验证。完成后按 deployment.json 清理本次独占容器、网络、镜像、数据和私有材料，保持其他演示及开发数据不变。CI 使用同一 PLC 浏览器入口，架构门禁仍只在一个组合执行；未改变的消息/包恢复和角色流程复用既有证据。

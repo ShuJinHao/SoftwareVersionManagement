@@ -57,11 +57,11 @@ describe('hardware workspace',()=>{
   await vi.waitFor(()=>expect(root.querySelector('.work-heading .eyebrow')?.textContent).toBe('虚构厂区'))
   expect(document.querySelector('dialog')!.open).toBe(false);expect(root.textContent).toContain('工控机 A')
  })
- it('groups real software by IPC and keeps PLC as ledger without simulated state',async()=>{
+ it('groups IPC software and empty PLC program libraries without simulated state',async()=>{
   vi.stubGlobal('fetch',vi.fn(async(path:string)=>Response.json(fixture(path))));const {root}=await mount()
   await vi.waitFor(()=>expect(root.querySelectorAll('.hardware-section')).toHaveLength(2))
   expect(root.textContent).toContain('工控机 A');expect(root.textContent).toContain('上位机 A');expect(root.textContent).toContain('尚未登记')
-  const plc=[...root.querySelectorAll('.hardware-section')].find(x=>x.textContent?.includes('PLC 主控'))!;expect(plc.textContent).toContain('后续批次开放');expect(plc.querySelector('table')).toBeNull();expect(plc.textContent).not.toContain('在线')
+  const plc=[...root.querySelectorAll('.hardware-section')].find(x=>x.textContent?.includes('PLC 主控'))!;expect(plc.textContent).toContain('尚未关联主程序库');expect(plc.querySelector('table')).not.toBeNull();expect(plc.textContent).not.toContain('在线')
  })
  it('creates device with automatic code and preserves a fixed device for hardware writes',async()=>{
   const fetch=vi.fn(async(path:string,init?:RequestInit)=>Response.json(init?.method==='POST'?{...hardware,id:'new'}:fixture(path)));vi.stubGlobal('fetch',fetch)

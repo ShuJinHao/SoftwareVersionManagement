@@ -11,7 +11,7 @@ public sealed record CallActor
             throw new ArgumentException("Authenticated actors need an identity; anonymous actors have none.");
         if (softwareId == Guid.Empty || instanceId == Guid.Empty || workId == Guid.Empty)
             throw new ArgumentException("Scope identifiers cannot be empty.");
-        if (kind is ActorKind.Instance or ActorKind.EnrollmentGrant or ActorKind.RecoveryGrant && softwareId is null)
+        if (kind is ActorKind.Instance or ActorKind.EnrollmentGrant or ActorKind.RecoveryGrant or ActorKind.PlcUpload && softwareId is null)
             throw new ArgumentException("This actor is bound to a software scope.");
         if (kind is ActorKind.Instance or ActorKind.RecoveryGrant && instanceId is null)
             throw new ArgumentException("This actor is bound to an instance.");

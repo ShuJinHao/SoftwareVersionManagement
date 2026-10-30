@@ -11,7 +11,7 @@ using Svm.Application.Releases;
 namespace Svm.Application.Personnel;
 
 internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessionProofSource proofSource, IUnitOfWork unitOfWork,
-    IPersonnelAdministration? administration = null, Svm.Application.Catalog.CatalogAuthorization? catalog = null, IRoleAuthorization? roles = null, InstanceAuthorization? instanceAuthorization = null, PackageAuthorization? packageAuthorization = null, Svm.Application.Tasks.TaskAuthorization? taskAuthorization = null, GitLabAuthorization? gitLab = null) : IRequestAuthorizer
+    IPersonnelAdministration? administration = null, Svm.Application.Catalog.CatalogAuthorization? catalog = null, IRoleAuthorization? roles = null, InstanceAuthorization? instanceAuthorization = null, PackageAuthorization? packageAuthorization = null, Svm.Application.Tasks.TaskAuthorization? taskAuthorization = null, GitLabAuthorization? gitLab = null, Svm.Application.Plc.PlcAuthorization? plc = null) : IRequestAuthorizer
 {
     public async ValueTask<AuthorizationDecision> AuthorizeAsync(AuthorizationRequest request, CancellationToken cancellationToken)
     {
@@ -30,6 +30,8 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
         if (InstanceCapabilities.IsWrite(request.Request.GetType()) || InstanceCapabilities.IsQuery(request.Request.GetType()))
             if (request.Context.Actor.Kind is ActorKind.Instance or ActorKind.EnrollmentGrant or ActorKind.RecoveryGrant)
                 return instanceAuthorization is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await instanceAuthorization.MachineAsync(request, cancellationToken);
+        if (request.Context.Actor.Kind == ActorKind.PlcUpload)
+            return plc is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await plc.AuthorizeAsync(request, null, cancellationToken);
         if (request.Context.Actor.Kind == ActorKind.Anonymous)
             return request.Request is AnonymousSessionQuery or LoginCommand ? AuthorizationDecision.Allow(AuthorizationTarget.Global()) :
                 AuthorizationDecision.Deny(RequestFailure.AuthenticationRequired);
@@ -50,6 +52,8 @@ internal sealed class PersonnelAuthorization(IPersonnelService personnel, ISessi
             return AuthorizationDecision.Allow(AuthorizationTarget.Global());
         if (person.MustChangePassword) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
         if (request.Request is GetMyAuthorizationQuery) return AuthorizationDecision.Allow(AuthorizationTarget.Global());
+        if (Svm.Services.Contracts.Plc.PlcCapabilities.Contains(request.Request.GetType()))
+            return plc is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await plc.AuthorizeAsync(request, person, cancellationToken);
         if (GitLabCapabilities.Contains(request.Request.GetType()))
             return gitLab is null ? AuthorizationDecision.Deny(RequestFailure.ConfigurationInvalid) : await gitLab.AuthorizeAsync(request, person, cancellationToken);
         if (Svm.Services.Contracts.Tasks.TaskCapabilities.Contains(request.Request.GetType()))

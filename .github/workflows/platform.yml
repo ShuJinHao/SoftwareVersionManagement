@@ -1,7 +1,7 @@
 name: Platform delivery
 on:
   pull_request:
-    branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace]
+    branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace, codex/gitlab-source-management]
     types: [opened, synchronize]
   workflow_dispatch:
 permissions:
@@ -40,7 +40,7 @@ jobs:
     env:
       SVM_SDK_VERSION: ${{ matrix.sdk }}
       CI: 'true'
-      SVM_WEB_TEST_NAMES: 'roles and site scopes|personnel access|uncertain management writes|deployment read ownership|deployment safe controls|restores a control work response|retains the final operation body|hardware workspace|workspace navigation and final facts'
+      SVM_WEB_TEST_NAMES: 'PLC archive workspace|groups IPC|release publication'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -103,14 +103,14 @@ jobs:
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.web == 'true'
         shell: bash
         run: |
-          eng/test web --file tests/roles-scopes.test.ts --file tests/hardware-workspace.test.ts --file tests/deployments.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
-          eng/test web --file tests/roles-scopes.test.ts --file tests/hardware-workspace.test.ts --file tests/deployments.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
-          eng/test web --file tests/roles-scopes.test.ts --file tests/hardware-workspace.test.ts --file tests/deployments.test.ts --file tests/personnel.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
+          eng/test web --file tests/plc-workspace.test.ts --file tests/hardware-workspace.test.ts --file tests/publication.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
+          eng/test web --file tests/plc-workspace.test.ts --file tests/hardware-workspace.test.ts --file tests/publication.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
+          eng/test web --file tests/plc-workspace.test.ts --file tests/hardware-workspace.test.ts --file tests/publication.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
       - name: Targeted Linux UI browser verification
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash
         run: |
-          eng/node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('deploy/linux/demo-settings.json'));fs.mkdirSync('artifacts/linux-demo',{recursive:true});fs.writeFileSync('artifacts/linux-demo/ui-settings.json',JSON.stringify(s));"
+          eng/node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('deploy/linux/demo-settings.json'));s.plc={uploadCredentialMaxLifetimeSeconds:86400};fs.mkdirSync('artifacts/linux-demo',{recursive:true});fs.writeFileSync('artifacts/linux-demo/ui-settings.json',JSON.stringify(s));"
           eng/node deploy/linux/prepare.mjs --demo --settings artifacts/linux-demo/ui-settings.json --release artifacts/releases/ci --output artifacts/linux-demo/ci
           artifacts/linux-demo/ci/svm.sh build
           artifacts/linux-demo/ci/svm.sh pull
@@ -123,7 +123,7 @@ jobs:
           artifacts/linux-demo/ci/svm.sh validate
           artifacts/linux-demo/ci/svm.sh up
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node src/ui/svm-web/node_modules/playwright/cli.js install --with-deps chromium
-          eng/node deploy/linux/verify-roles.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
+          eng/node deploy/linux/verify-plc.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
       - name: Stop owned demo resources
         if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash

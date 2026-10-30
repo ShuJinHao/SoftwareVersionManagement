@@ -10,6 +10,8 @@ import { pendingWriteKey } from '../mutation'
 import { hashFile } from '../packages/hashFile'
 import type { ReleaseSource, ReleaseSyncWork, ReleaseSourceOption, ReleaseSourceOptions } from '../packages'
 import { createReadScope } from '../reading'
+import PlcPublication from '../components/PlcPublication.vue'
+import { plcDownload } from '../plc'
 import OperationStatus from '../components/OperationStatus.vue'
 
 const route = useRoute(), session = useSession(), mutation = useProtectedMutation()
@@ -25,7 +27,8 @@ const file = ref<File | null>(null), digest = ref(''), hashedBytes = ref(0), has
 const registered = ref<ReleaseUpload | null>(null), maxBytes = ref<number | null>(null), actionReason = ref('')
 const chosenEvidence = ref(''), publishReason = ref(''), publishConclusion = ref('')
 const source = ref<ReleaseSource | null>(null), syncWork = ref<ReleaseSyncWork | null>(null), historicalTag = ref('')
-const canManageSource = computed(() => session.can('release.source.manage', softwareId))
+const isPlc = computed(() => software.value?.category === 'PLC')
+const canManageSource = computed(() => !isPlc.value && session.can('release.source.manage', softwareId))
 const sourceDialog = ref<HTMLDialogElement | null>(null), sourceOptions = ref<ReleaseSourceOption[]>([])
 const sourceSearch = ref(''), sourceAppliedSearch = ref(''), sourceNextPage = ref<number | null>(null), sourceOptionsLoading = ref(false)
 const sourceDraft = ref<{ softwareId: string; softwareName: string; revision: number; stamp: string; selected: ReleaseSourceOption | null; enabled: boolean; reason: string; blocking: string[] } | null>(null)
@@ -33,10 +36,10 @@ const sourceStamp = computed(() => JSON.stringify([session.current?.subjectId, s
 const sourceDraftValid = computed(() => canManageSource.value && sourceDraft.value?.stamp === sourceStamp.value)
 let sourceReturnFocus: HTMLElement | null = null
 const canSync = computed(() => source.value?.kind === 'GitLab' && source.value.enabled && session.can('release.upload', softwareId))
-const canPublish = computed(() => source.value?.kind === 'Manual' && session.can('release.publish', softwareId))
+const canPublish = computed(() => (isPlc.value || source.value?.kind === 'Manual') && session.can('release.publish', softwareId))
 const publishReady = computed(() => selected.value?.state === 'Test' && pkg.value?.state === 'Ready' && pkg.value.healthyReplicaCount === 2 && pkg.value.sizeBytes === pkg.value.expectedSize && pkg.value.sha256 === pkg.value.expectedSha256)
-const locked = computed(() => mutation.blocked.value || uploading.value || uploadUnknown.value)
-const canUpload = computed(() => source.value?.kind === 'Manual' && session.can('release.upload', softwareId)), canDisable = computed(() => session.can('release.disable', softwareId))
+const locked = computed(() => globalPending.value || mutation.blocked.value || uploading.value || uploadUnknown.value)
+const canUpload = computed(() => (isPlc.value || source.value?.kind === 'Manual') && session.can('release.upload', softwareId)), canDisable = computed(() => session.can('release.disable', softwareId))
 const canRead = computed(() => session.can('software.read', softwareId)), canAudit = computed(() => session.can('audit.read', softwareId))
 const detailLoading = ref(false), evidenceLoading = ref(false), auditLoading = ref(false), syncLoading = ref(false)
 const listRead = createReadScope(), detailRead = createReadScope(), evidenceRead = createReadScope(), auditRead = createReadScope(), sourceRead = createReadScope(), syncRead = createReadScope(), initialRead = createReadScope(), uploadVerificationRead = createReadScope()
@@ -59,6 +62,8 @@ async function loadSource() {
   if (!canRead.value || disposed) return false
   const ticket = startRead(sourceRead), previousWorkId = syncWork.value?.id
   try {
+    if (!software.value) { const product = await read<Software>(`/api/v1/manage/software/${softwareId}`,ticket); if(!current(ticket))return false; software.value=product }
+    if (isPlc.value) { source.value=null; return true }
     const info = await read<ReleaseSource>(`/api/v1/manage/software/${softwareId}/release-source`, ticket)
     const work = (!syncWork.value || syncWork.value.kind === 'Scan' && syncWork.value.stage === 'Completed') && info.latestWorkId
       ? await read<ReleaseSyncWork>(`/api/v1/manage/release-sync-work/${info.latestWorkId}`, ticket) : null
@@ -169,7 +174,7 @@ async function detail(id: string, preservePages = false) {
     if (release.softwareId !== softwareId || release.id !== id) throw new Error('版本不属于当前软件。')
     const [packageInfo, proof, auditPage] = await Promise.all([
       read<Package>('/api/v1/manage/packages/' + release.packageId, ticket),
-      preserve ? null : read<Page<TestEvidence>>(`/api/v1/manage/releases/${id}/test-evidence?pageSize=50`, ticket),
+      preserve || isPlc.value ? null : read<Page<TestEvidence>>(`/api/v1/manage/releases/${id}/test-evidence?pageSize=50`, ticket),
       !preserve && allowedAudit ? read<Page<DownloadAudit>>('/api/v1/manage/audit-events?' + new URLSearchParams({ softwareId, pageSize: '50' }), ticket) : null,
     ])
     if (!ownsDetail()) return
@@ -329,7 +334,7 @@ onMounted(async () => {
 onUnmounted(() => { disposed = true; for (const scope of readScopes) scope.invalidate(); globalPending.value = false; hashAbort?.abort(); uploadAbort?.abort(); file.value = null; window.removeEventListener('beforeunload', unload); if (poll) clearTimeout(poll) })
 </script>
 <template>
-  <RouterLink v-if="session.can('deployment.create',softwareId) || session.can('instance.read',softwareId)" class="text-link" :to="{ path: '/deployments', query: { softwareId, releaseId: selected?.state === 'Formal' ? selected.id : undefined } }">正式版本更新投放</RouterLink>
+  <RouterLink v-if="!isPlc && (session.can('deployment.create',softwareId) || session.can('instance.read',softwareId))" class="text-link" :to="{ path: '/deployments', query: { softwareId, releaseId: selected?.state === 'Formal' ? selected.id : undefined } }">正式版本更新投放</RouterLink>
   <section class="workspace">
     <div class="page-heading"><div><div class="eyebrow">软件版本</div><h1>{{ software?.name ?? '版本与安装包' }}</h1><p v-if="software" class="muted">{{ software.code }} · {{ categoryName(software.category) }} · 同软件设备共用版本库</p></div><button v-if="canUpload" class="primary" :disabled="locked || !maxBytes" @click="begin">登记版本并上传</button></div>
     <p v-if="failure" class="error" role="alert">{{ failure }}</p><p v-if="notice" class="success" role="status">{{ notice }}</p>
@@ -345,6 +350,7 @@ onUnmounted(() => { disposed = true; for (const scope of readScopes) scope.inval
       <p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">原操作键和正文保留在本页内存中，请人工核实，页面不会自动重发。</p>
       <div v-if="syncWork"><p>{{ syncWork.tag ?? '发布扫描' }} · {{ syncStages[syncWork.stage] ?? syncWork.stage }}</p><p v-if="syncWork.lastErrorCode" class="error">{{ syncWork.lastErrorCode }}</p><p v-if="syncWork.stage === 'Completed'" class="muted">同步已完成；可刷新版本列表或查看导入版本，当前查看对象不会自动切换。</p><button :disabled="busy || syncLoading" @click="refreshSync">核对同步进度</button><button v-if="syncWork.releaseId" :disabled="locked" @click="detail(syncWork.releaseId)">查看导入版本</button></div>
     </section>
+    <p v-if="isPlc" class="state-card">PLC 人工归档：上传不透明程序包，双副本核对后开放测试。人员现场验证后转正式；下载不改变控制器使用版本。</p>
     <p v-if="source?.kind === 'Manual'" class="state-card" aria-label="版本来源配置">尚未绑定 GitLab。来源管理员可选择允许的项目及安装包；现有人工版本与历史继续保留。</p>
     <div class="dialog-actions"><button v-if="canManageSource" :disabled="locked || sourceOptionsLoading" @click="openSource">{{ source?.kind === 'GitLab' ? '管理 GitLab 来源' : '关联 GitLab 来源' }}</button></div>
     <dialog v-if="sourceDraft" ref="sourceDialog" @cancel.prevent="closeSource" aria-labelledby="source-dialog-title">
@@ -369,15 +375,16 @@ onUnmounted(() => { disposed = true; for (const scope of readScopes) scope.inval
         <footer class="pagination"><span>本页可查看 {{ items.length }} 项</span><div><button :disabled="loading || locked || cursors.length <= 1" @click="previous">上一页</button><button :disabled="loading || locked || !nextCursor" @click="next">下一页</button></div></footer>
       </section>
       <aside class="panel detail" aria-label="版本详情" :aria-busy="detailLoading"><p v-if="detailLoading" role="status">正在核对当前版本详情…</p><template v-if="selected"><h2>{{ selected.version }} <span class="badge">{{ releaseState(selected.state) }}</span></h2><p class="description">{{ selected.changeSummary }}</p><dl><div><dt>变更级别</dt><dd>{{ selected.changeLevel }}</dd></div><div><dt>变更原因</dt><dd>{{ selected.changeReason }}</dd></div><div><dt>修订</dt><dd>{{ selected.revision }}</dd></div><div v-if="selected.disabledAt"><dt>停用原因</dt><dd>{{ selected.disableReason }}</dd></div></dl>
-        <template v-if="pkg"><h3>安装包</h3><dl><div><dt>处理阶段</dt><dd>{{ packageStage(pkg.processingStage) }}</dd></div><div><dt>已核对副本</dt><dd>{{ pkg.healthyReplicaCount }} / 2</dd></div><div><dt>大小</dt><dd>{{ pkg.sizeBytes ?? '尚未确认' }} 字节（预期 {{ pkg.expectedSize }}）</dd></div><div><dt>SHA-256</dt><dd class="digest">{{ pkg.sha256 ?? '尚未确认' }}</dd></div></dl><p v-if="pkg.lastErrorCode" class="error">{{ pkg.lastErrorCode }}</p><a v-if="pkg.downloadAvailable && pkg.downloadPath" class="primary text-link" :href="pkg.downloadPath" download>下载安装包</a><p v-else class="muted">当前不可下载。首次开放下载须完成两个副本核对。</p>
+        <template v-if="pkg"><h3>安装包</h3><dl><div><dt>处理阶段</dt><dd>{{ packageStage(pkg.processingStage) }}</dd></div><div><dt>已核对副本</dt><dd>{{ pkg.healthyReplicaCount }} / 2</dd></div><div><dt>大小</dt><dd>{{ pkg.sizeBytes ?? '尚未确认' }} 字节（预期 {{ pkg.expectedSize }}）</dd></div><div><dt>SHA-256</dt><dd class="digest">{{ pkg.sha256 ?? '尚未确认' }}</dd></div></dl><p v-if="pkg.lastErrorCode" class="error">{{ pkg.lastErrorCode }}</p><a v-if="pkg.downloadAvailable && pkg.downloadPath" class="primary text-link" :href="isPlc && typeof route.query.bindingId==='string' ? plcDownload(route.query.bindingId,pkg.id) : pkg.downloadPath" download>下载安装包</a><p v-else class="muted">当前不可下载。首次开放下载须完成两个副本核对。</p>
           <button v-if="canUpload && selected.state === 'Staging' && ['AwaitingUpload', 'UploadFailed', 'Receiving'].includes(pkg.processingStage)" :disabled="locked" @click="resume">重传原版本安装包</button>
           <label v-if="canDisable && selected.state !== 'Disabled' || canUpload && pkg.processingStage === 'CopyFailed'">操作原因<input v-model="actionReason" maxlength="256" :disabled="locked" /></label>
           <div class="dialog-actions"><button v-if="canUpload && pkg.processingStage === 'CopyFailed'" :disabled="busy || !actionReason || uncertain && pendingAction !== 'retry'" @click="retry">{{ uncertain ? '核实原操作' : '重试副本工作' }}</button><button v-if="canDisable && selected.state !== 'Disabled'" :disabled="busy || !actionReason || uncertain && pendingAction !== 'disable'" @click="disable">{{ uncertain ? '核实原操作' : '停用版本' }}</button><button v-if="error && !uncertain" @click="refresh">加载最新详情</button></div><p v-if="error" class="error">{{ error }}</p><p v-if="uncertain" class="muted">结果待核实；原请求及操作键保留在当前页面内存中。</p>
         </template>
-        <section v-if="selected.publishedAt && selected.sourceKind !== 'GitLab'" class="publication-history" aria-labelledby="publication-history-title"><h3 id="publication-history-title">正式发布记录</h3><dl><div><dt>发布工号</dt><dd>{{ selected.publishedEmployeeNo }}</dd></div><div><dt>发布时间</dt><dd>{{ new Date(selected.publishedAt).toLocaleString() }}</dd></div><div><dt>通过原因</dt><dd>{{ selected.publishReason }}</dd></div><div><dt>测试结论</dt><dd class="conclusion">{{ selected.publishConclusion }}</dd></div><div><dt>证据标识</dt><dd>{{ selected.testEvidenceId }}</dd></div></dl></section>
-        <section v-if="selected.state === 'Test' && canPublish || uncertain && pendingAction === 'publish'" class="publication-panel" aria-labelledby="publication-title"><h3 id="publication-title">测试转正式</h3><p class="muted">选择此版本的真实安装证据并填写结论，工号和时间由平台记录。</p><p v-if="!publishReady" class="muted">发布需两个当前健康副本；请等待核对或修复后刷新详情。</p><p v-if="!evidence.length" class="muted">尚无可选择的安装证据，不能发布。</p><form @submit.prevent="publish"><fieldset :disabled="locked"><label>安装证据<select v-model="chosenEvidence" required><option value="" disabled>选择安装上报</option><option v-for="item in evidence" :key="item.id" :value="item.id">{{ item.installedVersion }} · {{ item.instanceId }} · {{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</option></select></label><label>测试通过原因<input v-model="publishReason" required maxlength="256" /></label><label>测试结论<textarea v-model="publishConclusion" required maxlength="2000" rows="3" /></label></fieldset><button class="primary" :disabled="busy || uncertain && pendingAction !== 'publish' || !uncertain && (!canPublish || !publishReady || !chosenEvidence || !publishReason.trim() || !publishConclusion.trim())">{{ uncertain ? '核实原发布操作' : '转为正式版' }}</button></form></section>
+        <section v-if="selected.publishedAt && selected.sourceKind !== 'GitLab'" class="publication-history" aria-labelledby="publication-history-title"><h3 id="publication-history-title">正式发布记录</h3><dl><div><dt>发布工号</dt><dd>{{ selected.publishedEmployeeNo }}</dd></div><div><dt>发布时间</dt><dd>{{ new Date(selected.publishedAt).toLocaleString() }}</dd></div><div><dt>通过原因</dt><dd>{{ selected.publishReason }}</dd></div><div><dt>测试结论</dt><dd class="conclusion">{{ selected.publishConclusion }}</dd></div><div><dt>证据标识</dt><dd>{{ selected.plcEvidenceId ?? selected.testEvidenceId }}</dd></div></dl></section>
+        <section v-if="!isPlc && (selected.state === 'Test' && canPublish || uncertain && pendingAction === 'publish')" class="publication-panel" aria-labelledby="publication-title"><h3 id="publication-title">测试转正式</h3><p class="muted">选择此版本的真实安装证据并填写结论，工号和时间由平台记录。</p><p v-if="!publishReady" class="muted">发布需两个当前健康副本；请等待核对或修复后刷新详情。</p><p v-if="!evidence.length" class="muted">尚无可选择的安装证据，不能发布。</p><form @submit.prevent="publish"><fieldset :disabled="locked"><label>安装证据<select v-model="chosenEvidence" required><option value="" disabled>选择安装上报</option><option v-for="item in evidence" :key="item.id" :value="item.id">{{ item.installedVersion }} · {{ item.instanceId }} · {{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</option></select></label><label>测试通过原因<input v-model="publishReason" required maxlength="256" /></label><label>测试结论<textarea v-model="publishConclusion" required maxlength="2000" rows="3" /></label></fieldset><button class="primary" :disabled="busy || uncertain && pendingAction !== 'publish' || !uncertain && (!canPublish || !publishReady || !chosenEvidence || !publishReason.trim() || !publishConclusion.trim())">{{ uncertain ? '核实原发布操作' : '转为正式版' }}</button></form></section>
         <section v-if="selected.sourceKind === 'GitLab' && selected.source"><h3>GitLab 发布来源</h3><dl><div><dt>正式 Tag</dt><dd>{{ selected.source.manifest.tag }}</dd></div><div><dt>提交 SHA</dt><dd class="digest">{{ selected.source.manifest.commitSha }}</dd></div><div><dt>源端发布时间</dt><dd>{{ new Date(selected.source.releasedAt).toLocaleString() }}</dd></div><div><dt>构建流水线</dt><dd><a :href="selected.source.pipelineUrl" target="_blank" rel="noopener noreferrer">{{ selected.source.manifest.pipelineId }}</a> · Job {{ selected.source.manifest.jobId }}</dd></div></dl><p class="muted">无需平台再次测试转正式，实际安装情况仍以实例上报为准。</p></section>
-        <h3>{{ selected.sourceKind === 'GitLab' ? '安装上报事实' : '测试安装证据' }}</h3><p class="muted">下载完成不代表安装成功；证据来自实例引用此版本的有效上报。</p><ul v-if="evidence.length" class="permission-list"><li v-for="item in evidence" :key="item.id">{{ item.installedVersion }} · {{ item.instanceId }}<small>{{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</small></li></ul><p v-else class="muted">尚无关联安装证据。</p><button v-if="evidenceNext" :disabled="evidenceLoading || locked" @click="moreEvidence">更多安装证据</button>
+        <PlcPublication v-if="isPlc" :key="selected.id" :release="selected" :ready="publishReady" @published="channel='Formal';load(true);detail($event.id)" />
+        <template v-else><h3>{{ selected.sourceKind === 'GitLab' ? '安装上报事实' : '测试安装证据' }}</h3><p class="muted">下载完成不代表安装成功；证据来自实例引用此版本的有效上报。</p><ul v-if="evidence.length" class="permission-list"><li v-for="item in evidence" :key="item.id">{{ item.installedVersion }} · {{ item.instanceId }}<small>{{ new Date(item.receivedAt).toLocaleString() }} · {{ item.reportedRunningState }}</small></li></ul><p v-else class="muted">尚无关联安装证据。</p><button v-if="evidenceNext" :disabled="evidenceLoading || locked" @click="moreEvidence">更多安装证据</button></template>
         <template v-if="canAudit"><h3>下载传输记录（已加载）</h3><ul v-if="audits.length" class="permission-list"><li v-for="item in audits" :key="item.requestId">{{ item.employeeNo ?? item.actorKind }} · {{ item.state }}<small>{{ item.bytesSent ?? '尚未取得可信结束记录' }} 字节 · {{ item.startedAt }}</small></li></ul><p v-else class="muted">已加载数据中无此版本的下载记录。</p><button v-if="auditNext" :disabled="auditLoading || locked" @click="moreAudit()">更多下载记录</button></template>
       </template><div v-else class="empty">选择版本，查看更新详情、包处理和关联证据。</div></aside>
     </div>

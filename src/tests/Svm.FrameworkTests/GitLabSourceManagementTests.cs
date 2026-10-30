@@ -189,10 +189,10 @@ public sealed class GitLabSourceManagementTests
             VALUES ('22222222-2222-4222-8222-222222222222','11111111-1111-4111-8111-111111111111','33333333-3333-4333-8333-333333333333','https://gitlab.example.invalid/',17,'fixture',true);
             """);
         var before = await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, "SELECT row_to_json(b)::text FROM rel.source_bindings b");
-        var result = await db.Runner.ApplyAsync(default); Assert.Equal(14, result.Applied.Count);
+        var result = await db.Runner.ApplyAsync(default); Assert.Equal(15, result.Applied.Count);
         Assert.True(await probe.CheckAsync(default));
         Assert.True(await probe.CheckAsync(default));
-        Assert.Equal(14, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
+        Assert.Equal(15, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         var after = await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, "SELECT row_to_json(b)::text FROM (SELECT \"Id\",\"SoftwareId\",\"SubjectId\",\"BaseUri\",\"ProjectId\",\"PackageName\",\"Initialized\",\"LastSyncedAt\",\"NextScanAt\",\"LatestWorkId\",\"LastErrorCode\" FROM rel.source_bindings) b");
         Assert.Equal(System.Text.Json.Nodes.JsonNode.Parse(before)!.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(after)!.ToJsonString());
         Assert.Equal(1, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM iam.permission_catalog WHERE \"Operation\"='release.source.manage'"));

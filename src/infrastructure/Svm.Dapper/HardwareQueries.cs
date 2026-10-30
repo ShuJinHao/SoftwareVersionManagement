@@ -8,7 +8,7 @@ using Svm.Services.Contracts.Tasks;
 namespace Svm.Dapper;
 
 internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope scope, TimeProvider? clock = null,
-    IFormalReleaseAvailability? availability = null, ITaskQueries? tasks = null) : IHardwareQueries
+    IFormalReleaseAvailability? availability = null, ITaskQueries? tasks = null, Svm.Services.Contracts.Plc.IPlcQueries? plc = null) : IHardwareQueries
 {
     private const string HardwareProjection = """
         SELECT h."Id",h."DeviceId",h."Type",h."Name",h."AssetNumber",h."ManagementIp",h."Revision"
@@ -60,7 +60,7 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
         ), visible AS (
           SELECT p.* FROM positions p JOIN rel.software s ON s."Id"=p."SoftwareId" JOIN ins.devices vd ON vd."Id"=p."DeviceId"
           WHERE iam.has_field(@subjectId,'software.read',vd."ProcessId",vd."Id",p."SoftwareId")
-            AND iam.has_field(@subjectId,'instance.read',vd."ProcessId",vd."Id",p."SoftwareId")
+            AND (s."Category"='PLC' OR iam.has_field(@subjectId,'instance.read',vd."ProcessId",vd."Id",p."SoftwareId"))
             AND iam.has_field(@subjectId,'asset.read',vd."ProcessId",vd."Id",NULL)
             AND (CAST(@softwareId AS uuid) IS NULL OR p."SoftwareId"=@softwareId)
             AND (CAST(@hardwareId AS uuid) IS NULL OR p."HardwareId"=@hardwareId)
@@ -120,6 +120,8 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
         { var latest = await availability.LatestAsync(selected.Select(x => x.SoftwareId).Distinct().ToArray(), token); foreach (var row in selected) row.LatestAvailableFormalReleaseId = latest.TryGetValue(row.SoftwareId, out var id) ? id : null; }
         if (tasks is not null)
         { var summaries = await tasks.LatestAsync(selected.Where(x => x.InstanceId is not null).Select(x => x.InstanceId!.Value).ToArray(), token); foreach (var row in selected) if (summaries.TryGetValue(row.Id, out var summary)) { row.LatestTaskId = summary.TaskId; row.LatestTaskResult = summary.Result; } }
+        var usage = plc is null ? new Dictionary<Guid,Svm.Services.Contracts.Plc.PlcUsageSummary>() : await plc.CurrentAsync(selected.Where(x=>x.Category=="PLC" && x.PositionId!=null).Select(x=>x.PositionId!.Value).ToArray(),token);
+        var versions = await session.QueryAsync<VersionRow>("SELECT \"Id\",(\"Major\"::text || '.' || \"Minor\"::text || '.' || \"Patch\"::text) AS \"Version\" FROM rel.releases WHERE \"Id\"=ANY(@ids)",new { ids=selected.Where(x=>x.LatestAvailableFormalReleaseId!=null).Select(x=>x.LatestAvailableFormalReleaseId!.Value).Distinct().ToArray() },token);
         var now = (clock ?? TimeProvider.System).GetUtcNow(); var site = scope.Site;
         var items = selected.Select(x =>
         {
@@ -128,7 +130,8 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
             HardwareBindingView? position = x.PositionId is { } pid ? new(pid, x.HardwareId!.Value, x.DeviceId, x.SoftwareId, true, x.InstanceId, x.PositionRevision!.Value) : null;
             return new WorkspaceInstallationView(x.RowId, new(x.DeviceId, x.DeviceNo, x.DeviceName, x.ProcessId, x.ProcessCode, x.ProcessName, site.SiteId, site.SiteName, x.DeviceRevision, x.DeviceAssetNumber), hardware, position,
                 new(x.SoftwareId, x.SoftwareCode, x.SoftwareName, x.Category, x.Description, x.LatestAvailableFormalReleaseId, x.SoftwareRevision),
-                x.InstanceId is null ? null : x.View(site, now), x.PositionId is null ? "PendingHardware" : x.InstanceId is null ? "NotRegistered" : "Registered");
+                x.InstanceId is null ? null : x.View(site, now), x.PositionId is null ? "PendingHardware" : x.Category=="PLC" ? usage.GetValueOrDefault(x.PositionId.Value)?.Current is null ? "PendingConfirmation" : "Confirmed" : x.InstanceId is null ? "NotRegistered" : "Registered")
+            { PlcUsage=x.PositionId is {} key?usage.GetValueOrDefault(key):null, LatestFormalVersion=versions.FirstOrDefault(v=>v.Id==x.LatestAvailableFormalReleaseId)?.Version };
         }).ToArray();
         return new(items, rows.Count > input.PageSize ? new(selected[^1].SoftwareCode, selected[^1].RowId) : null, total);
     }
@@ -141,6 +144,7 @@ internal sealed class HardwareQueries(ReadQuerySession session, CatalogReadScope
         public int HardwareCount {get;set;} public int InstallationCount {get;set;} public int PendingLocationCount {get;set;} public int NeverReportedCount {get;set;} public int UnknownCount {get;set;}
         internal DeviceView View(SiteView site) => new(Id,DeviceNo,Name,ProcessId,ProcessCode,ProcessName,site.SiteId,site.SiteName,Revision,AssetNumber);
     }
+    private sealed record VersionRow(Guid Id,string Version);
     private sealed class PositionRow : InstanceRow
     {
         public Guid RowId {get;set;} public Guid? PositionId {get;set;} public long? PositionRevision {get;set;} public Guid? InstanceId {get;set;}

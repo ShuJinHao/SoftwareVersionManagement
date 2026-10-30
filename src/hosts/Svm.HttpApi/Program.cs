@@ -68,6 +68,7 @@ public partial class Program
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddScoped<InstanceCursor>();
         builder.Services.AddSingleton(InstanceAccessConfiguration.LoadFromEnvironment());
+        builder.Services.AddSingleton(PlcConfiguration.LoadFromEnvironment());
         builder.Services.AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases();
         builder.Services.AddSingleton(personnel.Management);
         builder.Services.AddScoped<UserCursor>();
@@ -162,6 +163,7 @@ public partial class Program
         app.MapSiteCatalog();
         app.MapInstanceAccess();
         app.MapPackages(packageFiles is not null);
+        Svm.HttpApi.Plc.PlcEndpoints.MapPlc(app, packageFiles is not null);
         app.MapGitLabReleases(packageFiles is not null);
         app.MapTasks(taskOptions is not null);
         app.MapPackageInternal(packageFiles is not null);

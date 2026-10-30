@@ -29,12 +29,12 @@ internal sealed class HardwareAssets(IHardwareRepository repository, ISiteAssetR
     public async Task<HardwareBindingView> BindAsync(Guid hardwareId, Guid softwareId, CancellationToken token)
     {
         RequireWrite(); var h = await Existing(hardwareId, true, token);
-        if (h.Type != "IPC") throw Reject(RequestFailure.InvalidState);
+        if (h.Type == "PLC" && await repository.HasActivePlcBindingAsync(hardwareId, token)) throw Reject(RequestFailure.InvalidState);
         var parent = await sites.BindingAsync(h.DeviceId.Value, softwareId, true, token);
         if (parent is null) { parent = new(new(Guid.NewGuid()), h.DeviceId, softwareId); sites.AddBinding(parent); }
         else if (!parent.IsActive) parent.Reactivate();
         var value = await repository.BindingAsync(hardwareId, softwareId, true, token);
-        if (value is null) { value = new(new(Guid.NewGuid()), h.Id, parent.Id, softwareId); repository.Add(value); }
+        if (value is null) { value = new(new(Guid.NewGuid()), h.Id, parent.Id, softwareId, h.Type); repository.Add(value); }
         else { if (value.IsActive || value.InstanceId is not null) throw Reject(RequestFailure.InvalidState); value.Reactivate(); }
         return View(value, h.DeviceId.Value);
     }

@@ -57,6 +57,9 @@ internal static class PackageInternalEndpoints
             var packageId = HeaderId(http, "X-Svm-Package-Id"); Bind(http, packageId, "Gateway"); PackageEndpoints.Empty(http);
             if (http.Request.Headers.Authorization.Count > 0 && (http.Request.Cookies.ContainsKey(SessionEndpoints.CookieName) || proof.Instance is null))
                 throw new RequestRejectedException(RequestFailure.CredentialInvalid);
+            Guid? plcBinding = null;
+            if (http.Request.Headers.TryGetValue("X-Svm-Plc-Binding", out var plc) && !string.IsNullOrEmpty(plc.ToString()))
+                plcBinding = plc.Count == 1 && Guid.TryParseExact(plc[0], "D", out var binding) && binding != Guid.Empty ? binding : throw Invalid();
             var node = Header(http, "X-Svm-Node-Id"); var peer = (PackagePeer)http.Items[HttpPackageIdentity.PeerItem]!;
             var method = Header(http, "X-Svm-Original-Method");
             if (method is not ("GET" or "HEAD") || node != peer.NodeId) throw new RequestRejectedException(RequestFailure.PermissionDenied);
@@ -70,13 +73,13 @@ internal static class PackageInternalEndpoints
             {
                 // Check the original caller before probing files or registering a repair intent.
                 // HEAD performs current authorization without creating a download fact.
-                try { await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, true), token); }
+                try { await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, true, PlcBindingId: plcBinding), token); }
                 catch (RequestRejectedException e) when (e.Failure == RequestFailure.NoHealthyReplica) { }
                 var p = await executor.SendAsync(new InspectReplicaQuery(packageId), token);
                 var verifiedNode = await FirstHealthy(files, executor, options, p, localOnly, token);
                 // Recheck current authorization/disable state and bind this request to the node
                 // actually verified above. Cached health cannot select a different replica.
-                var result = await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, method == "HEAD", verifiedNode), token);
+                var result = await executor.SendAsync(new AuthorizeDownloadCommand(packageId, requestId, node, generation, method == "HEAD", verifiedNode, plcBinding), token);
                 http.Response.Headers["X-Svm-Replica-Uri"] = result.Value.InternalUri;
                 http.Response.Headers["X-Svm-Download-Authorized"] = method == "GET" ? "1" : "0";
                 http.Response.Headers["X-Svm-Sha256"] = result.Value.Sha256;

@@ -7,7 +7,7 @@ public sealed class SoftwareProduct(StrongId<SoftwareProduct> id, string code, s
 {
     public string Code { get; private set; } = Required(code);
     public string Name { get; private set; } = Required(name);
-    public string Category { get; private set; } = category is "UpperComputer" or "Vision" ? category : throw new ArgumentException("Invalid software category.");
+    public string Category { get; private set; } = category is "UpperComputer" or "Vision" or "PLC" ? category : throw new ArgumentException("Invalid software category.");
     public string? Description { get; private set; } = description;
     public long Revision { get; private set; } = 1;
     public void Update(string name, string? description) { Name = Required(name); Description = description; Revision++; }

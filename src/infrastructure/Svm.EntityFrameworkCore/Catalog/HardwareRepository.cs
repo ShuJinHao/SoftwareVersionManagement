@@ -25,6 +25,8 @@ internal sealed class HardwareRepository(SvmDbContext context, IUnitOfWork unit)
         var query = context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"HardwareId\"={0} AND \"SoftwareId\"={1}" + (protect ? " FOR UPDATE" : ""), hardwareId, softwareId);
         return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
     }
+    public Task<bool> HasActivePlcBindingAsync(Guid hardwareId, CancellationToken token) =>
+        context.Set<HardwareSoftwareBinding>().AnyAsync(x => x.HardwareId == new Svm.SharedKernel.Domain.StrongId<HardwareAsset>(hardwareId) && x.IsActive && x.HardwareType == "PLC", token);
     public void Add(HardwareAsset hardware) { RequireWrite(); context.Add(hardware); }
     public void Add(HardwareSoftwareBinding binding) { RequireWrite(); context.Add(binding); }
     private void RequireWrite()

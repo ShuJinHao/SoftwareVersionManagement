@@ -12,7 +12,7 @@ public static class ReleaseRegistration
     public static IServiceCollection AddSvmReleases(this IServiceCollection services)
     {
         services.TryAddSingleton(GitLabImportOptions.Disabled);
-        return services.AddScoped<IReleases, Releases>().AddScoped<IReleaseImports, ReleaseImports>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
+        return services.AddScoped<Svm.Services.Contracts.Plc.IPlcPublication, PlcPublicationService>().AddScoped<IReleases, Releases>().AddScoped<IReleaseImports, ReleaseImports>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
     }
 }
 internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRepository software,
@@ -21,15 +21,17 @@ internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRe
     public async Task<IReadOnlyList<ReleaseView>> FormalCandidatesAsync(Guid id, CancellationToken token) => (await repository.FormalCandidatesAsync(id, token)).Select(View).ToArray();
     public async Task<Guid?> SoftwareForAsync(Guid id, bool protect, CancellationToken token) => (await repository.GetAsync(id, protect, token))?.SoftwareId;
     public async Task<ReleaseView> GetAsync(Guid id, bool protect, CancellationToken token) => View(await Existing(id, protect, token));
-    public async Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token)
+    public async Task<ReleaseView> CreateAsync(CreateReleaseCommand input, Guid packageId, Guid actorId, CancellationToken token, Svm.Services.Contracts.Plc.PlcScope? plcUploadScope = null)
     {
         RequireWrite();
-        if (await software.GetAsync(input.SoftwareId, true, token) is null) throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        var product = await software.GetAsync(input.SoftwareId, true, token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
         var number = SoftwareRelease.Next(await repository.LatestAsync(input.SoftwareId, token), input.ChangeLevel);
         if (input.ExpectedVersion is { } expected && expected != $"{number.Major}.{number.Minor}.{number.Patch}")
             throw new RequestRejectedException(RequestFailure.VersionConflict);
         var release = new SoftwareRelease(Guid.NewGuid(), input.SoftwareId, number.Major, number.Minor, number.Patch,
             input.ChangeLevel, input.ChangeSummary, input.ChangeReason, packageId, actorId, clock.GetUtcNow());
+        if (product.Category == "PLC") release.SetPlcSource();
+        if (plcUploadScope is { } plc) release.BindPlcUpload(plc.BindingId, plc.BindingRevision);
         repository.Add(release); return View(release);
     }
     public async Task<ReleaseView> DisableAsync(Guid id, long revision, string reason, CancellationToken token)
@@ -64,5 +66,5 @@ internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRe
     private void RequireWrite() { if (unit.CurrentOperationId is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
     internal static ReleaseView View(SoftwareRelease r) => new(r.Id.Value, r.SoftwareId, r.Version, r.State, r.ChangeLevel,
         r.ChangeSummary, r.ChangeReason, r.PackageId, false, r.CreatedBy, r.CreatedAt, r.DisabledAt, r.DisableReason, r.Revision,
-        r.PublishedBy, r.PublishedEmployeeNo, r.PublishedAt, r.TestEvidenceId, r.PublishReason, r.PublishConclusion, r.SourceKind, GitLabFacts.Decode(r.SourceFactsJson));
+        r.PublishedBy, r.PublishedEmployeeNo, r.PublishedAt, r.TestEvidenceId, r.PublishReason, r.PublishConclusion, r.SourceKind, GitLabFacts.Decode(r.SourceFactsJson), r.PlcEvidenceId);
 }

@@ -62,6 +62,7 @@ internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog so
         var selectionId = x.Request switch { PutTargetChunkCommand t => t.SelectionId, SealTargetSelectionCommand t => t.SelectionId, GetTargetSelectionQuery t => t.SelectionId, _ => (Guid?)null };
         if (selectionId is { } sel && await tasks.OwnerAsync("selection", sel, ct) != person.SubjectId) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if (!await software.ExistsAsync(sid.Value, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+        if ((await software.GetAsync(sid.Value, false, ct)).Category == "PLC") return AuthorizationDecision.Deny(RequestFailure.InvalidState);
         if (x.Request is RecordIntegrationMaterialCommand material) await releases.GetAsync(material.ReleaseId, protect, ct);
         return AuthorizationDecision.Allow(AuthorizationTarget.Software(sid.Value));
     }

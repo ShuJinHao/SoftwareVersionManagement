@@ -7,7 +7,7 @@ namespace Svm.IdentityService;
 public static class PersonnelWorkRegistration
 {
     public static IServiceCollection AddSvmPersonnelWorkAuthorization(this IServiceCollection services) =>
-        services.AddScoped<IPersonnelWorkAuthorization, PersonnelWorkAuthorization>();
+        services.AddScoped<Svm.Services.Contracts.Plc.IPlcUploadProvenance, PlcUploadProvenance>().AddScoped<IPersonnelWorkAuthorization, PersonnelWorkAuthorization>();
 }
 internal sealed class PersonnelWorkAuthorization(IPersonnelRepository repository, IRoleRepository roles) : IPersonnelWorkAuthorization
 {

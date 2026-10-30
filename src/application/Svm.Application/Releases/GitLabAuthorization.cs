@@ -29,6 +29,7 @@ internal sealed class GitLabAuthorization(IReleaseImports imports, GitLabImportO
         else if (person is null || !await scope.SoftwareAsync(person.Access, request.Policy.Permission!, softwareId, token))
             return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if (!await software.ExistsAsync(softwareId, unit.CurrentOperationId is not null, token)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+        if ((await software.GetAsync(softwareId, false, token)).Category == "PLC") return AuthorizationDecision.Deny(RequestFailure.InvalidState);
         return GitLabCapabilities.IsInternal(request.Request.GetType())
             ? AuthorizationDecision.Allow(AuthorizationTarget.Work(request.Policy.Owner, workId ?? service!.BindingId!.Value, softwareId))
             : AuthorizationDecision.Allow(AuthorizationTarget.Software(softwareId));
