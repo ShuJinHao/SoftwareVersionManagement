@@ -104,6 +104,8 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 ## PLC 程序归档与人工使用
 
+实现提交 `96049cd`，见 [PR #19](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/19)；[CI 五项检查](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/41003885309) 全部通过，本批尚未合并。局部验证与现场待验范围见框架设计 11.1。
+
 在控制器下关联 PLC 程序库，或从程序库反查全部有权控制器。上位机/视觉仅关联 IPC，PLC 仅关联控制器；一台控制器只保留一个有效主程序库。更换先解除旧关联，保留历史，新关联显示待人工确认。创建不自动增加产品权限。
 
 人员上传、发布和停用分别沿用 release.upload/publish/disable。发布另需具体控制器 plc.verify，现场登记需 plc.usage.record，签发和吊销上传凭据需产品 plc.uploadCredential.manage；三个新增操作均不自动授予旧人员/角色。上传凭据固定程序库和绑定修订，不能发布或记录使用。私有 `SVM_PLC_CONFIG_FILE` 必须显式提供 `uploadCredentialMaxLifetimeSeconds` 才能签发新凭据；包、厂区、消息配置继续沿用已有规则。
