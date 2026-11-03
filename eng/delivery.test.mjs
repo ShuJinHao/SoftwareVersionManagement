@@ -79,6 +79,7 @@ test('CI impact skips pure documentation and selects tools and web independently
   assert.deepEqual(changeImpact(['src/ui/svm-web/tests/deployments.test.ts']),{code:true,tools:false,web:true,browser:false});
   assert.deepEqual(changeImpact(['src/ui/svm-web/src/pages/DeploymentsPage.vue']),{code:true,tools:false,web:true,browser:true});
   assert.deepEqual(changeImpact(['deploy/linux/verify-ui.mjs']),{code:true,tools:false,web:false,browser:true});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-rollback.mjs']),{code:true,tools:false,web:false,browser:true});
 });
 test('publish rejects missing page, referenced assets and license notices', async () => {
   await mkdir(join(root,'artifacts/test-results/tools-fixtures'),{recursive:true});

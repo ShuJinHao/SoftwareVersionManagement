@@ -103,7 +103,7 @@ describe('hardware workspace',()=>{
  it('carries selected installation identities into deployment without reselecting machines',async()=>{
   const instance={id:ids.instance,softwareId:ids.software,deviceId:ids.device,deviceName:device.name,deviceNo:device.deviceNo,hardwareName:hardware.name,hardwareBindingId:ids.position,revision:1,lifecycle:'Active',freshness:'NeverReported',lastSnapshot:null}
   const fetch=vi.fn(async(path:string)=>Response.json(path.includes('/workspace/installations?')?page([{...row,instance,position:{...position,instanceId:ids.instance}}]):fixture(path)));vi.stubGlobal('fetch',fetch)
-  const {root}=await mount();await vi.waitFor(()=>expect(root.querySelector('.installation-table input')).toBeTruthy());(root.querySelector('.installation-table input') as HTMLInputElement).click();await nextTick();await click('更新所选软件')
+  const {root}=await mount();await vi.waitFor(()=>expect(root.querySelector('.installation-table input')).toBeTruthy());(root.querySelector('.installation-table input') as HTMLInputElement).click();await nextTick();await click('更新／回退所选软件')
   await vi.waitFor(()=>expect(root.textContent).toContain('已带入工作台勾选的安装位置'));expect(root.textContent).toContain('虚构设备 A / 工控机 A');expect(root.textContent).not.toContain('目标方式');expect(fetch.mock.calls.some(c=>c[0].includes('/manage/instances?'))).toBe(false)
  })
 })

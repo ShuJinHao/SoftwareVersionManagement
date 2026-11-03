@@ -18,6 +18,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
           r."CreatedBy",r."CreatedAt",r."DisabledAt",r."DisableReason",r."Revision",p."SizeBytes",p."Sha256",
           r."PublishedBy",r."PublishedEmployeeNo",r."PublishedAt",r."TestEvidenceId",r."PublishReason",r."PublishConclusion",
           r."SourceKind",r."SourceFactsJson",r."PlcEvidenceId",
+          (SELECT max(c."DeclarationRevision") FROM rel.compatibility_declarations c WHERE c."TargetReleaseId"=r."Id") AS "CompatibilityDeclarationRevision",
           (r."State" IN ('Test','Formal') AND p."State"='Ready' AND NOT p."Disabled" AND EXISTS
              (SELECT 1 FROM pkg.replicas cp WHERE cp."PackageId"=p."Id" AND cp."State"='Healthy'
                 AND cp."CheckedAt">clock_timestamp()-make_interval(secs=>@freshSeconds))) AS "DownloadAvailable"
@@ -39,7 +40,7 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         var rows = await Rows(input with { State = input.Channel == "Test" ? "Test" : "Formal" }, true, token);
         var items = rows.Take(input.PageSize).ToArray();
         return new(items.Select(r => new ClientReleaseView(r.Id, r.View.Version, r.State, r.ChangeSummary, r.ChangeReason,
-            r.PackageId, r.SizeBytes!.Value, r.Sha256!, $"/api/v1/packages/{r.PackageId:D}/content")).ToArray(), rows.Count > input.PageSize ? items[^1].Position : null);
+            r.PackageId, r.SizeBytes!.Value, r.Sha256!, $"/api/v1/packages/{r.PackageId:D}/content",r.CompatibilityDeclarationRevision)).ToArray(), rows.Count > input.PageSize ? items[^1].Position : null);
     }
     private Task<IReadOnlyList<Row>> Rows(ReleaseListInput input, bool available, CancellationToken token) => session.QueryAsync<Row>(
         "SELECT * FROM (" + Projection + " WHERE r.\"SoftwareId\"=@software AND " + Visible + """
@@ -102,10 +103,11 @@ internal sealed class ReleaseQueries(ReadQuerySession session, ICallContext call
         public Guid? TestEvidenceId { get; set; } public string? PublishReason { get; set; } public string? PublishConclusion { get; set; }
         public long? SizeBytes { get; set; } public string? Sha256 { get; set; }
         public Guid? PlcEvidenceId { get; set; }
+        public long? CompatibilityDeclarationRevision { get; set; }
         public string SourceKind { get; set; } = "Manual"; public string? SourceFactsJson { get; set; }
         public ReleaseView View => new(Id, SoftwareId, $"{Major}.{Minor}.{Patch}", State, ChangeLevel, ChangeSummary, ChangeReason,
             PackageId, DownloadAvailable, CreatedBy, CreatedAt, DisabledAt, DisableReason, Revision,
-            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion, SourceKind, GitLabFacts.Decode(SourceFactsJson), PlcEvidenceId);
+            PublishedBy, PublishedEmployeeNo, PublishedAt, TestEvidenceId, PublishReason, PublishConclusion, SourceKind, GitLabFacts.Decode(SourceFactsJson), PlcEvidenceId, CompatibilityDeclarationRevision);
         public ReleasePosition Position => new(Major, Minor, Patch, Id);
     }
 }

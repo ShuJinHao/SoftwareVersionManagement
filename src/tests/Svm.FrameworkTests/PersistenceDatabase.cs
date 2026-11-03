@@ -17,6 +17,7 @@ namespace Svm.FrameworkTests;
 /// <summary>Every instance owns only its random database and roles in the dedicated local container.</summary>
 public sealed class PersistenceDatabase : IAsyncLifetime
 {
+    internal const int CurrentMigrationCount = 16;
     private readonly string _suffix = Guid.NewGuid().ToString("N");
     private readonly List<string> _createdRoles = [];
     private string _admin = "";

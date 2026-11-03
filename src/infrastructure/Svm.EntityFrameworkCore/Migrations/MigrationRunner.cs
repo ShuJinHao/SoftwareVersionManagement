@@ -155,7 +155,7 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE UPDATE ON TABLE iam.registrations,ins.installation_evidence,ins.report_stream_receipts FROM {writer};");
         sql.AppendLine($"REVOKE SELECT ON iam.plc_upload_credentials FROM {reader};");
         sql.AppendLine($"GRANT SELECT (\"Id\",\"SoftwareId\",\"Name\",\"ScopeJson\",\"ExpiresAt\",\"RevokedAt\",\"CreatedBy\",\"CreatedAt\",\"Revision\") ON iam.plc_upload_credentials TO {reader};");
-        sql.AppendLine($"REVOKE UPDATE, DELETE ON ins.plc_usage_records,rel.plc_publications FROM {writer};");
+        sql.AppendLine($"REVOKE UPDATE, DELETE ON rel.compatibility_declarations,ins.plc_usage_records,rel.plc_publications FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON iam.plc_upload_credentials,ins.plc_usage_state FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.releases,pkg.packages,pkg.works,pkg.replicas,pkg.download_sessions,pkg.dispatches,pkg.receive_attempts FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE pkg.dispatches,pkg.receive_attempts FROM {writer};");

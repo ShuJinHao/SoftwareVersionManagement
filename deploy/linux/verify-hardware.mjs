@@ -112,7 +112,7 @@ try{
   await page.getByRole('button',{name:'1.0.0',exact:true}).click();await expect(page.getByRole('complementary',{name:'版本详情'})).toContainText('正式发布记录');await screenshot('04-release-source');await stage(phase);
   phase='browser deployment uses exactly the selected hardware-bound instance';
   if(!fixture.operations['ui-deployment']){
-   await page.goto(config.url+'/workspace?deviceId='+fixture.devices[1].id);const row=page.locator('.installation-table tbody tr').filter({hasText:fixture.software.name});await expect(row).toContainText('尚未安装');await row.getByRole('checkbox').check();await page.getByRole('button',{name:'更新所选软件',exact:true}).click();
+   await page.goto(config.url+'/workspace?deviceId='+fixture.devices[1].id);const row=page.locator('.installation-table tbody tr').filter({hasText:fixture.software.name});await expect(row).toContainText('尚未安装');await row.getByRole('checkbox').check();await page.getByRole('button',{name:'更新／回退所选软件',exact:true}).click();
    await expect(page.getByText('已带入工作台勾选的安装位置',{exact:false})).toBeVisible();await page.getByLabel(/^正式目标版本/).selectOption(fixture.release.id);await page.getByLabel('使用配置的下一时段',{exact:true}).uncheck();
    await page.getByLabel('UTC 开始',{exact:true}).fill(new Date(Date.now()-120000).toISOString().slice(0,16));await page.getByLabel('UTC 最晚开始',{exact:true}).fill(new Date(Date.now()+3600000).toISOString().slice(0,16));await page.getByLabel('投放原因',{exact:true}).fill('仅更新所选控制工控机 B，模拟接入协议');
    fixture.update=await uiWrite('ui-deployment','/api/v1/manage/deployments',()=>page.getByRole('button',{name:'封存目标并创建更新投放',exact:true}).click());await save();await expect(page.getByText('投放已登记',{exact:false})).toBeVisible();

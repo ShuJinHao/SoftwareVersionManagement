@@ -37,6 +37,7 @@ internal sealed class SvmDbContext : DbContext
         Packages.ReleaseImportModel.Configure(modelBuilder);
         Tasks.TaskModel.Configure(modelBuilder);
         Tasks.IntegrationMaterialModel.Configure(modelBuilder);
+        Tasks.CompatibilityDeclarationModel.Configure(modelBuilder);
         Plc.PlcModel.Configure(modelBuilder);
     }
 

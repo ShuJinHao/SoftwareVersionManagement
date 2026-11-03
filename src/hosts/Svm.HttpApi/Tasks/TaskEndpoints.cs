@@ -65,6 +65,13 @@ internal static class TaskEndpoints
         g.MapGet("/deployment-work/{workId:guid}/items",async (Guid workId,HttpContext h,ISender s,TaskCursor c) => { var p = await c.Read(h,"control-items",workId,[]); return Page(await s.Send(new ListTaskControlItemsQuery(workId,p.Size,p.After),h.RequestAborted),p,c); });
         g.MapPost("/releases/{releaseId:guid}/integration-materials",async (Guid releaseId,HttpContext h,ISender s,IAntiforgery a) => { using var d = await Input(h,a,["dataLocations","updateBehavior","rollbackBehavior","recoveryPlan","verificationConclusion","evidenceReferences","reason"]); return Result(h,await s.Send(new RecordIntegrationMaterialCommand(Key(h),releaseId,Read<IntegrationMaterialInput>(d)),h.RequestAborted),201); });
         g.MapGet("/releases/{releaseId:guid}/integration-materials",async (Guid releaseId,HttpContext h,ISender s,TaskCursor c) => { var p = await c.Read(h,"materials",releaseId,[]); var items = await s.Send(new GetIntegrationMaterialsQuery(releaseId,p.Size+0,p.After),h.RequestAborted); return Results.Json(new {items,nextCursor = items.Count == p.Size ? c.Encode(p,items[^1].Id) : null,serverTime = DateTimeOffset.UtcNow}); });
+        g.MapPost("/releases/{releaseId:guid}/compatibility-declarations", async (Guid releaseId, HttpContext h, ISender s, IAntiforgery a) => {
+            using var d = await Input(h, a, ["sourceReleaseIds","databaseMode","databaseRequirements","statement","reason"]);
+            return Result(h, await s.Send(new RecordCompatibilityCommand(Key(h), releaseId, Read<CompatibilityInput>(d)), h.RequestAborted), 201); });
+        g.MapGet("/releases/{releaseId:guid}/compatibility-declarations", async (Guid releaseId, HttpContext h, ISender s, TaskCursor c) => {
+            var p = await c.Read(h, "compatibility", releaseId, []);
+            var items = await s.Send(new GetCompatibilityDeclarationsQuery(releaseId, p.Size, p.After), h.RequestAborted);
+            return Results.Json(new { items, nextCursor = items.Count == p.Size ? c.Encode(p, items[^1].Id) : null, serverTime = DateTimeOffset.UtcNow }); });
         var client = Group(app,"/api/v1/client",RequestKind.Client,enabled);
         client.MapGet("/tasks",async (HttpContext h,ISender s,TaskCursor c,IInstanceAccess access,IAccessProofSource proof) => {
             var identity = await access.AuthenticateAsync(proof.Proof ?? throw Invalid(),false,h.RequestAborted) ?? throw new RequestRejectedException(RequestFailure.CredentialInvalid);
@@ -91,6 +98,8 @@ internal static class TaskEndpoints
                 "stateReport" => ["streamEpoch","reportSeq","reportedAt","installationState","installedReleaseId","installedVersion","installedAt","runningState","reportedIps","databaseState"],
                 "databaseState" => ["mode","items"], _ => null };
             if(fields is not null) { Fields(p.Value,fields); NestedFields(p.Value); }
+            if (p.Name == "databaseRequirements")
+            { if (p.Value.ValueKind != JsonValueKind.Array) throw Invalid(); foreach (var item in p.Value.EnumerateArray()) Fields(item, ["databaseKey","acceptedSchemaIds"]); }
             if(p.Name is "reviewedFailures" or "items")
             { if(p.Value.ValueKind != JsonValueKind.Array) throw Invalid(); foreach(var item in p.Value.EnumerateArray()) Fields(item,p.Name == "items" ? ["databaseKey","schemaId"] : ["batchId","failureRevision"]); }
         }

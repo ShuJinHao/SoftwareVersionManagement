@@ -45,12 +45,18 @@ public sealed record TaskView(Guid Id, Guid DeploymentId, Guid? BatchId, Guid In
     string State, TaskWindow Window, string? WaitReason, bool IsDeferred, DateTimeOffset? ResponseDeadlineAt,
     Guid? AttemptId, DateTimeOffset? StartAuthorizedAt, DateTimeOffset? MustBeginBefore, string? LastReportedProgress,
     string? TerminalResult, ManualClosureView? ManualClosure, Guid? RetryOfTaskId, long Revision, Guid? HardwareBindingId = null)
-{ public IReadOnlyList<string> EffectiveOperations { get; init; } = []; }
+{
+    public IReadOnlyList<string> EffectiveOperations { get; init; } = [];
+    public string Kind { get; init; } = "Update";
+    public long? CompatibilityDeclarationRevision { get; init; }
+    public CompatibilityDecision? AdmissionCompatibility { get; init; }
+    public CompatibilityDecision? StartCompatibility { get; init; }
+}
 public sealed record FailureReview([property: JsonRequired] Guid BatchId, [property: JsonRequired] long FailureRevision);
 public sealed record StartPreflight([property: JsonRequired] string DownloadedSha256, [property: JsonRequired] bool DataProtectionConfirmed, long? CompatibilityDeclarationRevision = null, string? Note = null);
 public sealed record StartInput([property: JsonRequired] StateReport StateReport, [property: JsonRequired] StartPreflight Preflight);
 public sealed record StartGrant(Guid TaskId, Guid AttemptId, Guid TargetReleaseId, Guid PackageId, string Sha256,
-    DateTimeOffset StartAuthorizedAt, DateTimeOffset MustBeginBefore);
+    DateTimeOffset StartAuthorizedAt, DateTimeOffset MustBeginBefore, string Kind = "Update", CompatibilityDecision? Compatibility = null);
 public sealed record ReceiptInput([property: JsonRequired] Guid EventId, [property: JsonRequired] long Sequence, [property: JsonRequired] string Kind, string? Progress = null, string? Result = null,
     string? FailureCode = null, string? Detail = null, StateReport? StateReport = null);
 public sealed record ReceiptView(Guid Id, Guid AttemptId, Guid EventId, long Sequence, string Kind, string? Progress,
@@ -70,6 +76,7 @@ public interface ITaskQueries
     Task<TaskView> TaskAsync(Guid id, CancellationToken token);
     Task<TaskWorkView> WorkAsync(Guid id, CancellationToken token);
     Task<TaskPage<BatchView>> BatchesAsync(Guid deployment, int take, Guid? after, CancellationToken token);
+    Task<IReadOnlyList<CompatibilityView>> CompatibilityAsync(Guid release, int take, Guid? after, CancellationToken token);
     Task<IReadOnlyList<IntegrationMaterialView>> MaterialsAsync(Guid release, int take, Guid? after, CancellationToken token);
     Task<TaskPage<DeploymentView>> DeploymentsAsync(TaskListInput input, CancellationToken token);
     Task<TaskPage<AdmissionView>> AdmissionsAsync(Guid deploymentId, int take, Guid? after, string? decision, string? reasonCode, CancellationToken token);
@@ -115,7 +122,7 @@ public interface ITaskWorkflow
     Task<TaskWorkAuthority> ControlAsync(Guid id, long revision, Guid actor, string kind, TaskWindow? window, CancellationToken token);
     Task<TaskView> TaskControlAsync(Guid id, long revision, string action, Guid actor, string reason, string? evidence, CancellationToken token);
     Task<Guid> ClaimAsync(Guid taskId, CancellationToken token);
-    Task<StartGrant> StartAsync(Guid attemptId, Guid packageId, string sha256, CancellationToken token);
+    Task<StartGrant> StartAsync(Guid attemptId, Guid packageId, string sha256, CancellationToken token, CompatibilityDecision? compatibility = null);
     Task<StartGrant?> ExistingGrantAsync(Guid attemptId, CancellationToken token);
     Task CheckStartAsync(Guid attemptId, CancellationToken token);
     Task<ReceiptResult?> FindReceiptAsync(Guid attempt, ReceiptInput input, string digest, CancellationToken token);
@@ -130,7 +137,7 @@ public interface ITaskWorkflow
     Task<TaskLease?> ClaimWorkAsync(Guid id, Guid leaseToken, CancellationToken token);
     Task<TaskWorkView> WorkAsync(Guid id, CancellationToken token);
     Task<IReadOnlyList<Guid>> NextMembersAsync(TaskLease lease, CancellationToken token);
-    Task AdmitAsync(TaskLease lease, Guid instanceId, string? reason, Guid? retryOfTask, CancellationToken token, Guid? hardwareBindingId = null);
+    Task AdmitAsync(TaskLease lease, Guid instanceId, string? reason, Guid? retryOfTask, CancellationToken token, Guid? hardwareBindingId = null, CompatibilityDecision? compatibility = null);
     Task AdvanceAsync(TaskLease lease, bool authorized, bool targetAvailable, CancellationToken token);
     Task FailWorkAsync(TaskLease lease, string code, CancellationToken token);
     Task<Guid?> RetryDeploymentAsync(Guid deploymentId, CancellationToken token);

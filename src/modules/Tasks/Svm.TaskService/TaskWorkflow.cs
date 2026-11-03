@@ -67,12 +67,12 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
     public async Task<DeploymentView> CreateAsync(Guid id, DeploymentInput input, Guid releaseId, Guid actor, TaskWindow window, CancellationToken ct)
     {
         Write(); var s = await Selection(input.SelectionId, true, ct);
-        if (input.Kind != "Update") throw Reject(RequestFailure.ValidationFailed);
+        if (input.Kind is not ("Update" or "Rollback") || input.Kind == "Rollback" && input.TargetReleaseId is null) throw Reject(RequestFailure.ValidationFailed);
         if (s.State != "Sealed" || s.SoftwareId != input.SoftwareId || s.OwnerId != actor || s.MemberCount < 1) throw Reject();
         if (window.NotBefore >= window.LatestStart || window.LatestStart <= await time.NowAsync(ct)) throw Reject(RequestFailure.ValidationFailed);
-        if (input.RetryOfDeploymentId is { } old && (await Deployment(old, true, ct)).SoftwareId != input.SoftwareId) throw Reject();
+        if (input.RetryOfDeploymentId is { } old) { var source = await Deployment(old, true, ct); if (source.SoftwareId != input.SoftwareId || source.Kind != input.Kind) throw Reject(); }
         var d = new Deployment(id, input.SoftwareId, input.SelectionId, releaseId, actor, input.Reason,
-            window.NotBefore, window.LatestStart, options.BatchSize!.Value, options.FailureLimit!.Value, options.ResultWaitSeconds!.Value, s.MemberCount, input.RetryOfDeploymentId, await time.NowAsync(ct));
+            window.NotBefore, window.LatestStart, options.BatchSize!.Value, options.FailureLimit!.Value, options.ResultWaitSeconds!.Value, s.MemberCount, input.RetryOfDeploymentId, await time.NowAsync(ct), input.Kind);
         repository.Add(d); return await View(d, ct);
     }
     public async Task<DeploymentView> DeploymentAsync(Guid id, bool protect, CancellationToken ct) => await View(await Deployment(id, protect, ct), ct);
@@ -137,10 +137,12 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
     public async Task<StartGrant?> ExistingGrantAsync(Guid id, CancellationToken ct)
     { var a = await repository.AttemptAsync(id, false, ct) ?? throw Reject(RequestFailure.ResourceNotFound);
       if (a.StartAuthorizedAt is null) return null; var t = await Task(a.TaskId.Value, false, ct); return Grant(t, a); }
-    public async Task<StartGrant> StartAsync(Guid id, Guid packageId, string sha256, CancellationToken ct)
+    public async Task<StartGrant> StartAsync(Guid id, Guid packageId, string sha256, CancellationToken ct, CompatibilityDecision? compatibility = null)
     { await CheckStartAsync(id, ct); var a = await repository.AttemptAsync(id, true, ct) ?? throw Reject(RequestFailure.ResourceNotFound);
       var t = await Task(a.TaskId.Value, true, ct); if (a.StartAuthorizedAt is not null) return Grant(t, a);
-      a.Authorize(packageId, sha256, await time.NowAsync(ct), t.LatestStart); t.Start(); return Grant(t, a); }
+      var d = await Deployment(t.DeploymentId.Value, false, ct);
+      if ((d.Kind == "Rollback") != (compatibility is not null)) throw Reject();
+      a.Authorize(packageId, sha256, await time.NowAsync(ct), t.LatestStart, compatibility is null ? null : JsonSerializer.Serialize(compatibility), compatibility?.DeclarationId); t.Start(); return Grant(t, a); }
     public async Task<ReceiptResult?> FindReceiptAsync(Guid id, ReceiptInput input, string digest, CancellationToken ct)
     { var r = await repository.ReceiptAsync(id, input.EventId, input.Sequence, ct); if (r is null) return null;
       if (r.EventId != input.EventId || r.Sequence != input.Sequence || r.Digest != digest) throw Reject(RequestFailure.ReceiptConflict);
@@ -190,14 +192,15 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
     public async Task<Guid?> RetryDeploymentAsync(Guid id, CancellationToken ct) => (await Deployment(id, false, ct)).RetryOfDeploymentId;
     public async Task<Guid?> RetrySourceAsync(Guid deployment, Guid instance, CancellationToken ct)
     { var t = await repository.RetryAsync(deployment, instance, ct); if (t is null || !t.Ended) throw Reject(RequestFailure.RetrySourceInvalid); return t.Id.Value; }
-    public async Task AdmitAsync(TaskLease lease, Guid instance, string? reason, Guid? retryOf, CancellationToken ct, Guid? hardwareBindingId = null)
+    public async Task AdmitAsync(TaskLease lease, Guid instance, string? reason, Guid? retryOf, CancellationToken ct, Guid? hardwareBindingId = null, CompatibilityDecision? compatibility = null)
     {
         Write(); var w = await Owned(lease, ct); var d = await Deployment(w.ResourceId, true, ct);
         if (w.Stage != "Admission" || d.Ended || d.ControlPending || d.PauseCodes.Contains("AuthorizationChanged", StringComparison.Ordinal)) throw Reject();
         if (await repository.GuardAsync(instance, ct) is not null) reason = "INSTANCE_BUSY";
         Guid? taskId = null;
         if (reason is null && hardwareBindingId is null) reason = "HARDWARE_BINDING_REQUIRED";
-        if (reason is null) { taskId = Guid.NewGuid(); repository.Add(new InstanceTask(taskId.Value, d.Id.Value, instance, d.TargetReleaseId, d.NotBefore, d.LatestStart, retryOf, await time.NowAsync(ct), hardwareBindingId)); repository.Add(new InstanceExecutionGuard(instance, new(taskId.Value))); }
+        if (reason is null && (d.Kind == "Rollback") != (compatibility is not null)) throw Reject();
+        if (reason is null) { taskId = Guid.NewGuid(); repository.Add(new InstanceTask(taskId.Value, d.Id.Value, instance, d.TargetReleaseId, d.NotBefore, d.LatestStart, retryOf, await time.NowAsync(ct), hardwareBindingId, compatibility is null ? null : JsonSerializer.Serialize(compatibility), compatibility?.DeclarationId)); repository.Add(new InstanceExecutionGuard(instance, new(taskId.Value))); }
         repository.Add(new AdmissionItem(d.Id, instance, reason is null ? "Accepted" : "Rejected", reason, taskId)); d.Admit(reason is null); w.Advance(instance);
     }
     public async Task AdvanceAsync(TaskLease lease, bool authorized, bool targetAvailable, CancellationToken ct)
@@ -205,7 +208,9 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
         Write(); var w = await Owned(lease, ct);
         if (w.Kind == "TargetSelection") { var s = await Selection(w.ResourceId, true, ct); if (s.State == "Sealed") w.Complete(); else { s.Fail(); w.Fail("SNAPSHOT_FAILED"); } return; }
         var d = await Deployment(w.ResourceId, true, ct); var now = await time.NowAsync(ct);
-        if (!authorized) { d.Pause("AuthorizationChanged"); w.Yield(now.AddSeconds(options.PollRetrySeconds!.Value)); return; }
+        if (!authorized) { d.Pause("AuthorizationChanged");
+            if (w.Kind == "Schedule") { await Schedule(d, now, targetAvailable, ct); if (d.Ended) { w.Complete(); return; } }
+            w.Yield(now.AddSeconds(options.PollRetrySeconds!.Value)); return; }
         if (w.Kind == "Schedule") { await Schedule(d, now, targetAvailable, ct); if (d.Ended) w.Complete(); else w.Yield(now.AddSeconds(options.PollRetrySeconds!.Value)); return; }
         if (w.Kind == "Deployment")
         {
@@ -286,7 +291,7 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
     private static int Rank(string? p) => p switch { "Downloading" => 1, "ReadyToInstall" => 2, "Installing" => 3, _ => 0 };
     private static SelectionView View(TargetSelection s) => new(s.Id.Value, s.SoftwareId, s.Mode, s.State, s.MemberCount, s.ReceivedChunkCount, s.SnapshotAt, s.Revision);
     private async Task<DeploymentView> View(Deployment d, CancellationToken ct)
-    { var c = await repository.CountsAsync(d.Id.Value, ct); return new(d.Id.Value, d.SoftwareId, d.TargetReleaseId, "Update", d.State, d.AuthorizationSubjectId,
+    { var c = await repository.CountsAsync(d.Id.Value, ct); return new(d.Id.Value, d.SoftwareId, d.TargetReleaseId, d.Kind, d.State, d.AuthorizationSubjectId,
         new(d.NotBefore, d.LatestStart), new(d.BatchSize, d.FailureLimit, d.ResultWaitSeconds), d.SelectionId.Value, d.SelectedCount, d.ProcessedCount, d.AcceptedCount, d.RejectedCount,
         new(c.Succeeded, c.Failed, c.Canceled, c.Unknown, c.Unfinished), d.PauseCodes.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(x => new PauseReason(x, x is "FailureLimit" or "ReceiptTimeout" ? "FutureBatches" : "NotStarted")).ToArray(), d.ControlPending, d.Revision); }
     private async Task<BatchView> View(TaskBatch b, DateTimeOffset now, CancellationToken ct)
@@ -300,7 +305,8 @@ internal sealed class TaskWorkflow(ITaskRepository repository, IUnitOfWork unit,
       return new(t.Id.Value, t.DeploymentId.Value, t.BatchId?.Value, t.InstanceId, t.TargetReleaseId, t.State == "Queued" && b?.State == "Open" ? "Available" : t.State,
         new(t.NotBefore, t.LatestStart), wait,
         t.IsDeferred, deadline, t.AttemptId, a?.StartAuthorizedAt, a?.MustBeginBefore, t.LastReportedProgress, t.TerminalResult,
-        t.ClosedAt is { } closed ? new(t.ClosedBy!.Value, t.ClosureReason!, t.OnsiteEvidence!, closed) : null, t.RetryOfTaskId, t.Revision, t.HardwareBindingId); }
-    private static StartGrant Grant(InstanceTask t, ExecutionAttempt a) => new(t.Id.Value, a.Id, t.TargetReleaseId, a.PackageId!.Value, a.Sha256!, a.StartAuthorizedAt!.Value, a.MustBeginBefore!.Value);
+        t.ClosedAt is { } closed ? new(t.ClosedBy!.Value, t.ClosureReason!, t.OnsiteEvidence!, closed) : null, t.RetryOfTaskId, t.Revision, t.HardwareBindingId) { Kind = d.Kind, AdmissionCompatibility = Decision(t.AdmissionCompatibilityJson), StartCompatibility = Decision(a?.CompatibilityJson) }; }
+    private static CompatibilityDecision? Decision(string? json) => json is null ? null : JsonSerializer.Deserialize<CompatibilityDecision>(json);
+    private static StartGrant Grant(InstanceTask t, ExecutionAttempt a) => new(t.Id.Value, a.Id, t.TargetReleaseId, a.PackageId!.Value, a.Sha256!, a.StartAuthorizedAt!.Value, a.MustBeginBefore!.Value, a.CompatibilityJson is null ? "Update" : "Rollback", Decision(a.CompatibilityJson));
     private static TaskWorkAuthority Authority(TaskWork w) => new(w.Id.Value, w.SoftwareId, w.ResourceId, w.InitiatorId, w.Kind, w.DispatchSequence, w.DispatchEventId, w.Accepted, w.State, w.Stage, w.LeaseToken, w.LeaseGeneration, w.LeaseUntil);
 }

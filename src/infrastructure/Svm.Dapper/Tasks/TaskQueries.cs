@@ -24,8 +24,8 @@ internal sealed class TaskQueries(ReadQuerySession session, ICallContext calls, 
     private const string MemberRange = "(iam.has_product(@subject,'instance.read',d.\"SoftwareId\") OR iam.has_instance(@subject,'instance.read',m.\"InstanceId\",d.\"SoftwareId\"))";
     private const string DeploymentRange = "EXISTS(SELECT 1 FROM tsk.target_members m WHERE m.\"SelectionId\"=d.\"SelectionId\" AND " + MemberRange + ")";
     private const string DeploymentProjection = $$"""
-        SELECT d."Id" AS "Cursor", (to_jsonb(d) || jsonb_build_object('Kind','Update',
-          'EffectiveOperations',COALESCE((SELECT jsonb_agg(op) FROM unnest(ARRAY['deployment.create','deployment.control']) op
+        SELECT d."Id" AS "Cursor", (to_jsonb(d) || jsonb_build_object('Kind',d."Kind",
+          'EffectiveOperations',COALESCE((SELECT jsonb_agg(op) FROM unnest(ARRAY['deployment.create','deployment.control','deployment.rollback']) op
             WHERE @instance::uuid IS NULL AND iam.has_software(@subject,op,d."SoftwareId") AND NOT EXISTS(
               SELECT 1 FROM tsk.target_members m JOIN ins.instances i ON i."Id"=m."InstanceId"
               WHERE m."SelectionId"=d."SelectionId" AND i."SoftwareId"=d."SoftwareId" AND NOT iam.has_instance(@subject,op,i."Id",d."SoftwareId"))),'[]'::jsonb),
@@ -55,6 +55,8 @@ internal sealed class TaskQueries(ReadQuerySession session, ICallContext calls, 
         """;
     private const string TaskProjection = $$"""
         SELECT t."Id" AS "Cursor", (to_jsonb(t) || jsonb_build_object(
+          'Kind',d."Kind",'AdmissionCompatibility',t."AdmissionCompatibilityJson"::jsonb,'StartCompatibility',a."CompatibilityJson"::jsonb,
+          'CompatibilityDeclarationRevision',CASE WHEN d."Kind"='Rollback' THEN (SELECT max(c."DeclarationRevision") FROM rel.compatibility_declarations c WHERE c."TargetReleaseId"=t."TargetReleaseId") END,
           'EffectiveOperations',COALESCE((SELECT jsonb_agg(op) FROM unnest(ARRAY['deployment.control','task.closeUnknown']) op
             WHERE @instance::uuid IS NULL AND iam.has_instance(@subject,op,t."InstanceId",d."SoftwareId")),'[]'::jsonb),
           'State',CASE WHEN t."State"='Queued' AND b."State"='Open' THEN 'Available' ELSE t."State" END,
@@ -67,6 +69,17 @@ internal sealed class TaskQueries(ReadQuerySession session, ICallContext calls, 
         """;
     private async Task<T> Single<T>(string sql, object parameters, CancellationToken ct)
     { var rows = await session.QueryAsync<Row>(sql,parameters,ct); return rows.Count == 1 ? JsonSerializer.Deserialize<T>(rows[0].Value,Json)! : throw new RequestRejectedException(RequestFailure.ResourceNotFound); }
+    public async Task<IReadOnlyList<CompatibilityView>> CompatibilityAsync(Guid release, int take, Guid? after, CancellationToken ct)
+    {
+        var rows = await session.QueryAsync<Row>("""
+            SELECT c."Id" AS "Cursor", (to_jsonb(c) || jsonb_build_object('DatabaseRequirements',c."DatabaseRequirementsJson"))::text AS "Value"
+            FROM rel.compatibility_declarations c JOIN rel.releases r ON r."Id"=c."TargetReleaseId"
+            WHERE c."TargetReleaseId"=@release AND iam.has_software(@subject,'software.read',r."SoftwareId")
+              AND (@after::uuid IS NULL OR c."DeclarationRevision"<(SELECT "DeclarationRevision" FROM rel.compatibility_declarations WHERE "Id"=@after AND "TargetReleaseId"=@release))
+            ORDER BY c."DeclarationRevision" DESC LIMIT @take
+            """, new { release, take, after, subject = Subject }, ct);
+        return rows.Select(r => JsonSerializer.Deserialize<CompatibilityView>(r.Value, Json)!).ToArray();
+    }
     public Task<SelectionView> SelectionAsync(Guid id, CancellationToken ct) => Single<SelectionView>("""
         SELECT s."Id" AS "Cursor",(to_jsonb(s)||jsonb_build_object('MemberCount',
           (SELECT count(*) FROM tsk.target_members m WHERE m."SelectionId"=s."Id" AND (iam.has_product(@subject,'deployment.create',s."SoftwareId") OR iam.has_instance(@subject,'deployment.create',m."InstanceId",s."SoftwareId")))))::text AS "Value" FROM tsk.target_selections s

@@ -10,7 +10,7 @@ public sealed record ReleaseView(Guid Id, Guid SoftwareId, string Version, strin
     DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? DisableReason, long Revision,
     Guid? PublishedBy = null, string? PublishedEmployeeNo = null, DateTimeOffset? PublishedAt = null,
     Guid? TestEvidenceId = null, string? PublishReason = null, string? PublishConclusion = null,
-    string SourceKind = "Manual", Svm.Services.Contracts.Releases.GitLabReleaseFacts? Source = null, Guid? PlcEvidenceId = null);
+    string SourceKind = "Manual", Svm.Services.Contracts.Releases.GitLabReleaseFacts? Source = null, Guid? PlcEvidenceId = null, long? CompatibilityDeclarationRevision = null);
 public sealed record ReleaseUploadResult(ReleaseView Release, Guid UploadId, string UploadPath);
 public sealed record PackageView(Guid Id, Guid ReleaseId, string State, long? SizeBytes, string? Sha256,
     long ExpectedSize, string ExpectedSha256, int HealthyReplicaCount, bool DownloadAvailable,
@@ -26,7 +26,7 @@ public sealed record TestEvidenceView(Guid Id, Guid InstanceId, Guid ReleaseId, 
     DateTimeOffset? InstalledAt, DateTimeOffset ReceivedAt, string ReportedRunningState);
 public sealed record EvidencePage(IReadOnlyList<TestEvidenceView> Items, Guid? Next);
 public sealed record ClientReleaseView(Guid Id, string Version, string State, string ChangeSummary,
-    string ChangeReason, Guid PackageId, long SizeBytes, string Sha256, string DownloadPath);
+    string ChangeReason, Guid PackageId, long SizeBytes, string Sha256, string DownloadPath, long? CompatibilityDeclarationRevision = null);
 public sealed record DownloadAuditView(Guid RequestId, Guid PackageId, Guid? SubjectId, string ActorKind,
     string? EmployeeNo, DateTimeOffset StartedAt, DateTimeOffset? EndedAt, long? BytesSent, string State, Guid? PlcBindingId = null, long? PlcBindingRevision = null);
 public sealed record DownloadAuditPage(IReadOnlyList<DownloadAuditView> Items, Guid? Next);

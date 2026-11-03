@@ -68,3 +68,14 @@ internal sealed class SubmitTaskReceiptCommandAdapter(ITaskWorkflow tasks) : IPr
     public async Task<ProtocolResult<OperationResult<ReceiptResult>>?> FindCommittedAsync(SubmitTaskReceiptCommand x, CancellationToken ct)
     { var r = await tasks.FindReceiptAsync(x.AttemptId, x.Input, ReceiptDigest(x.Input), ct); return r is null ? null : new(OperationResult<ReceiptResult>.Completed(r.ReceiptId, r, r.ReceiptId)); }
 }
+
+internal sealed class RecordCompatibilityCommandAdapter(ICompatibilityDeclarations declarations) : TaskAdapter<RecordCompatibilityCommand, CompatibilityView>
+{
+    public override OperationRequestData Describe(RecordCompatibilityCommand x) => new(x.Key, OperationValue.Object(G("releaseId", x.ReleaseId)),
+        OperationValue.Object(new("sourceReleaseIds", OperationValue.Array(x.Input.SourceReleaseIds.Select(OperationValue.Identifier).ToArray())),
+            S("databaseMode", x.Input.DatabaseMode), new("databaseRequirements", OperationValue.Array(x.Input.DatabaseRequirements.Select(r =>
+                OperationValue.Object(S("databaseKey", r.DatabaseKey), new("acceptedSchemaIds", Strings(r.AcceptedSchemaIds)))).ToArray())),
+            S("statement", x.Input.Statement), S("reason", x.Input.Reason)));
+    public override OperationResultReference GetReference(OperationResult<CompatibilityView> x) => new(x.OperationId, x.Status, x.Value.Id);
+    public override async Task<OperationResult<CompatibilityView>> RestoreAsync(OperationResultReference r, CancellationToken ct) => Restored(r, await declarations.FindAsync(Id(r), ct));
+}

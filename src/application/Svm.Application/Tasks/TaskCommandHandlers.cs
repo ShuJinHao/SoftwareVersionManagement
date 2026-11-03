@@ -57,3 +57,6 @@ internal sealed class TaskDispatch(SiteCatalogOptions site, ITaskTime time)
     internal TaskPreparationAvailableV1 Preparation(TaskWorkAuthority w, DateTimeOffset now) => new(w.DispatchEventId, now, w.WorkId, null, site.Require().SiteId, w.SoftwareId, w.Kind == "TargetSelection" ? TaskPreparationWorkKind.TargetSelection : TaskPreparationWorkKind.Deployment, w.WorkId, w.DispatchSequence);
     internal TaskControlAvailableV1 Control(TaskWorkAuthority w, DateTimeOffset now) => new(w.DispatchEventId, now, w.WorkId, null, site.Require().SiteId, w.SoftwareId, w.Kind == "Cancel" ? TaskControlWorkKind.Cancel : TaskControlWorkKind.Reschedule, w.WorkId, w.DispatchSequence);
 }
+
+internal sealed class RecordCompatibilityCommandHandler(TaskOperations operations) : IRequestHandler<RecordCompatibilityCommand, OperationResult<CompatibilityView>>
+{ public Task<OperationResult<CompatibilityView>> Handle(RecordCompatibilityCommand x, CancellationToken ct) => operations.RecordCompatibility(x, ct); }

@@ -299,7 +299,7 @@ try {
   phase = 'frozen filter draft keeps its version while materials change';
   fixture.resumeCheckpoint = 'freeze'; await saveFixture();
   compose('stop', 'worker-a', 'worker-b'); workersStopped = true;
-  await page.getByRole('button', { name: '选择更新目标', exact: true }).click();
+  await page.getByRole('button', { name: '安排更新或回退', exact: true }).click();
   await selectField('正式目标版本').selectOption(releases[0].id);
   await selectField('目标方式').selectOption('Filter');
   await page.getByRole('checkbox', { name: '使用配置的下一时段', exact: true }).uncheck();
@@ -370,7 +370,7 @@ try {
     await page.getByRole('button', { name: primary.id, exact: true }).click();
     await page.getByRole('heading', { name: /投放详情/ }).waitFor(); await allTaskPages();
   }
-  await page.getByRole('button', { name: '选择更新目标', exact: true }).click();
+  await page.getByRole('button', { name: '安排更新或回退', exact: true }).click();
   async function inspectViewport(target, name, width, height) {
     await target.setViewportSize({ width, height });
     const geometry = await target.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio,
@@ -382,7 +382,7 @@ try {
   const zoomContext = await browser.newContext({ viewport: { width: 683, height: 384 }, deviceScaleFactor: 2, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
   await zoomContext.addCookies(await context.cookies()); const zoomPage = await zoomContext.newPage(); zoomPage.setDefaultTimeout(15000);
   await zoomPage.goto(location); await zoomPage.getByRole('button', { name: primary.id, exact: true }).click();
-  await zoomPage.getByRole('heading', { name: /投放详情/ }).waitFor(); await zoomPage.getByRole('button', { name: '选择更新目标', exact: true }).click();
+  await zoomPage.getByRole('heading', { name: /投放详情/ }).waitFor(); await zoomPage.getByRole('button', { name: '安排更新或回退', exact: true }).click();
   await inspectViewport(zoomPage, 'ui-200-percent-equivalent', 683, 384);
   const scrollRegion = zoomPage.getByRole('region', { name: '可横向滚动的数据表格', exact: true }).filter({ has: zoomPage.getByRole('checkbox', { name: '选择实例 ' + instances[0].id, exact: true }) });
   diagnostics.push({ check: 'zoom-scroll-region-count', count: await scrollRegion.count() });

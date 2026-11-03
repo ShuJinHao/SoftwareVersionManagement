@@ -27,11 +27,12 @@ public sealed class Deployment : AggregateRoot<StrongId<Deployment>>
     private Deployment(StrongId<Deployment> id) : base(id) { }
     public Deployment(Guid id, Guid software, Guid selection, Guid release, Guid subject, string reason,
         DateTimeOffset notBefore, DateTimeOffset latestStart, int batchSize, int failureLimit, int waitSeconds,
-        int count, Guid? retryOf, DateTimeOffset createdAt) : base(new(id))
-    { SoftwareId = software; SelectionId = new(selection); TargetReleaseId = release; CreatedBy = AuthorizationSubjectId = subject;
+        int count, Guid? retryOf, DateTimeOffset createdAt, string kind = "Update") : base(new(id))
+    { if (kind is not ("Update" or "Rollback")) throw new ArgumentOutOfRangeException(nameof(kind)); Kind = kind; SoftwareId = software; SelectionId = new(selection); TargetReleaseId = release; CreatedBy = AuthorizationSubjectId = subject;
       Reason = reason; NotBefore = notBefore; LatestStart = latestStart; BatchSize = batchSize; FailureLimit = failureLimit;
       CreatedAt = createdAt; ResultWaitSeconds = waitSeconds; SelectedCount = count; RetryOfDeploymentId = retryOf; }
     public Guid SoftwareId { get; private set; }
+    public string Kind { get; private set; } = "Update";
     public StrongId<TargetSelection> SelectionId { get; private set; }
     public Guid TargetReleaseId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -90,11 +91,13 @@ public sealed class InstanceTask : AggregateRoot<StrongId<InstanceTask>>
 {
     private InstanceTask(StrongId<InstanceTask> id) : base(id) { }
     public InstanceTask(Guid id, Guid deployment, Guid instance, Guid release, DateTimeOffset start,
-        DateTimeOffset end, Guid? retryOf, DateTimeOffset createdAt, Guid? hardwareBindingId = null) : base(new(id))
-    { HardwareBindingId = hardwareBindingId; CreatedAt = createdAt; DeploymentId = new(deployment); InstanceId = instance; TargetReleaseId = release; NotBefore = start; LatestStart = end; RetryOfTaskId = retryOf; }
+        DateTimeOffset end, Guid? retryOf, DateTimeOffset createdAt, Guid? hardwareBindingId = null, string? admissionCompatibilityJson = null, Guid? admissionCompatibilityId = null) : base(new(id))
+    { AdmissionCompatibilityId = admissionCompatibilityId; AdmissionCompatibilityJson = admissionCompatibilityJson; HardwareBindingId = hardwareBindingId; CreatedAt = createdAt; DeploymentId = new(deployment); InstanceId = instance; TargetReleaseId = release; NotBefore = start; LatestStart = end; RetryOfTaskId = retryOf; }
     public StrongId<Deployment> DeploymentId { get; private set; }
     public Guid InstanceId { get; private set; }
     public Guid? HardwareBindingId { get; private set; }
+    public string? AdmissionCompatibilityJson { get; private set; }
+    public Guid? AdmissionCompatibilityId { get; private set; }
     public Guid TargetReleaseId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public StrongId<TaskBatch>? BatchId { get; private set; }
@@ -137,8 +140,10 @@ public sealed class ExecutionAttempt(Guid id, StrongId<InstanceTask> taskId)
     public string? Sha256 { get; private set; }
     public DateTimeOffset? StartAuthorizedAt { get; private set; }
     public DateTimeOffset? MustBeginBefore { get; private set; }
-    public void Authorize(Guid packageId, string sha256, DateTimeOffset at, DateTimeOffset before)
-    { PackageId = packageId; Sha256 = sha256; StartAuthorizedAt = at; MustBeginBefore = before; }
+    public string? CompatibilityJson { get; private set; }
+    public Guid? CompatibilityDeclarationId { get; private set; }
+    public void Authorize(Guid packageId, string sha256, DateTimeOffset at, DateTimeOffset before, string? compatibilityJson = null, Guid? compatibilityDeclarationId = null)
+    { if (StartAuthorizedAt is not null) throw new InvalidOperationException("A start permit is immutable."); CompatibilityDeclarationId = compatibilityDeclarationId; CompatibilityJson = compatibilityJson; PackageId = packageId; Sha256 = sha256; StartAuthorizedAt = at; MustBeginBefore = before; }
 }
 public sealed record TaskReceipt(Guid Id, Guid AttemptId, Guid EventId, long Sequence, string Kind, string? Progress,
     string? Result, string? FailureCode, string? Detail, string Digest, DateTimeOffset ReceivedAt, bool Applied,
