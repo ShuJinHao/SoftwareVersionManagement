@@ -28,6 +28,9 @@ public sealed class PackageAsset : AggregateRoot<StrongId<PackageAsset>>
     public void Fail() { if (State != "Ready") { State = "Failed"; Revision++; } }
     public void Retry() { if (Disabled || SizeBytes is null || State != "Failed") throw new InvalidOperationException("Package not retryable."); State = "Verifying"; Revision++; }
     public void Stop() { Disabled = true; Revision++; }
+    public void BeginCleanup() { if (!Disabled || State == "Cleaned") throw new InvalidOperationException("Package is not eligible for cleanup."); State = "Cleaning"; Revision++; }
+    public void FinishCleanup() { if (!Disabled || State != "Cleaning") throw new InvalidOperationException("Package cleanup is not active."); State = "Cleaned"; Revision++; }
+    public void RecordStopEvidence() { if (!Disabled) throw new InvalidOperationException("Release must be disabled."); Revision++; }
 }
 
 public sealed class PackageWork : AggregateRoot<StrongId<PackageWork>>
@@ -71,7 +74,7 @@ public sealed class PackageWork : AggregateRoot<StrongId<PackageWork>>
       State = "Pending"; Stage = "AwaitingReceipt"; LastErrorCode = null; Revision++; }
     public void RepairFrom(string node) { if (Kind != "Repair") throw new InvalidOperationException(); SourceNode = node; }
     public void Accept(long generation, Guid eventId)
-    { if (generation != DispatchSequence || eventId != DispatchEventId) throw new InvalidOperationException("Stale work dispatch."); if (!Accepted) { Accepted = true; Stage = "Copying"; Revision++; } }
+    { if (generation != DispatchSequence || eventId != DispatchEventId) throw new InvalidOperationException("Stale work dispatch."); if (!Accepted) { Accepted = true; Stage = Kind == "Cleanup" ? "Deleting" : "Copying"; Revision++; } }
     public bool Claim(string node, Guid token, DateTimeOffset now, int seconds)
     {
         if (!Accepted || State is "Completed" or "Failed" || LeaseUntil > now) return false;
@@ -81,7 +84,7 @@ public sealed class PackageWork : AggregateRoot<StrongId<PackageWork>>
     public void Renew(DateTimeOffset now, int seconds) { LeaseUntil = now.AddSeconds(seconds); Revision++; }
     public void Complete(DateTimeOffset now) { State = "Completed"; Stage = "Completed"; CompletedAt = now; LeaseUntil = null; Revision++; }
     public void Fail(string code, bool upload = false)
-    { State = "Failed"; Stage = upload ? "UploadFailed" : "CopyFailed"; LastErrorCode = code; LeaseUntil = null; Revision++; }
+    { State = "Failed"; Stage = Kind == "Cleanup" ? "CleanupFailed" : upload ? "UploadFailed" : "CopyFailed"; LastErrorCode = code; LeaseUntil = null; Revision++; }
     public void Stop() { State = "Failed"; Stage = "Stopped"; LastErrorCode = "RELEASE_DISABLED"; LeaseToken = null; LeaseUntil = null; Revision++; }
 }
 
@@ -115,6 +118,12 @@ public sealed class PackageDownload(Guid id, Guid packageId, string nodeId, Guid
 }
 public interface IPackageRepository
 {
+    Task<IReadOnlyList<PackageWork>> WorksAsync(Guid packageId, bool protect, CancellationToken token);
+    Task<PackageCleanup?> CleanupAsync(Guid packageId, CancellationToken token);
+    Task<IReadOnlyList<OpenDownloadGroup>> OpenDownloadsAsync(Guid packageId, int take, CancellationToken token);
+    Task<DownloadStopEvidence?> StopEvidenceAsync(Guid id, CancellationToken token);
+    void Add(PackageCleanup cleanup);
+    void Add(DownloadStopEvidence evidence);
     Task<PackageAsset?> GetAsync(Guid id, bool protect, CancellationToken token);
     Task<PackageWork?> WorkAsync(Guid id, bool protect, CancellationToken token);
     Task<PackageWork?> UploadAsync(Guid packageId, bool protect, CancellationToken token);

@@ -4,7 +4,7 @@ using Svm.Services.Contracts.Packages;
 
 namespace Svm.Dapper;
 
-internal sealed class PackageQueries(ReadQuerySession session, ICallContext calls, PackageExecutionOptions execution) : IPackageQueries
+internal sealed partial class PackageQueries(ReadQuerySession session, ICallContext calls, PackageExecutionOptions execution) : IPackageQueries
 {
     private CallActor Actor => calls.Current?.Actor ?? throw new RequestRejectedException(RequestFailure.AuthenticationRequired);
     private const string Visible = """
@@ -31,7 +31,7 @@ internal sealed class PackageQueries(ReadQuerySession session, ICallContext call
     {
         var rows = await session.QueryAsync<WorkRow>("""
             SELECT w."Id",w."Kind",w."State",w."Stage",w."LastErrorCode",w."CreatedAt",w."CompletedAt",w."Revision",
-              (SELECT count(*)::int FROM pkg.replicas c WHERE c."PackageId"=p."Id" AND c."State"='Healthy') AS "CompletedItems"
+              (SELECT count(*)::int FROM pkg.replicas c WHERE c."PackageId"=p."Id" AND c."State"=CASE WHEN w."Kind"='Cleanup' THEN 'Deleted' ELSE 'Healthy' END) AS "CompletedItems"
             FROM pkg.works w JOIN pkg.packages p ON p."Id"=w."PackageId" WHERE w."Id"=@id AND
             """ + Visible, Parameters(id, false), token);
         var r = rows.SingleOrDefault(); return r is null ? null : new(r.Id, r.Kind, r.State, r.Stage, r.CompletedItems, 2, r.LastErrorCode, [], r.CreatedAt, r.CompletedAt, r.Revision);

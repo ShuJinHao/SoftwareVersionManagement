@@ -34,6 +34,7 @@ internal sealed class SvmDbContext : DbContext
         Catalog.HardwareModel.Configure(modelBuilder);
         Instances.InstanceModel.Configure(modelBuilder);
         Packages.ReleasePackageModel.Configure(modelBuilder);
+        Packages.PackageCleanupModel.Configure(modelBuilder);
         Packages.ReleaseImportModel.Configure(modelBuilder);
         Tasks.TaskModel.Configure(modelBuilder);
         Tasks.IntegrationMaterialModel.Configure(modelBuilder);

@@ -11,7 +11,7 @@ export interface Release {
 export interface ReleaseSource { softwareId: string; kind: 'Manual' | 'GitLab'; enabled: boolean; baseUri: string | null; projectId: number | null; packageName: string | null; lastSyncedAt: string | null; lastErrorCode: string | null; latestWorkId: string | null; bindingId?: string | null; connectionId?: string | null; revision?: number; configurationAvailable?: boolean; managed?: boolean; changeId?: string | null; blockingWorkIds?: string[] }
 export interface ReleaseSyncWork { id: string; softwareId: string; kind: string; tag: string | null; stage: string; lastErrorCode: string | null; releaseId: string | null; createdAt: string; completedAt: string | null; revision: number }
 export interface Package {
-  id: string; releaseId: string; state: 'Uploading' | 'Verifying' | 'Ready' | 'Failed'; sizeBytes: number | null; sha256: string | null
+  id: string; releaseId: string; state: 'Uploading' | 'Verifying' | 'Ready' | 'Failed' | 'Cleaning' | 'Cleaned'; sizeBytes: number | null; sha256: string | null
   expectedSize: number; expectedSha256: string; healthyReplicaCount: number; downloadAvailable: boolean; downloadPath: string | null
   processingStage: string; lastErrorCode: string | null; revision: number; uploadId: string; fileName: string
 }
@@ -19,7 +19,7 @@ export interface ReleaseUpload { release: Release; uploadId: string; uploadPath:
 export interface TestEvidence { id: string; instanceId: string; releaseId: string; installedVersion: string; installedAt: string | null; receivedAt: string; reportedRunningState: string }
 export interface DownloadAudit { requestId: string; packageId: string; subjectId: string | null; actorKind: string; employeeNo: string | null; startedAt: string; endedAt: string | null; bytesSent: number | null; state: string }
 const releaseStates: Record<string, string> = { Staging: '待接收 / 处理中', Test: '测试版', Formal: '正式版', Disabled: '已停用' }
-const packageStages: Record<string, string> = { AwaitingUpload: '等待上传', Receiving: '正在接收', AwaitingReceipt: '等待后台接收', Copying: '校验并复制', Completed: '副本已核对', UploadFailed: '接收失败', CopyFailed: '副本处理失败', Stopped: '已停止' }
+const packageStages: Record<string, string> = { AwaitingUpload: '等待上传', Receiving: '正在接收', AwaitingReceipt: '等待后台接收', Copying: '校验并复制', Completed: '副本已核对', UploadFailed: '接收失败', CopyFailed: '副本处理失败', Stopped: '已停止', Deleting: '正在清理文件', CleanupFailed: '清理中断' }
 export const releaseState = (value: string) => releaseStates[value] ?? value
 export const packageStage = (value: string) => packageStages[value] ?? value
 

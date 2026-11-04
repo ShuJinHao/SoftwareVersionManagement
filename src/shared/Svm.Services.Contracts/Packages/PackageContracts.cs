@@ -53,6 +53,7 @@ public interface IReleaseQueries
 }
 public interface IPackageQueries
 {
+    Task<PackageCleanupStatus?> CleanupStatusAsync(Guid id, CancellationToken token);
     Task<PackageView?> GetAsync(Guid id, bool upload, CancellationToken token);
     Task<PackageWorkView?> WorkAsync(Guid id, CancellationToken token);
 }
@@ -70,7 +71,7 @@ public sealed record UploadReceipt(Guid UploadId, Guid PackageId, Guid SoftwareI
 public sealed record PackageWorkAuthority(Guid WorkId, Guid PackageId, Guid ReleaseId, Guid SoftwareId,
     Guid InitiatorId, string Kind, long DispatchSequence, Guid DispatchEventId, bool Accepted,
     string State, string Stage, string SourceNode, long LeaseGeneration, Guid? LeaseToken,
-    DateTimeOffset? LeaseUntil, long ExpectedSize, string ExpectedSha256, string? LeaseNode);
+    DateTimeOffset? LeaseUntil, long ExpectedSize, string ExpectedSha256, string? LeaseNode, Guid UploadId = default);
 public sealed record PackageLease(PackageWorkAuthority Work, Guid LeaseToken, long LeaseGeneration);
 public sealed record ReplicaFact(string NodeId, string State, DateTimeOffset CheckedAt);
 public sealed record DownloadAuthorization(Guid RequestId, Guid PackageId, string NodeId,
@@ -79,6 +80,12 @@ public sealed record DownloadEnd(Guid RequestId, string NodeId, Guid WorkerGener
     DateTimeOffset EndedAt, long BytesSent, string Outcome);
 public interface IPackages
 {
+    Task<PackageCleanupStatus> CleanupStatusAsync(Guid packageId, bool protect, CancellationToken token);
+    Task<PackageWorkAuthority?> RequestCleanupAsync(Guid packageId, long revision, Guid actor, string reason, CancellationToken token);
+    Task<DownloadStopView> RecordStopAsync(Guid id, Guid packageId, Guid actor, DownloadStopInput input, CancellationToken token);
+    Task<DownloadStopView> StopEvidenceAsync(Guid id, CancellationToken token);
+    Task RecordCleanupReplicaAsync(PackageLease lease, string nodeId, CancellationToken token);
+    Task<PackageView> CompleteCleanupAsync(PackageLease lease, CancellationToken token);
     Task<Guid?> SoftwareForAsync(string resource, Guid id, bool protect, CancellationToken token);
     Task<PackageView> GetAsync(Guid id, bool upload, bool protect, CancellationToken token);
     Task<Guid> UploadIdAsync(Guid packageId, CancellationToken token);
@@ -136,16 +143,17 @@ public interface IPackageServiceIdentity { Guid SubjectId { get; } string NodeId
 public static class PackageCapabilities
 {
     public static IReadOnlyList<Type> Writes { get; } = Array.AsReadOnly(new[] { typeof(CreateReleaseCommand), typeof(DisableReleaseCommand), typeof(PublishReleaseCommand),
+        typeof(RequestPackageCleanupCommand), typeof(RecordDownloadStopCommand), typeof(RecordCleanupReplicaCommand), typeof(CompletePackageCleanupCommand),
         typeof(RetryPackageCommand), typeof(UploadContentCommand), typeof(BeginUploadCommand), typeof(FinishUploadCommand), typeof(FailUploadCommand),
         typeof(ClaimPackageWorkCommand), typeof(RenewPackageWorkCommand), typeof(CompletePackageWorkCommand), typeof(FailPackageWorkCommand),
         typeof(CheckPackageReplicasCommand), typeof(AuthorizeDownloadCommand), typeof(RecordDownloadEndCommand) });
     public static bool IsWrite(Type type) => Writes.Contains(type);
-    public static bool IsIdempotent(Type type) => type == typeof(CreateReleaseCommand) || type == typeof(DisableReleaseCommand) || type == typeof(PublishReleaseCommand) || type == typeof(RetryPackageCommand) || type == typeof(RecordDownloadEndCommand) || IsPhase(type);
+    public static bool IsIdempotent(Type type) => type == typeof(RequestPackageCleanupCommand) || type == typeof(RecordDownloadStopCommand) || type == typeof(CreateReleaseCommand) || type == typeof(DisableReleaseCommand) || type == typeof(PublishReleaseCommand) || type == typeof(RetryPackageCommand) || type == typeof(RecordDownloadEndCommand) || IsPhase(type);
     public static bool IsPhase(Type type) => type == typeof(BeginUploadCommand) || type == typeof(FinishUploadCommand) || type == typeof(FailUploadCommand);
-    public static bool IsQuery(Type type) => type == typeof(GetUploadTargetQuery) || type == typeof(GetPackageCapabilitiesQuery) || type == typeof(CheckUploadQuery) || type == typeof(ListReleasesQuery) || type == typeof(GetReleaseQuery) ||
+    public static bool IsQuery(Type type) => type == typeof(GetPackageCleanupStatusQuery) || type == typeof(GetUploadTargetQuery) || type == typeof(GetPackageCapabilitiesQuery) || type == typeof(CheckUploadQuery) || type == typeof(ListReleasesQuery) || type == typeof(GetReleaseQuery) ||
         type == typeof(GetPackageQuery) || type == typeof(GetPackageWorkQuery) || type == typeof(GetTestEvidenceQuery) || type == typeof(GetDownloadAuditQuery) ||
         type == typeof(ListClientReleasesQuery) || type == typeof(GetClientReleaseQuery) || type == typeof(GetClientPackageQuery) || type == typeof(GetPackageAuthorityQuery) || type == typeof(InspectReplicaQuery) || type == typeof(GetDownloadEndQuery);
-    public static bool IsInternal(Type type) => type == typeof(ClaimPackageWorkCommand) || type == typeof(RenewPackageWorkCommand) ||
+    public static bool IsInternal(Type type) => type == typeof(RecordCleanupReplicaCommand) || type == typeof(CompletePackageCleanupCommand) || type == typeof(ClaimPackageWorkCommand) || type == typeof(RenewPackageWorkCommand) ||
         type == typeof(CompletePackageWorkCommand) || type == typeof(FailPackageWorkCommand) || type == typeof(CheckPackageReplicasCommand) ||
         type == typeof(AuthorizeDownloadCommand) || type == typeof(RecordDownloadEndCommand) || type == typeof(GetPackageAuthorityQuery) || type == typeof(InspectReplicaQuery) || type == typeof(GetDownloadEndQuery);
     public static bool IsWorker(Type type) => IsInternal(type) && type != typeof(AuthorizeDownloadCommand) && type != typeof(RecordDownloadEndCommand) && type != typeof(GetDownloadEndQuery);
@@ -154,6 +162,8 @@ public static class PackageCapabilities
 /// <summary>File effects are executed outside any database transaction. IDs alone form paths.</summary>
 public interface IPackageFiles
 {
+    Task DeleteLocalAsync(PackageWorkAuthority work, Func<CancellationToken, Task> verifyCurrent, CancellationToken token);
+    Task DeleteNodeAsync(string nodeId, PackageLease lease, Func<CancellationToken, Task> verifyCurrent, CancellationToken token);
     string NodeId { get; }
     Task<IAsyncDisposable> LockUploadAsync(Guid uploadId, CancellationToken token);
     Task<(long Size, string Sha256)> ReceiveAsync(UploadReceipt receipt, Stream content, long? contentLength,

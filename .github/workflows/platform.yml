@@ -1,7 +1,7 @@
 name: Platform delivery
 on:
   pull_request:
-    branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace, codex/gitlab-source-management]
+    branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace, codex/gitlab-source-management, codex/rollback-and-compatibility]
     types: [opened, synchronize]
   workflow_dispatch:
 permissions:
@@ -40,7 +40,7 @@ jobs:
     env:
       SVM_SDK_VERSION: ${{ matrix.sdk }}
       CI: 'true'
-      SVM_WEB_TEST_NAMES: 'compatibility|rollback|freezes launch|retains the final operation|carries selected installation'
+      SVM_WEB_TEST_NAMES: 'cleanup|keeps three evidence and audit pages|invalidates pending release reads'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -103,9 +103,9 @@ jobs:
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.web == 'true'
         shell: bash
         run: |
-          eng/test web --file tests/compatibility.test.ts --file tests/deployments.test.ts --file tests/hardware-workspace.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
-          eng/test web --file tests/compatibility.test.ts --file tests/deployments.test.ts --file tests/hardware-workspace.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
-          eng/test web --file tests/compatibility.test.ts --file tests/deployments.test.ts --file tests/hardware-workspace.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
+          eng/test web --file tests/package-cleanup.test.ts --file tests/releases-reading.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
+          eng/test web --file tests/package-cleanup.test.ts --file tests/releases-reading.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
+          eng/test web --file tests/package-cleanup.test.ts --file tests/releases-reading.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
       - name: Targeted Linux UI browser verification
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash
@@ -123,7 +123,7 @@ jobs:
           artifacts/linux-demo/ci/svm.sh validate
           artifacts/linux-demo/ci/svm.sh up
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node src/ui/svm-web/node_modules/playwright/cli.js install --with-deps chromium
-          eng/node deploy/linux/verify-rollback.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
+          eng/node deploy/linux/verify-cleanup.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
       - name: Stop owned demo resources
         if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash

@@ -135,6 +135,8 @@ public static class ApplicationRegistration
             services.AddScoped<IIdempotencyRequestAdapter<DisableReleaseCommand, OperationResult<ReleaseView>>, DisableReleaseAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<PublishReleaseCommand, OperationResult<ReleaseView>>, PublishReleaseAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<RetryPackageCommand, OperationResult<PackageView>>, RetryPackageAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RequestPackageCleanupCommand, OperationResult<PackageWorkView>>, RequestPackageCleanupAdapter>();
+            services.AddScoped<IIdempotencyRequestAdapter<RecordDownloadStopCommand, OperationResult<DownloadStopView>>, RecordDownloadStopAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<BeginUploadCommand, OperationResult<UploadReceipt>>, BeginUploadAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<FinishUploadCommand, OperationResult<PackageView>>, FinishUploadAdapter>();
             services.AddScoped<IIdempotencyRequestAdapter<FailUploadCommand, OperationResult<PackageView>>, FailUploadAdapter>();

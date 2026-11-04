@@ -65,12 +65,15 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
                     return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 var w = await packages.AuthorityAsync(target, false, token); softwareId = w.SoftwareId;
                 var source = await releases.GetAsync(w.ReleaseId, false, token);
-                if (w.Kind != "Repair" && !(source.SourceKind == "GitLab"
+                if (w.Kind == "Cleanup" && !await personnelWork.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "package.clean", protect, token))
+                    return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
+                if (w.Kind is not ("Repair" or "Cleanup") && !(source.SourceKind == "GitLab"
                     ? await imports.AuthorizesPackageAsync(w.ReleaseId, w.InitiatorId, w.SoftwareId, token)
                     : source.SourceKind == "PLC" && source.CreatedBy == w.InitiatorId && await (plc ?? throw new RequestRejectedException(RequestFailure.ConfigurationInvalid)).IsAcceptedUploaderAsync(w.InitiatorId, w.SoftwareId, token) || await personnelWork.HasPermissionAsync(w.InitiatorId, w.SoftwareId, "release.upload", protect, token)))
                     return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 await ProtectPackage(w.PackageId, w.SoftwareId, protect, token);
-                if ((await releases.GetAsync(w.ReleaseId, protect, token)).State == "Disabled") return AuthorizationDecision.Deny(RequestFailure.InvalidState);
+                var disabled = (await releases.GetAsync(w.ReleaseId, protect, token)).State == "Disabled";
+                if (w.Kind == "Cleanup" ? !disabled : disabled) return AuthorizationDecision.Deny(RequestFailure.InvalidState);
                 if (x.Request is ClaimPackageWorkCommand claim && claim.NodeId != service.NodeId) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
                 break;
         }
@@ -94,6 +97,9 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
         GetPackageQuery q => (await packages.GetAsync(q.PackageId, q.Upload, false, token)).ReleaseId,
         GetClientPackageQuery q => (await packages.GetAsync(q.PackageId, false, false, token)).ReleaseId,
         RetryPackageCommand c => (await packages.GetAsync(c.PackageId, false, false, token)).ReleaseId,
+        RequestPackageCleanupCommand c => (await packages.GetAsync(c.PackageId, false, false, token)).ReleaseId,
+        RecordDownloadStopCommand c => (await packages.GetAsync(c.PackageId, false, false, token)).ReleaseId,
+        GetPackageCleanupStatusQuery q => (await packages.GetAsync(q.PackageId, false, false, token)).ReleaseId,
         UploadContentCommand c => (await packages.GetAsync(c.UploadId, true, false, token)).ReleaseId,
         BeginUploadCommand c => (await packages.GetAsync(c.UploadId, true, false, token)).ReleaseId,
         FinishUploadCommand c => (await packages.GetAsync(c.Receipt.UploadId, true, false, token)).ReleaseId,
@@ -112,6 +118,7 @@ internal sealed class PackageAuthorization(IPackages packages, IReleases release
     };
     private static Guid WorkId(object x) => x switch
     {
+        RecordCleanupReplicaCommand c => c.Lease.Work.WorkId, CompletePackageCleanupCommand c => c.Lease.Work.WorkId,
         ClaimPackageWorkCommand c => c.WorkId, RenewPackageWorkCommand c => c.Lease.Work.WorkId, CompletePackageWorkCommand c => c.Lease.Work.WorkId,
         FailPackageWorkCommand c => c.Lease.Work.WorkId, GetPackageAuthorityQuery q => q.WorkId, _ => Guid.Empty
     };

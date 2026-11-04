@@ -37,7 +37,7 @@ internal static class PackageInternalEndpoints
         group.MapGet("/package-work/{workId:guid}/source", async (Guid workId, HttpContext http, IPackageFiles files, ScopedRequestExecutor executor) =>
         {
             Bind(http, workId, "Peer"); var w = await Lease(http, executor, workId);
-            if (w.SourceNode != files.NodeId) throw new RequestRejectedException(RequestFailure.PermissionDenied);
+            if (w.Kind == "Cleanup" || w.SourceNode != files.NodeId) throw new RequestRejectedException(RequestFailure.PermissionDenied);
             http.Response.ContentLength = w.ExpectedSize;
             return Results.Stream(await files.OpenSourceAsync(w, http.RequestAborted), "application/octet-stream");
         });
@@ -45,12 +45,21 @@ internal static class PackageInternalEndpoints
         {
             var workId = InstanceCursor.QueryId(http, "workId") ?? throw Invalid(); Bind(http, workId, "Peer");
             var w = await Lease(http, executor, workId);
-            if (w.PackageId != packageId || http.Request.ContentType?.Split(';')[0] != "application/octet-stream" ||
+            if (w.Kind == "Cleanup" || w.PackageId != packageId || http.Request.ContentType?.Split(';')[0] != "application/octet-stream" ||
                 http.Request.ContentLength is { } length && length != w.ExpectedSize) throw Invalid();
             var feature = http.Features.Get<IHttpMaxRequestBodySizeFeature>() ?? throw Invalid();
             if (feature.IsReadOnly) throw Invalid(); feature.MaxRequestBodySize = limits.MaxPackageBytes;
             await files.ReceiveReplicaAsync(w, http.Request.Body, async ct => { await Lease(http, executor, workId, ct); }, http.RequestAborted);
             return Results.Json(new { verified = true });
+        });
+        group.MapDelete("/package-work/{workId:guid}/files", async (Guid workId, HttpContext http, IPackageFiles files, ScopedRequestExecutor executor) =>
+        {
+            Bind(http, workId, "Peer");
+            if (http.Request.ContentLength is > 0 || http.Request.Headers.ContainsKey("Transfer-Encoding")) throw Invalid();
+            var work = await Lease(http, executor, workId);
+            if (work.Kind != "Cleanup") throw new RequestRejectedException(RequestFailure.PermissionDenied);
+            await files.DeleteLocalAsync(work, async ct => { await Lease(http, executor, workId, ct); }, http.RequestAborted);
+            return Results.NoContent();
         });
         group.MapGet("/download-authorizations", async (HttpContext http, IPackageFiles files, ScopedRequestExecutor executor, IPackageDownloadProof proof, PackageFileOptions options) =>
         {

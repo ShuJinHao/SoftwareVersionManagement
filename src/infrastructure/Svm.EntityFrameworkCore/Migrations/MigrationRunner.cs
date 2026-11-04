@@ -159,6 +159,7 @@ public sealed class MigrationRunner(MigrationConfiguration configuration)
         sql.AppendLine($"REVOKE DELETE ON iam.plc_upload_credentials,ins.plc_usage_state FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.releases,pkg.packages,pkg.works,pkg.replicas,pkg.download_sessions,pkg.dispatches,pkg.receive_attempts FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE pkg.dispatches,pkg.receive_attempts FROM {writer};");
+        sql.AppendLine($"REVOKE UPDATE, DELETE ON TABLE pkg.cleanup_intents,pkg.download_stop_evidence FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.integration_materials,tsk.target_selections,tsk.target_members,tsk.selection_chunks,tsk.deployments,tsk.admission_items,tsk.batches,tsk.tasks,tsk.attempts,tsk.receipts,tsk.works,tsk.dispatches,tsk.control_items FROM {writer};");
         sql.AppendLine($"REVOKE UPDATE ON TABLE rel.integration_materials,tsk.target_members,tsk.selection_chunks,tsk.admission_items,tsk.receipts,tsk.dispatches,tsk.control_items FROM {writer};");
         sql.AppendLine($"REVOKE DELETE ON TABLE rel.source_bindings,rel.sync_works FROM {writer};");

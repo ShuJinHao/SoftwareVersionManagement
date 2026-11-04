@@ -195,6 +195,7 @@ public sealed record BatchCounts(int Unfinished, int Deferred, int Failed, int T
 public sealed record DeploymentCounts(int Succeeded, int Failed, int Canceled, int Unknown, int Unfinished);
 public interface ITaskRepository
 {
+    Task<bool> HasUnfinishedReleaseAsync(Guid releaseId, CancellationToken token);
     Task<TargetSelection?> SelectionAsync(Guid id, bool protect, CancellationToken token);
     Task<SelectionChunk?> ChunkAsync(Guid selection, int number, CancellationToken token);
     Task<int> AppendMembersAsync(Guid selection, IReadOnlyList<Guid> ids, CancellationToken token);

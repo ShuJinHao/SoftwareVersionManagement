@@ -1,3 +1,4 @@
+using Svm.TaskService;
 using MediatR;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,7 +40,7 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
     {
         var s = new ServiceCollection(); if (importer) s.AddSvmPackageWorkerApplication(); else s.AddSvmPackageApplication();
         s.AddSvmPostgres(Database.WriterConnection).AddSvmReadPersistence(Database.ReaderConnection).AddSvmUserQueries().AddSvmCatalogQueries().AddSvmReleaseQueries();
-        s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmPersonnelWorkAuthorization().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Instances.Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases().AddSvmPackages();
+        s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmPersonnelWorkAuthorization().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Instances.Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases().AddSvmPackages().AddSvmReleaseTaskReferences();
         s.AddSingleton(new Svm.Services.Contracts.Plc.PlcOptions(86400)); s.AddSingleton(new PersonnelManagementOptions()); s.AddSingleton(Instances.Site.Options); s.AddSingleton(InstanceFixture.Limits); s.AddSingleton<TimeProvider>(Instances.Clock); s.AddSingleton(Limits); s.AddSingleton(Execution); s.AddSingleton(Nodes);
         var context = new Context(person ?? Instances.Site.Proof, access, plcSoftware ?? SoftwareId, instance, work, role, node, importer ? importBinding ?? gitLab!.Bindings.Single() : null, importOwner);
         if (gitLab is not null) s.AddSingleton(gitLab); s.AddScoped<IGitLabServiceIdentity>(_ => context);
@@ -74,6 +75,8 @@ internal sealed class PackageFixture(InstanceFixture instances) : IAsyncDisposab
     // Transaction tests never invoke file effects. Separate fixtures use the real adapter.
     private sealed class NoFiles : IPackageFiles
     {
+        public Task DeleteLocalAsync(PackageWorkAuthority w, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();
+        public Task DeleteNodeAsync(string n, PackageLease l, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();
         public string NodeId => "node-a";
         public Task<IAsyncDisposable> LockUploadAsync(Guid id, CancellationToken t) => throw new NotSupportedException();
         public Task<(long Size, string Sha256)> ReceiveAsync(UploadReceipt r, Stream s, long? l, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();

@@ -15,7 +15,7 @@ internal sealed class PackageDispatch(SiteCatalogOptions site, TimeProvider cloc
 {
     public PackageWorkAvailableV1 Create(PackageWorkAuthority w) => new(
         w.DispatchEventId, clock.GetUtcNow(), w.WorkId, null, site.Require().SiteId, w.SoftwareId,
-        w.Kind == "Repair" ? PackageWorkKind.Repair : PackageWorkKind.UploadVerificationAndCopy, w.WorkId, w.DispatchSequence);
+        w.Kind == "Cleanup" ? PackageWorkKind.Cleanup : w.Kind == "Repair" ? PackageWorkKind.Repair : PackageWorkKind.UploadVerificationAndCopy, w.WorkId, w.DispatchSequence);
 }
 internal sealed class CreateReleaseCommandHandler(IReleases releases, IPackages packages, ICallContext calls, CatalogCompletion completion, IReleaseImports imports)
     : IRequestHandler<CreateReleaseCommand, OperationResult<ReleaseUploadResult>>
