@@ -77,6 +77,7 @@ test('CI impact skips pure documentation and selects tools and web independently
   assert.deepEqual(changeImpact(['README.md','docs/详细设计.md']),{code:false,tools:false,web:false,browser:false});
   assert.deepEqual(changeImpact(['eng/toolchain.mjs']),{code:true,tools:true,web:false,browser:false});
   assert.deepEqual(changeImpact(['src/ui/svm-web/tests/deployments.test.ts']),{code:true,tools:false,web:true,browser:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/package.json','src/ui/svm-web/package-lock.json']),{code:true,tools:false,web:true,browser:false});
   assert.deepEqual(changeImpact(['src/ui/svm-web/src/pages/DeploymentsPage.vue']),{code:true,tools:false,web:true,browser:true});
   assert.deepEqual(changeImpact(['deploy/linux/verify-ui.mjs']),{code:true,tools:false,web:false,browser:true});
   assert.deepEqual(changeImpact(['deploy/linux/verify-rollback.mjs']),{code:true,tools:false,web:false,browser:true});

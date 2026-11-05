@@ -1,7 +1,7 @@
 name: Platform delivery
 on:
   pull_request:
-    branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace, codex/gitlab-source-management, codex/rollback-and-compatibility]
+    branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace, codex/gitlab-source-management, codex/rollback-and-compatibility, codex/package-cleanup]
     types: [opened, synchronize]
   workflow_dispatch:
 permissions:
@@ -40,7 +40,7 @@ jobs:
     env:
       SVM_SDK_VERSION: ${{ matrix.sdk }}
       CI: 'true'
-      SVM_WEB_TEST_NAMES: 'cleanup|keeps three evidence and audit pages|invalidates pending release reads'
+      SVM_WEB_TEST_NAMES: 'bounds a read at 15 seconds|bounds writes at 30 seconds|keeps an already-committed write after body timeout|restricts the first-change session|opens ordinary password changes|hashes bounded 1 MiB slices|cancel stops hashing|worker cancellation terminates|uses the applied software search|ignores late device success and failure'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -97,15 +97,16 @@ jobs:
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.tools == 'true'
         shell: bash
         run: |
-          eng/test tools --filter 'web selection|CI impact' --preview
-          eng/test tools --filter 'web selection|CI impact' --results-directory artifacts/test-results/platform/tools
+          eng/test tools --filter 'web selection|CI impact|publish rejects' --preview
+          eng/test tools --filter 'web selection|CI impact|publish rejects' --results-directory artifacts/test-results/platform/tools
       - name: Preview and verify affected web interactions
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.web == 'true'
         shell: bash
         run: |
-          eng/test web --file tests/package-cleanup.test.ts --file tests/releases-reading.test.ts --filter "$SVM_WEB_TEST_NAMES" --preview
-          eng/test web --file tests/package-cleanup.test.ts --file tests/releases-reading.test.ts --filter "$SVM_WEB_TEST_NAMES" --list
-          eng/test web --file tests/package-cleanup.test.ts --file tests/releases-reading.test.ts --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
+          files=(--file tests/request.test.ts --file tests/mutation.test.ts --file tests/personnel.test.ts --file tests/packages.test.ts --file tests/hardware-workspace.test.ts)
+          eng/test web "${files[@]}" --filter "$SVM_WEB_TEST_NAMES" --preview
+          eng/test web "${files[@]}" --filter "$SVM_WEB_TEST_NAMES" --list
+          eng/test web "${files[@]}" --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
       - name: Targeted Linux UI browser verification
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
         shell: bash
