@@ -25,6 +25,25 @@ internal sealed class ReleaseRepository(SvmDbContext context, IUnitOfWork unit) 
 }
 internal sealed class PackageRepository(SvmDbContext context, IUnitOfWork unit) : IPackageRepository
 {
+    public async Task<IReadOnlyList<PackageWork>> WorksAsync(Guid id, bool protect, CancellationToken token)
+    {
+        if (protect) Require();
+        var query = context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"Id\"" + (protect ? " FOR UPDATE" : ""), id);
+        var rows = await (protect ? query.AsTracking() : query.AsNoTracking()).ToListAsync(token);
+        return context.Set<PackageWork>().Local.Where(x => x.PackageId == id).Concat(rows).DistinctBy(x => x.Id).ToArray();
+    }
+    public Task<PackageCleanup?> CleanupAsync(Guid id, CancellationToken token) => context.Set<PackageCleanup>().AsNoTracking().SingleOrDefaultAsync(x => x.PackageId == id, token);
+    public async Task<IReadOnlyList<OpenDownloadGroup>> OpenDownloadsAsync(Guid id, int take, CancellationToken token)
+    {
+        var rows = await context.Set<PackageDownload>().AsNoTracking().Where(d => d.PackageId == id && d.State == "Open" &&
+            !context.Set<DownloadStopEvidence>().Any(e => e.PackageId == d.PackageId && e.NodeId == d.NodeId && e.WorkerGeneration == d.WorkerGeneration && e.StoppedAt >= d.StartedAt))
+            .GroupBy(d => new { d.NodeId, d.WorkerGeneration }).Select(g => new { g.Key.NodeId, g.Key.WorkerGeneration, OpenCount = g.LongCount(), LatestStartedAt = g.Max(d => d.StartedAt) })
+            .OrderBy(g => g.NodeId).ThenBy(g => g.WorkerGeneration).Take(take).ToListAsync(token);
+        return rows.Select(g => new OpenDownloadGroup(g.NodeId, g.WorkerGeneration, g.OpenCount, g.LatestStartedAt)).ToArray();
+    }
+    public Task<DownloadStopEvidence?> StopEvidenceAsync(Guid id, CancellationToken token) => context.Set<DownloadStopEvidence>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token);
+    public void Add(PackageCleanup value) { Require(); context.Add(value); }
+    public void Add(DownloadStopEvidence value) { Require(); context.Add(value); }
     public async Task<PackageAsset?> GetAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require(); var local = context.Set<PackageAsset>().Local.SingleOrDefault(x => x.Id.Value == id); if (local is not null) return local;

@@ -81,10 +81,23 @@ internal sealed class PackageExecutor(IServiceScopeFactory scopes, ScopedRequest
         var heartbeat = Heartbeat(lease, fileBudget, heartbeatStop.Token);
         try
         {
-            IReadOnlyList<ReplicaFact> facts;
-            await using (var scope = scopes.CreateAsyncScope())
-                facts = await scope.ServiceProvider.GetRequiredService<IPackageFiles>().PrepareReplicasAsync(lease, ct => Renew(lease, ct), fileBudget.Token);
-            await requests.SendAsync(new CompletePackageWorkCommand(lease, facts), fileBudget.Token);
+            if (lease.Work.Kind == "Cleanup")
+            {
+                foreach (var node in options.Nodes)
+                {
+                    await using var scope = scopes.CreateAsyncScope();
+                    await scope.ServiceProvider.GetRequiredService<IPackageFiles>().DeleteNodeAsync(node.NodeId, lease, ct => Renew(lease, ct), fileBudget.Token);
+                    await requests.SendAsync(new RecordCleanupReplicaCommand(lease, node.NodeId), fileBudget.Token);
+                }
+                await requests.SendAsync(new CompletePackageCleanupCommand(lease), fileBudget.Token);
+            }
+            else
+            {
+                IReadOnlyList<ReplicaFact> facts;
+                await using (var scope = scopes.CreateAsyncScope())
+                    facts = await scope.ServiceProvider.GetRequiredService<IPackageFiles>().PrepareReplicasAsync(lease, ct => Renew(lease, ct), fileBudget.Token);
+                await requests.SendAsync(new CompletePackageWorkCommand(lease, facts), fileBudget.Token);
+            }
         }
         catch (PersistenceException e) when (e.Failure == PersistenceFailure.CommitOutcomeUnknown)
         {
@@ -100,7 +113,7 @@ internal sealed class PackageExecutor(IServiceScopeFactory scopes, ScopedRequest
             heartbeatStop.Cancel(); await heartbeat;
             logger.LogWarning("Package work {WorkId} stopped {FailureType}", id, e.GetType().Name);
             using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            try { await requests.SendAsync(new FailPackageWorkCommand(lease, e is RequestRejectedException rejected ? rejected.Code : e is TimeoutException ? "REPLICA_COPY_TIMEOUT" : "REPLICA_COPY_FAILED"), budget.Token); }
+            try { await requests.SendAsync(new FailPackageWorkCommand(lease, e is RequestRejectedException rejected ? rejected.Code : lease.Work.Kind == "Cleanup" ? "CLEANUP_NODE_UNAVAILABLE" : e is TimeoutException ? "REPLICA_COPY_TIMEOUT" : "REPLICA_COPY_FAILED"), budget.Token); }
             catch (PersistenceException failure) when (failure.Failure == PersistenceFailure.CommitOutcomeUnknown) { await requests.SendAsync(new GetPackageAuthorityQuery(id), budget.Token); }
             catch (Exception failure) { logger.LogWarning("Package failure fact {WorkId} unresolved {FailureType}", id, failure.GetType().Name); }
         }

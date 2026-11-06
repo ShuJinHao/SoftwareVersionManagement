@@ -32,7 +32,7 @@ public sealed class PackagePeerClient : IDisposable
     }
     public void Dispose() { Client.Dispose(); _client.Dispose(); _root.Dispose(); }
 }
-internal sealed class PackageFiles(PackageFileOptions options, PackagePeerClient peer, IUnitOfWork unit, TimeProvider clock) : IPackageFiles
+internal sealed partial class PackageFiles(PackageFileOptions options, PackagePeerClient peer, IUnitOfWork unit, TimeProvider clock) : IPackageFiles
 {
     public string NodeId => options.NodeId;
     public Task<IAsyncDisposable> LockUploadAsync(Guid uploadId, CancellationToken token) => Lock("upload-" + uploadId.ToString("D"), false, token);

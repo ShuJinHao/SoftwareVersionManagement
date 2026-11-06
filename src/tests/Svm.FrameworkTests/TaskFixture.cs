@@ -42,7 +42,7 @@ internal sealed class TaskFixture(PackageFixture packages) : IAsyncDisposable
     {
         var s = new ServiceCollection(); s.AddSvmTaskApplication();
         s.AddSvmPostgres(Database.WriterConnection).AddSvmReadPersistence(Database.ReaderConnection).AddSvmUserQueries().AddSvmCatalogQueries().AddSvmReleaseQueries().AddSvmTaskQueries();
-        s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmPersonnelWorkAuthorization().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Instances.Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases().AddSvmPackages().AddSvmTasks();
+        s.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmPersonnelWorkAuthorization().AddSvmSoftwareCatalog().AddSvmSiteAssets().AddSvmAudit().AddSvmPersonnelCrypto(Instances.Site.Personnel.Personnel.Policy).AddSvmInstanceAccess().AddSvmManagedInstances().AddSvmReleases().AddSvmPackages().AddSvmTasks().AddSvmReleaseTaskReferences();
         s.AddSingleton(TaskOptions); s.Replace(ServiceDescriptor.Scoped<ITaskTime>(_ => new FixedTaskTime(Instances.Clock)));
         s.AddSingleton(new PersonnelManagementOptions()); s.AddSingleton(Instances.Site.Options); s.AddSingleton(InstanceFixture.Limits); s.AddSingleton<TimeProvider>(Instances.Clock); s.AddSingleton(Limits); s.AddSingleton(Execution); s.AddSingleton(Nodes);
         var context = new Context(person ?? Instances.Site.Proof, access, SoftwareId, instance, work, role, node);
@@ -76,6 +76,8 @@ internal sealed class TaskFixture(PackageFixture packages) : IAsyncDisposable
     // Transaction tests never invoke file effects. Separate fixtures use the real adapter.
     private sealed class NoFiles : IPackageFiles
     {
+        public Task DeleteLocalAsync(PackageWorkAuthority w, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();
+        public Task DeleteNodeAsync(string n, PackageLease l, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();
         public string NodeId => "node-a";
         public Task<IAsyncDisposable> LockUploadAsync(Guid id, CancellationToken t) => throw new NotSupportedException();
         public Task<(long Size, string Sha256)> ReceiveAsync(UploadReceipt r, Stream s, long? l, Func<CancellationToken, Task> v, CancellationToken t) => throw new NotSupportedException();

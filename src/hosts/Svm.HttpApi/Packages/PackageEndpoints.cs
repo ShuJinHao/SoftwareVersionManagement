@@ -50,6 +50,24 @@ internal static class PackageEndpoints
         group.MapPost("/packages/{packageId:guid}/retry", async (Guid packageId, HttpContext http, ISender sender, IAntiforgery csrf) =>
         { using var doc = await Input(http, csrf, ["reason", "expectedRevision"]); return Results.Json((await sender.Send(new RetryPackageCommand(Key(http), packageId, Revision(doc.RootElement), Text(doc.RootElement, "reason")), http.RequestAborted)).Value, statusCode: 202); });
         group.MapGet("/package-work/{workId:guid}", async (Guid workId, HttpContext http, ISender sender) => { Empty(http); return Results.Json(await sender.Send(new GetPackageWorkQuery(workId), http.RequestAborted)); });
+        group.MapGet("/packages/{packageId:guid}/cleanup", async (Guid packageId, HttpContext http, ISender sender) =>
+        { Empty(http); return Results.Json(await sender.Send(new GetPackageCleanupStatusQuery(packageId), http.RequestAborted)); });
+        group.MapPost("/packages/{packageId:guid}/cleanup", async (Guid packageId, HttpContext http, ISender sender, IAntiforgery csrf) =>
+        {
+            using var doc = await Input(http, csrf, ["reason", "expectedRevision"]);
+            var result = await sender.Send(new RequestPackageCleanupCommand(Key(http), packageId, Revision(doc.RootElement), Text(doc.RootElement, "reason")), http.RequestAborted);
+            http.Response.Headers.Location = "/api/v1/manage/package-work/" + result.Value.Id;
+            return Results.Json(result.Value, statusCode: 202);
+        });
+        group.MapPost("/packages/{packageId:guid}/download-stop-evidence", async (Guid packageId, HttpContext http, ISender sender, IAntiforgery csrf) =>
+        {
+            using var doc = await Input(http, csrf, ["nodeId", "workerGeneration", "stoppedAt", "processStoppedConfirmed", "evidence", "reason", "expectedRevision"]); var b = doc.RootElement;
+            if (!b.TryGetProperty("workerGeneration", out var generation) || generation.ValueKind != JsonValueKind.String || !generation.TryGetGuid(out var gen) ||
+                !b.TryGetProperty("stoppedAt", out var stopped) || stopped.ValueKind != JsonValueKind.String || !stopped.TryGetDateTimeOffset(out var at) ||
+                !b.TryGetProperty("processStoppedConfirmed", out var confirmed) || confirmed.ValueKind != JsonValueKind.True) throw Invalid();
+            return Results.Json((await sender.Send(new RecordDownloadStopCommand(Key(http), packageId, new(Text(b, "nodeId"), gen, at.ToUniversalTime(), true,
+                Text(b, "evidence"), Text(b, "reason"), Revision(b))), http.RequestAborted)).Value, statusCode: 201);
+        });
         group.MapGet("/releases/{releaseId:guid}/test-evidence", async (Guid releaseId, HttpContext http, ISender sender, InstanceCursor cursor) =>
         {
             var input = await cursor.ReadAsync(http, "test-evidence/" + releaseId, new { releaseId }, [], http.RequestAborted);

@@ -9,7 +9,7 @@ public static class PackageRegistration
 {
     public static IServiceCollection AddSvmPackages(this IServiceCollection services) => services.AddScoped<IPackages, Packages>();
 }
-internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, TimeProvider clock,
+internal sealed partial class Packages(IPackageRepository repository, IUnitOfWork unit, TimeProvider clock,
     PackageNodeCatalog nodes, PackageLimits limits, PackageExecutionOptions execution) : IPackages
 {
     public async Task VerifyPublishReadyAsync(Guid id, Guid releaseId, Guid softwareId, CancellationToken token)
@@ -40,7 +40,7 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
     public async Task<PackageWorkView> WorkAsync(Guid id, CancellationToken token)
     {
         var w = await ExistingWork(id, false, token);
-        var count = (await repository.ReplicasAsync(w.PackageId, false, token)).Count(x => x.State == "Healthy");
+        var count = (await repository.ReplicasAsync(w.PackageId, false, token)).Count(x => x.State == (w.Kind == "Cleanup" ? "Deleted" : "Healthy"));
         return new(w.Id.Value, w.Kind, w.State, w.Stage, count, 2, w.LastErrorCode, [], w.CreatedAt, w.CompletedAt, w.Revision);
     }
     public Task<Guid> CreateAsync(Guid id, Guid releaseId, Guid softwareId, Guid initiator, PackageInput input, CancellationToken token)
@@ -104,7 +104,7 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
     public async Task StopAsync(Guid id, CancellationToken token)
     {
         RequireWrite(); var p = await Existing(id, true, token); p.Stop();
-        var w = await repository.UploadAsync(id, true, token); if (w is not null && w.State != "Completed") w.Stop();
+        foreach (var w in await repository.WorksAsync(id, true, token)) if (w.Kind != "Cleanup" && w.State != "Completed") w.Stop();
     }
     public async Task<PackageWorkAuthority> AuthorityAsync(Guid id, bool protect, CancellationToken token)
     { var w = await ExistingWork(id, protect, token); return Authority(w, await Existing(w.PackageId, protect, token)); }
@@ -116,24 +116,26 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
     public async Task<PackageLease?> ClaimAsync(Guid id, string node, Guid leaseToken, DateTimeOffset now, CancellationToken token)
     {
         RequireWrite(); nodes.Require(node); var w = await ExistingWork(id, true, token); var p = await Existing(w.PackageId, true, token);
-        if (p.Disabled) return null;
+        if (w.Kind == "Cleanup" ? !p.Disabled || p.State != "Cleaning" : p.Disabled) return null;
         return w.Claim(node, leaseToken, now, execution.LeaseSeconds) ? new(Authority(w, p), leaseToken, w.LeaseGeneration) : null;
     }
     public async Task RenewAsync(PackageLease lease, DateTimeOffset now, CancellationToken token)
     { RequireWrite(); var (w, _) = await Owned(lease, token); w.Renew(now, execution.LeaseSeconds); }
     public async Task<PackageView> CompleteAsync(PackageLease lease, IReadOnlyList<ReplicaFact> facts, CancellationToken token)
     {
-        RequireWrite(); var (w, p) = await Owned(lease, token); CheckFacts(facts);
+        RequireWrite(); var (w, p) = await Owned(lease, token); if (w.Kind == "Cleanup") throw new RequestRejectedException(RequestFailure.InvalidState); CheckFacts(facts);
         if (facts.Count != 2 || facts.Count(x => x.State == "Healthy") != 2) throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
         await SaveFacts(p.Id.Value, facts, token);
         if ((await repository.ReplicasAsync(p.Id.Value, true, token)).Any(x => !Healthy(x))) throw new RequestRejectedException(RequestFailure.NoHealthyReplica);
         if (p.State != "Ready") p.Ready(); w.Complete(clock.GetUtcNow()); return await View(p, w, token);
     }
     public async Task FailWorkAsync(PackageLease lease, string code, CancellationToken token)
-    { RequireWrite(); var (w, p) = await Owned(lease, token); w.Fail(code); p.Fail(); }
+    { RequireWrite(); var (w, p) = await Owned(lease, token); w.Fail(code); if (w.Kind != "Cleanup") p.Fail(); }
     public async Task<PackageWorkAuthority?> CheckReplicasAsync(Guid id, IReadOnlyList<ReplicaFact> facts, CancellationToken token)
     {
-        RequireWrite(); var p = await Existing(id, true, token); CheckFacts(facts); await SaveFacts(id, facts, token);
+        RequireWrite(); var p = await Existing(id, true, token); CheckFacts(facts);
+        if (p.State is "Cleaning" or "Cleaned") return null; // Late probes cannot replace a confirmed deletion fact.
+        await SaveFacts(id, facts, token);
         var current = await repository.ReplicasAsync(id, true, token);
         if (p.Disabled || p.State != "Ready" || current.Count(Healthy) != 1) return null;
         var work = await repository.UploadAsync(id, true, token);
@@ -189,7 +191,7 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
     private async Task<(PackageWork Work, PackageAsset Package)> Owned(PackageLease lease, CancellationToken token)
     {
         var w = await ExistingWork(lease.Work.WorkId, true, token); var p = await Existing(w.PackageId, true, token);
-        if (p.Disabled || w.DispatchSequence != lease.Work.DispatchSequence || !w.Owns(lease.LeaseToken, lease.LeaseGeneration, clock.GetUtcNow()))
+        if ((w.Kind == "Cleanup" ? !p.Disabled || p.State != "Cleaning" : p.Disabled) || w.DispatchSequence != lease.Work.DispatchSequence || !w.Owns(lease.LeaseToken, lease.LeaseGeneration, clock.GetUtcNow()))
             throw new RequestRejectedException(RequestFailure.InvalidState);
         return (w, p);
     }
@@ -213,7 +215,7 @@ internal sealed class Packages(IPackageRepository repository, IUnitOfWork unit, 
         w.ReceiveToken ?? Guid.Empty, w.ReceiveGeneration, w.SourceNode, p.ExpectedSize, p.ExpectedSha256, received);
     private static PackageWorkAuthority Authority(PackageWork w, PackageAsset p) => new(w.Id.Value, p.Id.Value, p.ReleaseId, p.SoftwareId,
         w.InitiatorId, w.Kind, w.DispatchSequence, w.DispatchEventId, w.Accepted, w.State, w.Stage, w.SourceNode, w.LeaseGeneration, w.LeaseToken,
-        w.LeaseUntil, p.ExpectedSize, p.ExpectedSha256, w.LeaseNode);
+        w.LeaseUntil, p.ExpectedSize, p.ExpectedSha256, w.LeaseNode, p.UploadId);
     private async Task<PackageView> View(PackageAsset p, PackageWork? w, CancellationToken token)
     {
         var count = (await repository.ReplicasAsync(p.Id.Value, false, token)).Count(x => x.State == "Healthy" &&

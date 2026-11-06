@@ -10,6 +10,9 @@ namespace Svm.EntityFrameworkCore.Tasks;
 
 internal sealed class TaskRepository(SvmDbContext db, IUnitOfWork unit) : ITaskRepository
 {
+    public async Task<bool> HasUnfinishedReleaseAsync(Guid id, CancellationToken ct) =>
+        await db.Set<Deployment>().AsNoTracking().AnyAsync(d => d.TargetReleaseId == id && d.State != "Rejected" && d.State != "Canceled" && d.State != "Completed", ct) ||
+        await db.Set<InstanceTask>().AsNoTracking().AnyAsync(t => t.TargetReleaseId == id && t.State != "Succeeded" && t.State != "Failed" && t.State != "Canceled" && t.State != "ClosedUnknown", ct);
     private void Write() { if (unit.CurrentOperationId is null || db.Database.CurrentTransaction is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
     private async Task<T?> One<T>(string sql, Guid id, bool protect, Func<T, Guid> key, CancellationToken ct) where T : class
     {

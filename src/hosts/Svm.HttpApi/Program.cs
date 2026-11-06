@@ -80,7 +80,7 @@ public partial class Program
         builder.Services.AddScoped<IPackageServiceIdentity>(p => p.GetRequiredService<HttpPackageIdentity>());
         builder.Services.AddScoped<IPackageDownloadProof>(p => p.GetRequiredService<HttpPackageIdentity>());
         if (packageFiles is not null)
-            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization();
+            builder.Services.AddSvmPackageFiles(packageFiles).AddSvmPackages().AddSvmReleaseQueries().AddSvmPersonnelWorkAuthorization().AddSvmReleaseTaskReferences();
         if (gitLab is not null) builder.Services.AddSvmGitLab(gitLab);
         builder.Services.AddSvmPersonnel().AddSvmPersonnelAdministration().AddSvmPersonnelSoftwareAdministration().AddSvmAudit().AddSvmPersonnelCrypto(personnel.Policy);
         builder.Services.AddHttpContextAccessor();

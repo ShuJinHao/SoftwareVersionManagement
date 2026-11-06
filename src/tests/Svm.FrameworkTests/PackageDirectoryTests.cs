@@ -101,7 +101,7 @@ public sealed class PackageDirectoryTests
         Assert.Empty(Directory.GetFiles(f.Path, ".svm-access-*", SearchOption.AllDirectories));
     }
 
-    private sealed class Directories : IDisposable
+    internal sealed class Directories : IDisposable
     {
         internal string Path { get; } = System.IO.Path.Combine(OutboxFixture.Root, ".cache", "package-directories-" + Guid.NewGuid().ToString("N"));
         internal PackageFileOptions Options { get; }

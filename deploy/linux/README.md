@@ -216,3 +216,12 @@ verify-plc 只允许明确 full/demo 环境及虚构数据，依次验证固定�
 升级第十六份 RollbackCompatibility 后，旧任务继续为 Update；无自动回退授权。管理员明确配置现场 deployment.create/rollback，兼容声明登记另需产品 release.upload。任务配置沿用 SVM_TASK_CONFIG_FILE，不增加生产测试开关。现场客户端必须识别 kind，提交当前完整数据库状态和最新兼容修订；平台许可不证明接入方实际执行或数据保护完成。
 
 开发侧定向入口为 `eng/node deploy/linux/verify-rollback.mjs --deployment <本项目独立 full demo> --results artifacts/test-results/rollback-compatibility/linux`。脚本只接受明确 demo，创建三个虚构硬件绑定实例、两个双副本正式版本，以浏览器登记兼容依据、选择 A/B 部分回退，核对 B 不兼容拒绝和 C 未被选择，之后通过真实 HTTPS 模拟领取/许可/回执及独立报告。没有厂商安装或数据库操作。私有 rollback-fixture.json 保留原键/正文检查点，未知写入停止，--resume 仅继续已确认步骤；输出证据不含秘密。本批实际运行结果由框架设计 11.1 记录，不默认视为生产完成。
+
+
+## 停用包清理验证与运维边界
+
+当前完整库需要十七份迁移，就绪探针检查 `20261103000100_PackageCleanup`。先用 Migration `script` 审阅，再对明确目标库显式 `apply`；开发库未升级。没有新增私有配置、文件保留期或自动清理开关，沿用包节点/文件目录/消息配置，人员必须另获明确软件 `package.clean`。
+
+从停用版本详情查询清理条件、确认固定版本并发起。未完成投放/任务、未停止文件工作或未确认结束的下载都阻止清理。日志缺失时应先恢复可信日志；确实终止相关节点进程后，才登记节点代次、停止时间与材料。不能为释放磁盘伪填停止证明，也不能以数据库租约过期代替文件锁释放。证明不会把下载写成成功。清理失败保留原工作，恢复节点后从网页重新派发；两个节点均确认后才为 Cleaned。不要直接删除数据库历史或伪造工作完成。
+
+开发验证入口为 `eng/node deploy/linux/verify-cleanup.mjs --deployment <本项目独立 full demo> --results artifacts/test-results/package-cleanup/linux`。只接受明确 demo，创建虚构包，通过真实双副本、下载及可信结束记录、停用、网页确认清理，核对双节点完成与历史保留。私有 cleanup-fixture.json 保存写操作检查点；未知结果停止，`--resume` 仅继续已经核实的步骤，不自动换键重做。输出脱敏 summary.json 和截图，禁止公开 operator.json、fixture 或证书私钥。验证不替代厂区磁盘容量、备份恢复和生产高可用验收。
