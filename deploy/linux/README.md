@@ -1,5 +1,8 @@
 # Linux 演示部署与跨平台开发
 
+统一 Linux x64 整体回归请优先使用[独立候选版安装](ACCEPTANCE.md)：公开离线材料到目标机后再显式初始化私有厂区，不要求源码、SDK、Node 或 OpenSSL。下述 `prepare.mjs --demo` 保留为开发用虚构演示工具，不能作为真实厂区默认配置。账号及整体验收见 [ACCOUNTS](ACCOUNTS.md)、[REGRESSION](REGRESSION.md)。
+
+
 本文交付已有业务的运行入口。单机两逻辑节点用于功能验证；真实 GitLab、厂家安装、容量、异机故障域及生产高可用另验。源码与目标平台证据分别记录，不能把 Mac 容器验证写成原生 Linux x64 验收。
 
 ## 开发与正式构建

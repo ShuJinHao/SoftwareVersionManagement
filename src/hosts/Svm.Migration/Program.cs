@@ -4,6 +4,28 @@ using Svm.Services.Contracts.Framework;
 using Svm.Migration;
 using Svm.ServiceDefaults;
 
+if (args.Length > 0 && args[0] is "candidate-verify" or "acceptance-check" or "acceptance-init")
+{
+    try
+    {
+        if (args is ["candidate-verify", "--bundle", var bundle])
+        {
+            var candidate = await CandidateBundle.VerifyAsync(bundle, CancellationToken.None);
+            Console.WriteLine(JsonSerializer.Serialize(new { candidate.CandidateId, candidate.Commit, candidate.Platform }));
+        }
+        else if (args is ["acceptance-check", "--settings", var settingsFile])
+        {
+            var settings = await AcceptanceSettings.LoadAsync(settingsFile, CancellationToken.None);
+            Console.WriteLine(settings.DataDirectory); Console.WriteLine(settings.ServiceUid); Console.WriteLine(settings.ServiceGid);
+        }
+        else if (args is ["acceptance-init", "--settings", var configuration, "--bundle", var material, "--output", var destination])
+            Console.WriteLine(JsonSerializer.Serialize(await AcceptanceDeployment.InitializeAsync(configuration, material, destination, CancellationToken.None)));
+        else throw new ArgumentException();
+        return 0;
+    }
+    catch { Console.Error.WriteLine("CANDIDATE_INITIALIZATION_INVALID; private details suppressed; existing data were not reset."); return 2; }
+}
+
 if (args.Length == 3 && args[1] == "--directory" && args[0] is "recovery-review" or "recovery-open")
 {
     try { await RecoveryApproval.ExecuteAsync(args[0], args[2], CancellationToken.None); Console.WriteLine("RECOVERY_STATE_SAVED; services were not started."); return 0; }

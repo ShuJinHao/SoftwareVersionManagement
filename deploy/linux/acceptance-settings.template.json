@@ -1,0 +1,22 @@
+{
+  "siteName": "<填写本次整体验收厂区名称>",
+  "timeZone": "Asia/Shanghai",
+  "publicHost": "<填写服务器DNS名称或IPv4>",
+  "publicBind": "0.0.0.0",
+  "httpsPort": 9443,
+  "secondaryHttpsPort": 9444,
+  "dataDirectory": "/srv/svm/<填写新的验收目录>",
+  "serviceUid": 10001,
+  "serviceGid": 10001,
+  "networkSubnet": "172.31.248.0/28",
+  "gatewayAddress": "172.31.248.10",
+  "employeeNo": "<填写管理员工号>",
+  "administratorName": "<填写管理员名称>",
+  "certificateMode": "acceptance-test",
+  "certificateDays": 30,
+  "instances": { "enrollmentMaxLifetimeSeconds": 86400, "enrollmentMaxCount": 100, "recoveryMaxLifetimeSeconds": 1800 },
+  "plcUploadCredentialMaxLifetimeSeconds": 86400,
+  "packageLimits": { "maxPackageBytes": 1073741824, "uploadIdleSeconds": 30 },
+  "packageExecution": { "leaseSeconds": 60, "pollSeconds": 5, "replicaCheckSeconds": 60, "workBatchSize": 20, "peerResponseSeconds": 15, "downloadAuthorizationSeconds": 20 },
+  "task": { "defaultStartLocalTime": "00:00", "defaultLatestStartLocalTime": "23:59", "batchSize": 10, "failureLimit": 2, "resultWaitSeconds": 300, "selectionChunkSize": 100, "leaseSeconds": 60, "pollRetrySeconds": 2, "maxSelectionMembers": 1000, "snapshotTimeoutSeconds": 10 }
+}
