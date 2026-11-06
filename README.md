@@ -10,6 +10,8 @@
 
 当前 `codex/linux-x64-release-candidate` 补齐 Linux x64 独立离线验收初始化：公开候选包与厂区私有配置分开，运行机只需 Docker Engine/Compose/Bash，不需要源码、SDK、Node 或在线依赖还原。初始化复用 Migration 技术宿主，显式填写厂区、地址、UID/GID、数据目录、管理员和运行参数，只新建身份与秘密，不迁移、播种或启动服务。完整能力配置包含 PLC；GitLab 默认未配置，启用仍须实际连接与受权绑定。安装正文见[完整候选版安装](deploy/linux/ACCEPTANCE.md)、[账号与权限](deploy/linux/ACCOUNTS.md)、[整体回归记录](deploy/linux/REGRESSION.md)。
 
+实现提交 `6bc701b`，见 [PR #24](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/24)。[CI #42232498832](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/42232498832) 的 Windows/Linux 两 SDK 组合均通过，两个 Linux SDK 完整 Release 通过；原生 Linux x64 独立目录完成包校验/离线载入、私有初始化、空库显式迁移/播种/HTTPS 登录和重启保留四阶段验证。Architecture 79、初始化 5、CI 工具 5 通过；未改变的业务/网页/消息/冷恢复组未重跑。CI 临时合并提交 `a17287f` 与实现提交文件树一致，私有测试目录、项目容器与部署镜像标签已清理。最终候选从合并后干净 main 单独组装，包含安装、权限与整体回归材料，不因合并重复测试。
+
 本批保持 29 工程/99 引用/17 迁移和依赖锁，开发库不升级。运维与恢复实现 `102d878` 的 Windows/Linux 两 SDK 和原生 Linux x64 四阶段冷恢复证据继续保留（[CI #42222980086](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/42222980086)）；本批仅补初始化、候选包与新配置安装的影响选集，不重复宽泛业务或恢复测试。候选冻结后由用户集中部署回归，不宣称真实 GitLab、厂家安装或生产容量/高可用已经验收。
 
 2026-11-04：已在 `codex/package-cleanup` 接通停用包清理：明确产品授权、阻塞原因、固定对象确认、原工作中断恢复、双节点文件清除和历史保留。完整 Architecture 79、定向后端 14、网页 10、工具 2 项通过；第十七份迁移及就绪探针只在一次性库验证，十六份旧迁移、29 工程/99 引用、依赖锁和开发库不变。完整开发 Release 在独立 Linux arm64 容器完成三阶段 HTTPS/浏览器验证；测试资源和私有材料已清理，原有演示保留。实际证据见框架设计 11.1。部分回退当时已提交 `bcdbbb5` / PR #20（现已于 2026-11-06 合并）；统一候选版本仍待依赖与运维收尾，不要求用户逐功能验收。
