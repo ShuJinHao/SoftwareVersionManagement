@@ -1,0 +1,21 @@
+services:
+  review-entry:
+    image: ${SVM_NGINX_IMAGE}
+    platform: ${SVM_PLATFORM}
+    user: "${SVM_UID}:${SVM_GID}"
+    entrypoint: [nginx]
+    command: ["-g", "daemon off;"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: local
+      options: { max-size: "10m", max-file: "5" }
+    ports:
+      - "127.0.0.1:${SVM_REVIEW_PORT:-10443}:10443"
+    volumes: ["./recovery/review-nginx.conf:/etc/nginx/nginx.conf:ro"]
+    networks: [svm, review-entry]
+    depends_on:
+      api-a: { condition: service_healthy }
+networks:
+  review-entry: {}

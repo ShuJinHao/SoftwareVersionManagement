@@ -1,0 +1,13 @@
+# Only used while recovery/locked.json exists. The recovery network has no external route.
+services:
+  api-a:
+    ports: !reset []
+  gateway:
+    ports: !reset []
+    networks:
+      svm:
+        ipv4_address: !reset null
+networks:
+  svm:
+    internal: true
+    ipam: !reset {}

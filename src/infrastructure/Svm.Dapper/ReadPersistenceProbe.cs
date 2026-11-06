@@ -3,7 +3,7 @@ using Npgsql;
 namespace Svm.Dapper;
 
 /// <summary>Bounded, read-only deployment probe. Never migrates or writes business data.</summary>
-public sealed class ReadPersistenceProbe : IAsyncDisposable
+public sealed partial class ReadPersistenceProbe : IAsyncDisposable
 {
     private readonly ReadDataSource _source;
     private readonly ReadQuerySession _query;

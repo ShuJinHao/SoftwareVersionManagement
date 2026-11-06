@@ -33,8 +33,27 @@ public partial class Program
 {
     public static void Main(string[] args)
     {
-        if (args.Length == 1 && args[0] == "--healthcheck")
-        { Environment.ExitCode = HostDiagnostics.ProbeAsync(HostRuntimeConfiguration.Load()).GetAwaiter().GetResult(); return; }
+        if (args.Length == 1 && args[0] is "--operations-report" or "--recovery-packages")
+        {
+            using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var probe = new ReadPersistenceProbe(PersistenceConfiguration.LoadFromEnvironment().ReaderConnectionString);
+            try
+            {
+                if (args[0] == "--recovery-packages")
+                {
+                    Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(probe.RecoveryPackagesAsync(budget.Token).GetAwaiter().GetResult(), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+                    return;
+                }
+                var report = probe.OperationsAsync(budget.Token).GetAwaiter().GetResult();
+                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(report, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+                Environment.ExitCode = report.Status == "Available" ? 0 : 3;
+            }
+            catch { Console.Error.WriteLine("OPERATIONS_UNAVAILABLE; private details suppressed."); Environment.ExitCode = 3; }
+            finally { probe.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+            return;
+        }
+        if (args.Length == 1 && args[0] is "--healthcheck" or "--diagnostics")
+        { Environment.ExitCode = HostDiagnostics.ProbeAsync(HostRuntimeConfiguration.Load(), args[0] == "--diagnostics").GetAwaiter().GetResult(); return; }
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args,
             WebRootPath = Path.Combine(AppContext.BaseDirectory, "wwwroot") });
         builder.Host.UseDefaultServiceProvider(options =>
@@ -44,6 +63,7 @@ public partial class Program
         });
 
         var runtime = HostRuntimeConfiguration.Load();
+        SafeConsoleFormatter.Configure(builder.Logging);
         var taskOptions = TaskConfiguration.LoadFromEnvironment();
         var packageFiles = PackageFileOptions.LoadFromEnvironment();
         var gitLab = GitLabOptions.LoadFromEnvironment();
@@ -131,7 +151,12 @@ public partial class Program
         builder.Services.AddHealthChecks();
         var databaseProbe = new ReadPersistenceProbe(persistence.ReaderConnectionString);
         builder.Services.AddSingleton<IHostedService>(provider => new HostDiagnostics(runtime, "HttpApi", databaseProbe.CheckAsync,
-            provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>()));
+            provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>(), async token =>
+            {
+                var db = await databaseProbe.OperationsAsync(token, packageFiles?.Execution.ReplicaCheckSeconds * 2);
+                var metrics = db.Metrics.Concat(await PackageOperationsProbe.ReadAsync(packageFiles, token)).ToArray();
+                return new OperationsSnapshot(db.ObservedAt, metrics.Any(m => m.Status == "Unavailable") ? "Incomplete" : "Available", metrics);
+            }));
         builder.Services.ValidateSvmFoundation();
 
         if (args.Length == 1 && args[0] == "--validate-config")
@@ -144,7 +169,19 @@ public partial class Program
         var app = builder.Build();
         app.Lifetime.ApplicationStopped.Register(() => databaseProbe.DisposeAsync().AsTask().GetAwaiter().GetResult());
         app.UseForwardedHeaders(runtime.Forwarding());
+        app.Use(async (http, next) =>
+        {
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            try { await next(); }
+            finally
+            {
+                var operation = Guid.TryParse(http.Request.Headers["Idempotency-Key"].ToString(), out var id) ? id : (Guid?)null;
+                app.Logger.LogInformation("Request completed {Method} {StatusCode} {ElapsedMs} {TraceId} {OperationId}",
+                    http.Request.Method, http.Response.StatusCode, System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds, http.TraceIdentifier, operation);
+            }
+        });
         app.Use(SessionErrors.Handle);
+        app.Use(RecoveryFence.Load().InvokeAsync);
         app.Use(HttpPackageIdentity.VerifyPeer);
         app.Use(HttpAccessProofSource.Authenticate);
         app.UseAuthentication();

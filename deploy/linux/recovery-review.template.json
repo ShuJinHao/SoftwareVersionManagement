@@ -1,0 +1,9 @@
+{
+  "operator": "填写实际核实人员",
+  "reason": "填写本次恢复原因及核实结论",
+  "evidenceReference": "填写独立核实记录编号或私有材料位置",
+  "sourceStopped": false,
+  "postBackupChangesReconciled": false,
+  "pendingWorkReviewed": false,
+  "identityMaterialReviewed": false
+}

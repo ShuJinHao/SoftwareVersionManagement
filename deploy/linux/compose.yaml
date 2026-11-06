@@ -1,4 +1,7 @@
 name: ${SVM_PROJECT}
+x-logging: &logging
+  driver: local
+  options: { max-size: "10m", max-file: "5" }
 x-runtime: &runtime
   image: ${SVM_RUNTIME_IMAGE}
   platform: ${SVM_PLATFORM}
@@ -8,6 +11,7 @@ x-runtime: &runtime
   tmpfs: ["/tmp"]
   networks: [svm]
   security_opt: [no-new-privileges:true]
+  logging: *logging
   labels:
     io.svm.commit: ${SVM_CODE_COMMIT:-unrecorded}
     io.svm.deployment: ${SVM_PROJECT}
@@ -15,17 +19,20 @@ x-environment: &environment
   SVM_PERSISTENCE_CONFIG_FILE: /svm/config/persistence.json
   SVM_SITE_CONFIG_FILE: /svm/config/site.json
   SVM_HOST_CONFIG_FILE: /svm/config/host.json
+  SVM_RECOVERY_DIRECTORY: /svm/recovery
   SVM_PERSONNEL_CONFIG_FILE: /svm/config/personnel.json
   SVM_INSTANCE_ACCESS_CONFIG_FILE: /svm/config/instances.json
   SVM_PLC_CONFIG_FILE: ${SVM_PLC_CONFIG_FILE:-}
   SVM_PACKAGE_CONFIG_FILE: ${SVM_PACKAGE_CONFIG_FILE:-}
   SVM_MESSAGING_CONFIG_FILE: ${SVM_MESSAGING_CONFIG_FILE:-}
   SVM_TASK_CONFIG_FILE: ${SVM_TASK_CONFIG_FILE:-}
+  SVM_GITLAB_CONFIG_FILE: ${SVM_GITLAB_CONFIG_FILE:-}
   ASPNETCORE_URLS: https://0.0.0.0:7443
   Logging__LogLevel__Default: Information
   Logging__LogLevel__MassTransit: Warning
 services:
   postgres:
+    logging: *logging
     image: ${SVM_POSTGRES_IMAGE}
     platform: ${SVM_PLATFORM}
     user: "${SVM_UID}:${SVM_GID}"
@@ -46,6 +53,7 @@ services:
       timeout: 3s
       retries: 20
   rabbitmq:
+    logging: *logging
     profiles: [full]
     image: ${SVM_RABBITMQ_IMAGE}
     platform: ${SVM_PLATFORM}
@@ -68,6 +76,7 @@ services:
     environment: *environment
     volumes:
       - ./runtime/node-a:/svm/config:ro
+      - ./recovery:/svm/recovery:ro
       - ./packages/node-a:/svm/packages
       - ./logs/node-a:/svm/logs:ro
     depends_on:
@@ -84,6 +93,7 @@ services:
     environment: *environment
     volumes:
       - ./runtime/node-b:/svm/config:ro
+      - ./recovery:/svm/recovery:ro
       - ./packages/node-b:/svm/packages
       - ./logs/node-b:/svm/logs:ro
     depends_on:
@@ -100,6 +110,7 @@ services:
     environment: *environment
     volumes:
       - ./runtime/node-a:/svm/config:ro
+      - ./recovery:/svm/recovery:ro
       - ./packages/node-a:/svm/packages
       - ./logs/node-a:/svm/logs:ro
     depends_on:
@@ -117,6 +128,7 @@ services:
     environment: *environment
     volumes:
       - ./runtime/node-b:/svm/config:ro
+      - ./recovery:/svm/recovery:ro
       - ./packages/node-b:/svm/packages
       - ./logs/node-b:/svm/logs:ro
     depends_on:
@@ -128,6 +140,7 @@ services:
       timeout: 8s
       retries: 12
   gateway:
+    logging: *logging
     profiles: [full]
     image: ${SVM_NGINX_IMAGE}
     platform: ${SVM_PLATFORM}

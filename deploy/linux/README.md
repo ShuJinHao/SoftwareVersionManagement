@@ -76,7 +76,7 @@ cd artifacts/linux-demo/my-demo
 
 svm.sh 可在准备好的 Linux 目录独立运行，不依赖源码、SDK 或 Node。prepare 对发布物摘要进行复核后，生成独立构建上下文与运行配置。build 仅以固定 ASP.NET 运行镜像构建，不在镜像中安装开发工具。
 
-初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 16 份迁移（最后为 RollbackCompatibility） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
+初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 17 份迁移（最后为 PackageCleanup） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
 
 登录资料在私有 operator.json；初始账号仅有播种规则规定的权限，首次登录改密，再按职责明确分配资产和软件权限。工具不将真实账号或凭据输出到公共日志。不要公开这个目录、operator.json、连接配置、CA 私钥或服务私钥。
 
@@ -92,7 +92,7 @@ preview 只启动管理 API 与数据库，直接通过 HTTPS 访问；没有包
 - DataProtection 的 svm/ ApplicationName、保护证书与数据库密钥跨节点共享且稳定，不依赖安装路径。
 - SVM_HOST_CONFIG_FILE 提供公用 HTTPS 证书、KnownProxies 和私有 HealthPort。--validate-config 校验配置/注册后退出，不启动监听、消费者、业务循环或 DDL。
 - /health/live、/health/ready 仅在独立私有监听提供。--healthcheck 从容器内访问，运行镜像不需 curl/Node。
-- 数据库未达到当前 16 份迁移及 RollbackCompatibility 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
+- 数据库未达到当前 17 份迁移及 PackageCleanup 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
 - 证书角色覆盖与完整性增强仍暂缓；当前链验证、指纹、有效性和 mTLS 继续保留。
 
 直接执行 --validate-config 仍需完整挂载配置和准备日志目录；它不验证网络可达性。status、依赖 healthcheck 与后续 HTTPS 流程用于确认网络和数据库事实。
@@ -148,7 +148,7 @@ eng/node deploy/linux/verify-hardware.mjs --deployment artifacts/linux-demo/my-d
 
 平台 CI 使用 Windows/Linux x64 与两个 SDK 的加载/构建矩阵；两个 Linux SDK 分别完成正式发布，仅 Linux 8.0.425 运行 Architecture、受影响选集和本批定向 Compose 浏览器流程。VS MSBuild 成功不替代 GUI 实机验收。PR 文档单独更新复用已有代码证据，GitLab 接入示例不承担平台自身 CI。
 
-当前执行结果见框架设计与验收记录；任何尚未完成的目标环境验证须明确标注。
+当前执行结果见框架设计与验收记录；任何尚未完成的目标环境验证须明确标注。私有诊断、受控日志、冷备份、隔离复核及人工开放见 [运维与恢复](OPERATIONS.md)；实际配置、SBOM/镜像材料及用户整体回归交接见 [统一候选版核对表](DELIVERY-CHECKLIST.md)。本机恢复流程不代替现场 RPO/RTO 和异机故障域验收。
 
 ## 网页操作定向验证
 

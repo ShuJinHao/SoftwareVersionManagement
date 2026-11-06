@@ -17,6 +17,7 @@ jobs:
       tools: ${{ steps.impact.outputs.tools }}
       web: ${{ steps.impact.outputs.web }}
       browser: ${{ steps.impact.outputs.browser }}
+      operations: ${{ steps.impact.outputs.operations }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -97,8 +98,36 @@ jobs:
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.tools == 'true'
         shell: bash
         run: |
-          eng/test tools --filter 'web selection|CI impact|publish rejects' --preview
-          eng/test tools --filter 'web selection|CI impact|publish rejects' --results-directory artifacts/test-results/platform/tools
+          eng/test tools --filter 'operations |CI impact|publish rejects' --preview
+          eng/test tools --filter 'operations |CI impact|publish rejects' --results-directory artifacts/test-results/platform/tools
+      - name: Preview and verify affected recovery safety
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
+        shell: bash
+        run: |
+          selection='(FullyQualifiedName~OperationsRecoveryTests&FullyQualifiedName!~ReadOnlyPostgresDiagnostics)|FullyQualifiedName~HostDeploymentTests.PrivateReadinessChecksOnlyDependenciesHostedByThisRole'
+          eng/test framework --filter "$selection" --preview
+          eng/test framework --filter "$selection" --results-directory artifacts/test-results/platform/operations-unit
+      - name: Targeted Linux cold backup and fenced recovery
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
+        shell: bash
+        run: |
+          eng/node deploy/linux/prepare.mjs --demo --settings deploy/linux/demo-settings.json --release artifacts/releases/ci --output artifacts/linux-demo/operations-ci
+          artifacts/linux-demo/operations-ci/svm.sh build
+          artifacts/linux-demo/operations-ci/svm.sh pull
+          artifacts/linux-demo/operations-ci/svm.sh dependencies
+          artifacts/linux-demo/operations-ci/svm.sh apply
+          artifacts/linux-demo/operations-ci/svm.sh seed
+          artifacts/linux-demo/operations-ci/svm.sh validate
+          artifacts/linux-demo/operations-ci/svm.sh up
+          eng/node deploy/linux/inventory.mjs --deployment artifacts/linux-demo/operations-ci --output artifacts/test-results/platform/operations-images
+          eng/node deploy/linux/verify-operations.mjs --deployment artifacts/linux-demo/operations-ci --results artifacts/test-results/platform/operations-linux
+      - name: Stop owned recovery resources
+        if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
+        shell: bash
+        run: |
+          for directory in artifacts/linux-demo/operations-ci-restored artifacts/linux-demo/operations-ci; do
+            if [ -f "$directory/svm.sh" ]; then "$directory/svm.sh" down; fi
+          done
       - name: Preview and verify affected web interactions
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.web == 'true'
         shell: bash

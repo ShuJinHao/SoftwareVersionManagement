@@ -135,7 +135,8 @@ const nginx = {workerUser:null,resolverAddress:'127.0.0.11',certificateDirectory
 await file('gateway/nginx.conf',renderNginx(nginx));
 await cp(release,join(output,'image/release'),{recursive:true});
 await cp(cert('root.pem'),join(output,'image/ca.crt'));await cp(join(root,'deploy/linux/Dockerfile'),join(output,'image/Dockerfile'));
-for (const name of ['compose.yaml','compose.preview.yaml','svm.sh']) {await cp(join(root,'deploy/linux',name),join(output,name));await chmod(join(output,name),name.endsWith('.sh')?0o700:0o600);}
+await mkdir(join(output,'recovery'),{mode:0o700});
+for (const name of ['compose.yaml','compose.preview.yaml','compose.recovery.yaml','compose.review.yaml','svm.sh','operations.sh']) {await cp(join(root,'deploy/linux',name),join(output,name));await chmod(join(output,name),name.endsWith('.sh')?0o700:0o600);}
 const images={};
 for (const [name,manifest] of [['POSTGRES','postgres.local.json'],['RABBITMQ','rabbitmq.local.json'],['NGINX','nginx.packages.json']])
   images[name]=JSON.parse(await readFile(join(root,'build',manifest),'utf8')).images[settings.platform];

@@ -6,15 +6,16 @@ import { fileURLToPath } from 'node:url';
 export function changeImpact(files) {
   const changed = files.filter(f => f && !f.endsWith('.md'));
   const code = changed.some(f => /^(src\/|eng\/|build\/|deploy\/|\.github\/|global\.json$|Directory\..*|SoftwareVersionManagement\.sln$|NuGet\.Config$)/.test(f));
-  const tools = changed.some(f => /^(eng\/(bootstrap|toolchain|run|publish|test|delivery\.test|ci-changes)\.mjs$|Directory\.Build\.targets$|global\.json$|\.github\/)/.test(f));
+  const tools = changed.some(f => /^(eng\/(bootstrap|toolchain|run|publish|release-materials|test|delivery\.test|ci-changes)\.mjs$|Directory\.Build\.targets$|global\.json$|\.github\/)/.test(f));
   const web = changed.some(f => /^src\/ui\/svm-web\//.test(f));
   const browser = changed.some(f => /^src\/ui\/svm-web\/(src\/|tests\/browser\/)/.test(f) || /^deploy\/linux\/verify-(ui|hardware|roles|plc|rollback|cleanup)\.mjs$/.test(f));
-  return { code, tools, web, browser };
+  const operations = changed.some(f => /^(src\/hosts\/Svm.ServiceDefaults\/(DeploymentBackup|Recovery|HostDiagnostics|SafeConsole)|src\/infrastructure\/(Svm.Dapper\/Operations|Svm.FileStorage\/PackageOperations)|src\/shared\/Svm.Services.Contracts\/Framework\/OperationsSnapshot|src\/tests\/Svm.FrameworkTests\/OperationsRecoveryTests|eng\/release-materials|deploy\/linux\/(operations|inventory|verify-operations|compose|prepare|svm\.sh|Dockerfile))/.test(f));
+  return { code, tools, web, browser, operations };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-  let impact = { code: true, tools: true, web: true, browser: true };
+  let impact = { code: true, tools: true, web: true, browser: true, operations: true };
   if (process.env.GITHUB_EVENT_NAME === 'pull_request') {
     const before = event.action === 'synchronize' ? event.before : event.pull_request?.base?.sha;
     const after = event.pull_request?.head?.sha;
