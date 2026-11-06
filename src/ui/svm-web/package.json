@@ -27,7 +27,7 @@
     "tailwind-merge": "3.6.0",
     "vue": "3.5.43",
     "vue-echarts": "8.0.1",
-    "vue-i18n": "11.4.2",
+    "vue-i18n": "11.4.18",
     "vue-router": "5.0.3"
   },
   "devDependencies": {
@@ -36,15 +36,16 @@
     "@types/node": "24.12.0",
     "@vitejs/plugin-vue": "6.0.9",
     "@vue/tsconfig": "0.8.1",
-    "happy-dom": "20.10.6",
+    "happy-dom": "21.0.4",
     "tailwindcss": "4.3.0",
     "typescript": "5.9.3",
-    "vite": "8.3.1",
-    "vitest": "4.1.11",
+    "vite": "8.3.5",
+    "vitest": "4.1.12",
     "vue-tsc": "3.2.5"
   },
   "overrides": {
-    "postcss": "8.5.28",
+    "follow-redirects": "1.16.2",
+    "postcss": "8.5.30",
     "nanoid": "3.3.18",
     "source-map-js": "1.2.2"
   }
