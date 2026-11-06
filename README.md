@@ -76,7 +76,7 @@ Application 通过类型化端口登记三类固定消息；业务、审计、�
 
 跨平台开发、完整 Release 和 Linux Compose 演示入口见 [部署手册](deploy/linux/README.md)。上一批 SDK/网页整改的 [CI #38907621333](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/38907621333)的 Windows/Linux x64 × SDK 8.0.400/8.0.425 四项组合全部通过，Windows 包含 VS MSBuild；两个 Linux SDK 均生成干净正式 Release，原生 Linux 一次通过该批八阶段 HTTPS/API/浏览器选集。Architecture 79、工具 10、网页 60 项通过，另 5 项按名称排除；具体证据、失败历史、清理及 R00—R18 状态见框架设计第 11.1 节。VS GUI、公司实际 SDK/runtime、真实 GitLab、企业配置及生产验收仍待执行。
 
-2026-11-05 已按确认范围更新五项 npm 依赖及必要闭包，包含满足 Vite 下限的 PostCSS 8.5.30。更新后 npm 扫描未报告已知漏洞；Architecture 79、网页定向 10、工具 3 项通过，网页类型检查/构建和许可核对通过。其余 34 个网页用例按名称排除。NuGet、业务源码和十七份迁移不变；完整候选版仍需观测、备份恢复及发行材料收尾，当前结果不代替整体回归。
+2026-11-05 已按确认范围更新五项 npm 依赖及必要闭包，包含满足 Vite 下限的 PostCSS 8.5.30。更新后 npm 扫描未报告已知漏洞；Architecture 79、网页定向 10、工具 3 项通过，网页类型检查/构建和许可核对通过。其余 34 个网页用例按名称排除。实现提交 `4f5523a`，见 [PR #22](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/22)；[CI #42039896014](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/42039896014) 五项检查全部通过，Windows/Linux × SDK 8.0.400/8.0.425 构建通过，两个 Linux SDK 均生成完整 Release。本机同一实现提交的干净完整发行物已核验 693 个文件和 31 份锁文件摘要。NuGet、业务源码和十七份迁移不变；PR 保留审阅，完整候选版仍需观测、备份恢复及发行材料收尾，当前结果不代替整体回归。
 
 ## GitLab 正式版本导入
 
