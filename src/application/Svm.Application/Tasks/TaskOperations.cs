@@ -10,7 +10,7 @@ using Svm.Services.Contracts.Messaging.V1;
 namespace Svm.Application.Tasks;
 
 internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts facts, IManagedInstances instances,
-    IReleases releases, IPackages packages, IIntegrationMaterials materials, IPersonnelWorkAuthorization authorization,
+    IReleases releases, IPackages packages, IIntegrationMaterials materials, ICompatibilityDeclarations compatibility, IPersonnelWorkAuthorization authorization,
     ITaskTime time, TaskOptions options, SiteCatalogOptions site, ICallContext calls,
     IUnitOfWork unit, IAuditWriter audit)
 {
@@ -42,6 +42,7 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
     public async Task<OperationResult<DeploymentView>> CreateDeployment(CreateDeploymentCommand x, CancellationToken ct)
     {
         if (!await authorization.CoversSelectionAsync(Actor, x.Input.SoftwareId, "deployment.create", x.Input.SelectionId, true, ct)) throw new RequestRejectedException(RequestFailure.PermissionDenied);
+        if (x.Input.Kind == "Rollback" && (x.Input.TargetReleaseId is null || !await authorization.CoversSelectionAsync(Actor, x.Input.SoftwareId, "deployment.rollback", x.Input.SelectionId, true, ct))) throw new RequestRejectedException(RequestFailure.PermissionDenied);
         var release = await Target(x.Input.SoftwareId, x.Input.TargetReleaseId, true, ct); var now = await time.NowAsync(ct);
         var d = await tasks.CreateAsync(Guid.NewGuid(), x.Input, release.Id, Actor, x.Input.Window ?? DefaultWindow(now), ct);
         var w = await tasks.CreateWorkAsync(Guid.NewGuid(), d.SoftwareId, d.Id, Actor, "Deployment", ct);
@@ -76,11 +77,20 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         }
         await tasks.CheckStartAsync(x.AttemptId, ct);
         var report = x.Input.StateReport; await VerifyReport(d.SoftwareId, report, ct);
-        var direction = Direction(report, release.Version); if (direction is not null) throw new RequestRejectedException(direction == "ROLLBACK_REQUIRED" ? RequestFailure.RollbackRequired : direction == "CURRENT_VERSION_UNKNOWN" ? RequestFailure.CurrentVersionUnknown : RequestFailure.InvalidState);
+        var direction = Direction(report, release.Version, d.Kind); if (direction is not null) throw DirectionFailure(direction);
+        CompatibilityDecision? decision = null;
+        if (d.Kind == "Rollback")
+        {
+            if (x.Input.Preflight.CompatibilityDeclarationRevision is null) throw new RequestRejectedException(RequestFailure.CompatibilityRequired);
+            var check = await compatibility.CheckAsync(release.Id, report.InstalledReleaseId, report.DatabaseState, x.Input.Preflight.CompatibilityDeclarationRevision, ct);
+            if (check.RejectionCode is { } rejection) throw CompatibilityFailure(rejection);
+            decision = check.Decision;
+        }
+        else if (x.Input.Preflight.CompatibilityDeclarationRevision is not null) throw new RequestRejectedException(RequestFailure.ValidationFailed);
         var accepted = await instances.ReportAsync(t.InstanceId, report, ct);
         // Only a newly accepted report or the exact current report may accompany a start permit.
         if (!accepted.Applied) throw new RequestRejectedException(RequestFailure.ReportConflict);
-        return Done(await tasks.StartAsync(x.AttemptId, p.Id, p.Sha256!, ct), x.AttemptId, "tsk.start.authorized", "digest and data protection confirmed");
+        return Done(await tasks.StartAsync(x.AttemptId, p.Id, p.Sha256!, ct, decision), x.AttemptId, "tsk.start.authorized", "digest and data protection confirmed");
     }
     public async Task<OperationResult<ReceiptResult>> SubmitTaskReceipt(SubmitTaskReceiptCommand x, CancellationToken ct)
     {
@@ -90,6 +100,8 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         var r = await tasks.ReceiveAsync(x.AttemptId, x.Input, TaskProjection.ReceiptDigest(x.Input), applied, ct);
         return Done(r, r.ReceiptId, "tsk.receipt.recorded", r.LateAfterClosure ? "late receipt retained without applying snapshot" : "sequenced receipt");
     }
+    public async Task<OperationResult<CompatibilityView>> RecordCompatibility(RecordCompatibilityCommand x, CancellationToken ct) => Done(
+        await compatibility.RecordAsync(Guid.NewGuid(), x.ReleaseId, x.Input, Actor, ct), x.ReleaseId, "rel.compatibility.recorded", x.Input.Reason);
     public async Task<OperationResult<IntegrationMaterialView>> RecordIntegrationMaterial(RecordIntegrationMaterialCommand x, CancellationToken ct) => Done(
         await materials.RecordAsync(Guid.NewGuid(), x.ReleaseId, x.Input, Actor, ct), x.ReleaseId, "rel.material.recorded", x.Input.Reason);
     public async Task<OperationResult<TaskLease?>> ClaimTaskWork(ClaimTaskWorkCommand x, CancellationToken ct) => OperationResult<TaskLease?>.Completed(Operation, await tasks.ClaimWorkAsync(x.WorkId, x.LeaseToken, ct), x.WorkId);
@@ -114,17 +126,24 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         {
             var d = await tasks.DeploymentAsync(w.ResourceId, false, ct);
             authorized &= await authorization.CoversSelectionAsync(w.InitiatorId, w.SoftwareId, permission, d.SelectionId, true, ct);
+            if (d.Kind == "Rollback" && w.Kind is "Deployment" or "Schedule") authorized &= await authorization.CoversSelectionAsync(w.InitiatorId, w.SoftwareId, "deployment.rollback", d.SelectionId, true, ct);
             var r = await releases.GetAsync(d.TargetReleaseId, true, ct);
             available = r.State == "Formal" && (await packages.GetAsync(r.PackageId, false, true, ct)).DownloadAvailable;
             if (authorized && available && w.Kind == "Deployment" && w.Stage == "Admission")
             {
                 foreach (var id in await tasks.NextMembersAsync(x.Lease, ct))
                 {
-                    var f = await facts.GetAsync(id, true, ct); var reason = f?.SoftwareId != d.SoftwareId || !await authorization.HasInstanceAsync(w.InitiatorId, w.SoftwareId, "deployment.create", id, true, ct) ? "OUT_OF_SCOPE" : f.Lifecycle != "Active" ? "INSTANCE_SUSPENDED" : f.HardwareBindingId is null ? "HARDWARE_BINDING_REQUIRED" : Direction(f.Snapshot, r.Version);
+                    var f = await facts.GetAsync(id, true, ct); var reason = f?.SoftwareId != d.SoftwareId || !await authorization.HasInstanceAsync(w.InitiatorId, w.SoftwareId, "deployment.create", id, true, ct) ? "OUT_OF_SCOPE" : f.Lifecycle != "Active" ? "INSTANCE_SUSPENDED" : f.HardwareBindingId is null ? "HARDWARE_BINDING_REQUIRED" : Direction(f.Snapshot, r.Version, d.Kind);
+                    CompatibilityDecision? decision = null;
+                    if (reason is null && d.Kind == "Rollback")
+                    {
+                        var check = await compatibility.CheckAsync(r.Id, f!.Snapshot?.InstalledReleaseId, f.Snapshot?.DatabaseState, null, ct);
+                        reason = check.RejectionCode; decision = check.Decision;
+                    }
                     Guid? retry = null;
                     if (d.Id != Guid.Empty && reason is null)
                     { var source = await tasks.RetryDeploymentAsync(d.Id, ct); if (source is { } old) { try { retry = await tasks.RetrySourceAsync(old, id, ct); } catch (RequestRejectedException e) when (e.Failure == RequestFailure.RetrySourceInvalid) { reason = "RETRY_SOURCE_INVALID"; } } }
-                    await tasks.AdmitAsync(x.Lease, id, reason, retry, ct, f?.HardwareBindingId);
+                    await tasks.AdmitAsync(x.Lease, id, reason, retry, ct, f?.HardwareBindingId, decision);
                 }
             }
         }
@@ -152,12 +171,15 @@ internal sealed class TaskOperations(ITaskWorkflow tasks, IInstanceTaskFacts fac
         if (zone.IsInvalidTime(from) || zone.IsInvalidTime(until) || zone.IsAmbiguousTime(from) || zone.IsAmbiguousTime(until)) throw new RequestRejectedException(RequestFailure.ValidationFailed);
         return new(TimeZoneInfo.ConvertTimeToUtc(from, zone), TimeZoneInfo.ConvertTimeToUtc(until, zone));
     }
-    internal static string? Direction(StateReport? report, string target)
+    internal static string? Direction(StateReport? report, string target, string kind = "Update")
     {
-        if (report?.InstallationState == "NotInstalled") return null;
+        if (report?.InstallationState == "NotInstalled") return kind == "Update" ? null : "CURRENT_VERSION_UNKNOWN";
+        if (kind == "Rollback" && report?.InstalledReleaseId is null) return "CURRENT_VERSION_UNKNOWN";
         if (report?.InstallationState != "Installed" || !TryVersion(report.InstalledVersion, out var current) || !TryVersion(target, out var next)) return "CURRENT_VERSION_UNKNOWN";
-        var cmp = next.CompareTo(current); return cmp < 0 ? "ROLLBACK_REQUIRED" : cmp == 0 ? "ALREADY_AT_TARGET" : null;
+        var cmp = next.CompareTo(current); return cmp == 0 ? "ALREADY_AT_TARGET" : kind == "Rollback" ? cmp < 0 ? null : "UPDATE_REQUIRED" : cmp < 0 ? "ROLLBACK_REQUIRED" : null;
     }
+    private static RequestRejectedException DirectionFailure(string code) => new(code switch { "ROLLBACK_REQUIRED" => RequestFailure.RollbackRequired, "CURRENT_VERSION_UNKNOWN" => RequestFailure.CurrentVersionUnknown, "UPDATE_REQUIRED" => RequestFailure.UpdateRequired, _ => RequestFailure.InvalidState });
+    private static RequestRejectedException CompatibilityFailure(string code) => new(code switch { "COMPATIBILITY_REQUIRED" => RequestFailure.CompatibilityRequired, "COMPATIBILITY_REVISION_CONFLICT" => RequestFailure.CompatibilityRevisionConflict, "SOURCE_RELEASE_INCOMPATIBLE" => RequestFailure.SourceReleaseIncompatible, _ => RequestFailure.DatabaseIncompatible });
     private static bool TryVersion(string? value, out (int Major, int Minor, int Patch) version)
     { version = default; var p = value?.Split('.'); if (p?.Length != 3 || p.Any(x => x.Length == 0 || x.Any(c => !char.IsAsciiDigit(c)) || x.Length > 1 && x[0] == '0')) return false;
       if (!int.TryParse(p[0], out var a) || !int.TryParse(p[1], out var b) || !int.TryParse(p[2], out var c)) return false; version = (a,b,c); return true; }

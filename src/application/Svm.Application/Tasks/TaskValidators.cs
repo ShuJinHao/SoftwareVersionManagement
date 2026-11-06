@@ -24,7 +24,7 @@ internal sealed class SealTargetSelectionCommandValidator : AbstractValidator<Se
 }
 internal sealed class CreateDeploymentCommandValidator : AbstractValidator<CreateDeploymentCommand>
 {
-    public CreateDeploymentCommandValidator() { RuleFor(x => x.Key).NotEmpty(); RuleFor(x => x.Input.SoftwareId).NotEmpty(); RuleFor(x => x.Input.SelectionId).NotEmpty(); RuleFor(x => x.Input.Kind).Equal("Update"); RuleFor(x => x.Input.Reason).Must(TaskValidation.Reason); RuleFor(x => x.Input.Window).Must(TaskValidation.Window); }
+    public CreateDeploymentCommandValidator() { RuleFor(x => x.Key).NotEmpty(); RuleFor(x => x.Input.SoftwareId).NotEmpty(); RuleFor(x => x.Input.SelectionId).NotEmpty(); RuleFor(x => x.Input.Kind).Must(x => x is "Update" or "Rollback"); RuleFor(x => x.Input).Must(x => x.TargetReleaseId != Guid.Empty && (x.Kind != "Rollback" || x.TargetReleaseId is not null)); RuleFor(x => x.Input.Reason).Must(TaskValidation.Reason); RuleFor(x => x.Input.Window).Must(TaskValidation.Window); }
 }
 internal sealed class ControlDeploymentCommandValidator : AbstractValidator<ControlDeploymentCommand>
 {
@@ -44,7 +44,7 @@ internal sealed class ClaimInstanceTaskCommandValidator : AbstractValidator<Clai
 }
 internal sealed class StartInstanceTaskCommandValidator : AbstractValidator<StartInstanceTaskCommand>
 {
-    public StartInstanceTaskCommandValidator() { RuleFor(x => x.Key).NotEmpty(); RuleFor(x => x.AttemptId).NotEmpty(); RuleFor(x => x.Input.Preflight).NotNull(); RuleFor(x => x.Input.StateReport).NotNull(); When(x => x.Input.Preflight is not null, () => { RuleFor(x => x.Input.Preflight.DownloadedSha256).NotEmpty().Matches("^[0-9a-f]{64}$"); RuleFor(x => x.Input.Preflight.DataProtectionConfirmed).Equal(true); RuleFor(x => x.Input.Preflight.CompatibilityDeclarationRevision).Null(); RuleFor(x => x.Input.Preflight.Note).MaximumLength(2000); }); RuleFor(x => x.Input.StateReport).SetValidator(new TaskStateReportValidator()); }
+    public StartInstanceTaskCommandValidator() { RuleFor(x => x.Key).NotEmpty(); RuleFor(x => x.AttemptId).NotEmpty(); RuleFor(x => x.Input.Preflight).NotNull(); RuleFor(x => x.Input.StateReport).NotNull(); When(x => x.Input.Preflight is not null, () => { RuleFor(x => x.Input.Preflight.DownloadedSha256).NotEmpty().Matches("^[0-9a-f]{64}$"); RuleFor(x => x.Input.Preflight.DataProtectionConfirmed).Equal(true); RuleFor(x => x.Input.Preflight.CompatibilityDeclarationRevision).Must(x => x is null or > 0); RuleFor(x => x.Input.Preflight.Note).MaximumLength(2000); }); RuleFor(x => x.Input.StateReport).SetValidator(new TaskStateReportValidator()); }
 }
 internal sealed class SubmitTaskReceiptCommandValidator : AbstractValidator<SubmitTaskReceiptCommand>
 {
@@ -133,4 +133,27 @@ internal sealed class GetIntegrationMaterialsQueryValidator : AbstractValidator<
 internal sealed class TaskStateReportValidator : AbstractValidator<StateReport>
 {
     public TaskStateReportValidator() { RuleFor(x => x).Must(Svm.Services.Contracts.Instances.InstanceValidation.Report); }
+}
+
+internal sealed class RecordCompatibilityCommandValidator : AbstractValidator<RecordCompatibilityCommand>
+{
+    public RecordCompatibilityCommandValidator()
+    {
+        RuleFor(x => x.Key).NotEmpty(); RuleFor(x => x.ReleaseId).NotEmpty(); RuleFor(x => x.Input).NotNull();
+        When(x => x.Input is not null, () => {
+            RuleFor(x => x.Input.SourceReleaseIds).Must(ids => ids is { Count: >= 1 and <= 200 } && ids.All(id => id != Guid.Empty) && ids.Distinct().Count() == ids.Count);
+            RuleFor(x => x.Input.DatabaseMode).Must(mode => mode is "None" or "Present");
+            RuleFor(x => x.Input).Must(x => x.DatabaseRequirements is { Count: <= 16 } r &&
+                (x.DatabaseMode == "None" ? r.Count == 0 : r.Count > 0) &&
+                r.All(i => i is not null && !string.IsNullOrWhiteSpace(i.DatabaseKey) && i.DatabaseKey.Length <= 64 &&
+                    i.AcceptedSchemaIds is { Count: >= 1 and <= 100 } s && s.All(v => !string.IsNullOrWhiteSpace(v) && v.Length <= 128) && s.Distinct(StringComparer.Ordinal).Count() == s.Count) &&
+                r.Select(i => i.DatabaseKey).Distinct(StringComparer.Ordinal).Count() == r.Count);
+            RuleFor(x => x.Input.Statement).NotEmpty().MaximumLength(2000);
+            RuleFor(x => x.Input.Reason).Must(TaskValidation.Reason);
+        });
+    }
+}
+internal sealed class GetCompatibilityDeclarationsQueryValidator : AbstractValidator<GetCompatibilityDeclarationsQuery>
+{
+    public GetCompatibilityDeclarationsQueryValidator() { RuleFor(x => x.ReleaseId).NotEmpty(); RuleFor(x => x.PageSize).InclusiveBetween(1,200); RuleFor(x => x.After).NotEqual(Guid.Empty); }
 }

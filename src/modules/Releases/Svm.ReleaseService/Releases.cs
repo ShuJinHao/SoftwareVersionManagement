@@ -12,7 +12,7 @@ public static class ReleaseRegistration
     public static IServiceCollection AddSvmReleases(this IServiceCollection services)
     {
         services.TryAddSingleton(GitLabImportOptions.Disabled);
-        return services.AddScoped<Svm.Services.Contracts.Plc.IPlcPublication, PlcPublicationService>().AddScoped<IReleases, Releases>().AddScoped<IReleaseImports, ReleaseImports>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
+        return services.AddScoped<Svm.Services.Contracts.Tasks.ICompatibilityDeclarations, CompatibilityDeclarations>().AddScoped<Svm.Services.Contracts.Plc.IPlcPublication, PlcPublicationService>().AddScoped<IReleases, Releases>().AddScoped<IReleaseImports, ReleaseImports>().AddScoped<Svm.Services.Contracts.Tasks.IIntegrationMaterials, IntegrationMaterials>();
     }
 }
 internal sealed class Releases(IReleaseRepository repository, ISoftwareCatalogRepository software,

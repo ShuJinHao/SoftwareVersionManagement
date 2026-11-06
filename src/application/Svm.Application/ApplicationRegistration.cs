@@ -152,6 +152,7 @@ public static class ApplicationRegistration
         services.AddScoped<IIdempotencyRequestAdapter<ClaimInstanceTaskCommand, OperationResult<Guid>>, ClaimInstanceTaskCommandAdapter>();
         services.AddScoped<IIdempotencyRequestAdapter<StartInstanceTaskCommand, OperationResult<StartGrant>>, StartInstanceTaskCommandAdapter>();
         services.AddScoped<IIdempotencyRequestAdapter<RecordIntegrationMaterialCommand, OperationResult<IntegrationMaterialView>>, RecordIntegrationMaterialCommandAdapter>();
+        services.AddScoped<IIdempotencyRequestAdapter<RecordCompatibilityCommand, OperationResult<CompatibilityView>>, RecordCompatibilityCommandAdapter>();
         services.AddScoped<IProtocolRequestAdapter<PutTargetChunkCommand, OperationResult<SelectionView>>, PutTargetChunkCommandAdapter>();
         services.AddScoped<IProtocolRequestAdapter<SubmitTaskReceiptCommand, OperationResult<ReceiptResult>>, SubmitTaskReceiptCommandAdapter>();
         }

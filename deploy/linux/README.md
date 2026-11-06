@@ -76,7 +76,7 @@ cd artifacts/linux-demo/my-demo
 
 svm.sh 可在准备好的 Linux 目录独立运行，不依赖源码、SDK 或 Node。prepare 对发布物摘要进行复核后，生成独立构建上下文与运行配置。build 仅以固定 ASP.NET 运行镜像构建，不在镜像中安装开发工具。
 
-初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 15 份迁移（最后为 PlcArchives） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
+初始化顺序为：创建专用 PostgreSQL 角色/库 → 显式应用 16 份迁移（最后为 RollbackCompatibility） → 显式 seed。API/Worker 均不自动迁移或播种。migration/seed 配置只挂载到一次性 Migration 容器，日常 API/Worker 只获得 writer/reader。完整消费者配置显式启用 Inbox 权限；旧迁移和模型不变。
 
 登录资料在私有 operator.json；初始账号仅有播种规则规定的权限，首次登录改密，再按职责明确分配资产和软件权限。工具不将真实账号或凭据输出到公共日志。不要公开这个目录、operator.json、连接配置、CA 私钥或服务私钥。
 
@@ -92,7 +92,7 @@ preview 只启动管理 API 与数据库，直接通过 HTTPS 访问；没有包
 - DataProtection 的 svm/ ApplicationName、保护证书与数据库密钥跨节点共享且稳定，不依赖安装路径。
 - SVM_HOST_CONFIG_FILE 提供公用 HTTPS 证书、KnownProxies 和私有 HealthPort。--validate-config 校验配置/注册后退出，不启动监听、消费者、业务循环或 DDL。
 - /health/live、/health/ready 仅在独立私有监听提供。--healthcheck 从容器内访问，运行镜像不需 curl/Node。
-- 数据库未达到当前 15 份迁移及 PlcArchives 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
+- 数据库未达到当前 16 份迁移及 RollbackCompatibility 标识、或不可达时未就绪；MQ 中断不导致 liveness 失败，API 仍可保存 Outbox 意图，Worker 消费就绪单独显示。Docker unhealthy 不等于应不断重启进程。
 - 证书角色覆盖与完整性增强仍暂缓；当前链验证、指纹、有效性和 mTLS 继续保留。
 
 直接执行 --validate-config 仍需完整挂载配置和准备日志目录；它不验证网络可达性。status、依赖 healthcheck 与后续 HTTPS 流程用于确认网络和数据库事实。
@@ -210,3 +210,9 @@ PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node deploy/linux
 verify-plc 只允许明确 full/demo 环境及虚构数据，依次验证固定控制器/主程序库、API 上传和双副本、协议范围、控制器下载、网页人工发布、独立现场登记、网页上传及凭据吊销。HEAD、Range 和完整下载校验 SHA-256；浏览器仅信任本演示叶证书 SPKI，API 正常验证 CA/主机名。私有 plc-fixture.json 保存原操作检查点和随机上传秘密，不公开；出现未知写入停止，`--resume` 只恢复已确认阶段，不能删检查点或更换键重做未核实写入。脱敏 summary.json 与截图可保留。
 
 该流程没有 PLC 在线状态、下装或更新任务，现场时间/使用内容由虚构人员提交，不等同真实控制器验证。完成后按 deployment.json 清理本次独占容器、网络、镜像、数据和私有材料，保持其他演示及开发数据不变。CI 使用同一 PLC 浏览器入口，架构门禁仍只在一个组合执行；未改变的消息/包恢复和角色流程复用既有证据。
+
+## 部分回退与兼容声明
+
+升级第十六份 RollbackCompatibility 后，旧任务继续为 Update；无自动回退授权。管理员明确配置现场 deployment.create/rollback，兼容声明登记另需产品 release.upload。任务配置沿用 SVM_TASK_CONFIG_FILE，不增加生产测试开关。现场客户端必须识别 kind，提交当前完整数据库状态和最新兼容修订；平台许可不证明接入方实际执行或数据保护完成。
+
+开发侧定向入口为 `eng/node deploy/linux/verify-rollback.mjs --deployment <本项目独立 full demo> --results artifacts/test-results/rollback-compatibility/linux`。脚本只接受明确 demo，创建三个虚构硬件绑定实例、两个双副本正式版本，以浏览器登记兼容依据、选择 A/B 部分回退，核对 B 不兼容拒绝和 C 未被选择，之后通过真实 HTTPS 模拟领取/许可/回执及独立报告。没有厂商安装或数据库操作。私有 rollback-fixture.json 保留原键/正文检查点，未知写入停止，--resume 仅继续已确认步骤；输出证据不含秘密。本批实际运行结果由框架设计 11.1 记录，不默认视为生产完成。

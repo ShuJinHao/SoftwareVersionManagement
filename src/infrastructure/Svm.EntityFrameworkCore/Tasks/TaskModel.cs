@@ -36,6 +36,7 @@ internal static class TaskModel
         m.Entity<Deployment>(b =>
         {
             b.ToTable("deployments", "tsk");
+            b.Property(x => x.Kind).HasDefaultValue("Update");
             b.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<Deployment>(x)); b.Ignore(x => x.DomainEvents);
             b.Ignore(x => x.Ended);
             b.HasKey("Id");
@@ -67,6 +68,7 @@ internal static class TaskModel
         m.Entity<InstanceTask>(b =>
         {
             b.ToTable("tasks", "tsk");
+            b.Property(x => x.AdmissionCompatibilityJson).HasColumnType("jsonb");
             b.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<InstanceTask>(x)); b.Ignore(x => x.DomainEvents);
             b.Ignore(x => x.Ended);
             b.HasKey("Id");
@@ -83,6 +85,7 @@ internal static class TaskModel
         m.Entity<ExecutionAttempt>(b =>
         {
             b.ToTable("attempts", "tsk");
+            b.Property(x => x.CompatibilityJson).HasColumnType("jsonb");
             b.HasKey("Id");
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.TaskId).HasConversion(x => x.Value, x => new StrongId<InstanceTask>(x));

@@ -38,11 +38,16 @@ internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog so
             if (task is not null && task.InstanceId != identity.InstanceId) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             if (x.Request is StartInstanceTaskCommand && task is not null)
             { var d = await tasks.DeploymentAsync(task.DeploymentId, false, ct);
-              if (!await authorization.HasInstanceAsync(d.AuthorizationSubjectId, sid.Value, "deployment.create", task.InstanceId, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied); }
+              if (!await authorization.HasInstanceAsync(d.AuthorizationSubjectId, sid.Value, "deployment.create", task.InstanceId, protect, ct) ||
+                  d.Kind == "Rollback" && !await authorization.HasInstanceAsync(d.AuthorizationSubjectId, sid.Value, "deployment.rollback", task.InstanceId, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.PermissionDenied); }
             if (!await software.ExistsAsync(sid.Value, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
             return AuthorizationDecision.Allow(AuthorizationTarget.Instance(sid.Value, identity.InstanceId!.Value));
         }
         if (person is null || !await scope.SoftwareAsync(person.Access, x.Policy.Permission!, sid.Value, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
+        if (x.Request is CreateDeploymentCommand create &&
+            (!await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.create", create.Input.SelectionId, protect, ct) ||
+             create.Input.Kind == "Rollback" && !await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.rollback", create.Input.SelectionId, protect, ct)))
+            return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
         var humanTask = x.Request switch { ControlInstanceTaskCommand q => q.TaskId, GetInstanceTaskQuery q => q.TaskId, ListTaskReceiptsQuery q => q.TaskId, _ => (Guid?)null };
         if (humanTask is { } humanTaskId)
         {
@@ -56,7 +61,9 @@ internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog so
         {
             var deployment = await tasks.DeploymentAsync(deploymentId, false, ct);
             if (!await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.control", deployment.SelectionId, protect, ct) ||
-                x.Request is ControlDeploymentCommand { Action: "Resume" } && !await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.create", deployment.SelectionId, protect, ct))
+                x.Request is ControlDeploymentCommand { Action: "Resume" } &&
+                (!await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.create", deployment.SelectionId, protect, ct) ||
+                 deployment.Kind == "Rollback" && !await authorization.CoversSelectionAsync(person.SubjectId, sid.Value, "deployment.rollback", deployment.SelectionId, protect, ct)))
                 return AuthorizationDecision.Deny(RequestFailure.PermissionDenied);
         }
         var selectionId = x.Request switch { PutTargetChunkCommand t => t.SelectionId, SealTargetSelectionCommand t => t.SelectionId, GetTargetSelectionQuery t => t.SelectionId, _ => (Guid?)null };
@@ -64,6 +71,7 @@ internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog so
         if (!await software.ExistsAsync(sid.Value, protect, ct)) return AuthorizationDecision.Deny(RequestFailure.ResourceNotFound);
         if ((await software.GetAsync(sid.Value, false, ct)).Category == "PLC") return AuthorizationDecision.Deny(RequestFailure.InvalidState);
         if (x.Request is RecordIntegrationMaterialCommand material) await releases.GetAsync(material.ReleaseId, protect, ct);
+        if (x.Request is RecordCompatibilityCommand declaration) await releases.GetAsync(declaration.ReleaseId, protect, ct);
         return AuthorizationDecision.Allow(AuthorizationTarget.Software(sid.Value));
     }
     internal static Guid WorkId(object request) => request switch { ClaimTaskWorkCommand c => c.WorkId, AdvanceTaskWorkCommand c => c.Lease.Work.WorkId,
@@ -81,6 +89,7 @@ internal sealed class TaskAuthorization(ITaskWorkflow tasks, ISoftwareCatalog so
         ControlInstanceTaskCommand x => tasks.SoftwareForAsync("task", x.TaskId, ct), GetInstanceTaskQuery x => tasks.SoftwareForAsync("task", x.TaskId, ct), ClaimInstanceTaskCommand x => tasks.SoftwareForAsync("task", x.TaskId, ct), GetClientTaskQuery x => tasks.SoftwareForAsync("task", x.TaskId, ct), ListTaskReceiptsQuery x => tasks.SoftwareForAsync("task", x.TaskId, ct),
         StartInstanceTaskCommand x => tasks.SoftwareForAsync("attempt", x.AttemptId, ct), SubmitTaskReceiptCommand x => tasks.SoftwareForAsync("attempt", x.AttemptId, ct),
         GetTaskWorkQuery x => tasks.SoftwareForAsync("work", x.WorkId, ct), ListTaskControlItemsQuery x => tasks.SoftwareForAsync("work", x.WorkId, ct),
+        RecordCompatibilityCommand x => releases.SoftwareForAsync(x.ReleaseId, false, ct), GetCompatibilityDeclarationsQuery x => releases.SoftwareForAsync(x.ReleaseId, false, ct),
         RecordIntegrationMaterialCommand x => releases.SoftwareForAsync(x.ReleaseId, false, ct), GetIntegrationMaterialsQuery x => releases.SoftwareForAsync(x.ReleaseId, false, ct),
         _ => System.Threading.Tasks.Task.FromResult<Guid?>(null)
     };

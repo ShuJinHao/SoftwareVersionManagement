@@ -22,7 +22,7 @@ internal sealed class ListClientReleasesQueryHandler(IReleaseQueries queries) : 
     {
         return await queries.ClientListAsync(x.Input, t);
     }
-    internal static ClientReleaseView View(ReleaseView r, PackageView p) => new(r.Id, r.Version, r.State, r.ChangeSummary, r.ChangeReason, p.Id, p.SizeBytes!.Value, p.Sha256!, p.DownloadPath!);
+    internal static ClientReleaseView View(ReleaseView r, PackageView p) => new(r.Id, r.Version, r.State, r.ChangeSummary, r.ChangeReason, p.Id, p.SizeBytes!.Value, p.Sha256!, p.DownloadPath!, r.CompatibilityDeclarationRevision);
 }
 internal sealed class GetClientReleaseQueryHandler(IReleaseQueries queries, IPackages packages) : IRequestHandler<GetClientReleaseQuery, ClientReleaseView>
 {

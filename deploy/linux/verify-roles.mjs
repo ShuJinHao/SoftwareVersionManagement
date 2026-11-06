@@ -133,7 +133,7 @@ try{
   }else{
    await page.goto(config.url+'/workspace?deviceId='+fixture.devices[key==='reader'?1:0].id);await expect(page.getByRole('heading',{name:'控制工控机 '+(key==='reader'?'B':'A'),exact:true})).toBeVisible();
    assert.equal(await page.getByRole('button',{name:'关联软件',exact:true}).count(),key==='engineer'?1:0);
-   const select=page.locator('.installation-table tbody input[type=checkbox]').first();if(key==='operations'){await expect(select).toBeEnabled();await select.check();await expect(page.getByRole('button',{name:'更新所选软件',exact:true})).toBeEnabled();}else await expect(select).toBeDisabled();
+   const select=page.locator('.installation-table tbody input[type=checkbox]').first();if(key==='operations'){await expect(select).toBeEnabled();await select.check();await expect(page.getByRole('button',{name:'更新／回退所选软件',exact:true})).toBeEnabled();}else await expect(select).toBeDisabled();
    await page.goto(config.url+'/system');await expect(page.getByText('当前账号没有人员管理权限',{exact:false})).toBeVisible();
   }
   assert.deepEqual(errors,[]);await context.close();await stage(phase);

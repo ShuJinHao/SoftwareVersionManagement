@@ -24,6 +24,7 @@ internal sealed class SvmDbContextModelSnapshot : ModelSnapshot
         RolesAndScopesV1Model.Configure(modelBuilder);
         GitLabSourceV1Model.Configure(modelBuilder);
         PlcArchivesV1Model.Configure(modelBuilder);
+        RollbackCompatibilityV1Model.Configure(modelBuilder);
     }
     internal static void Configure(ModelBuilder modelBuilder) => modelBuilder.HasDefaultSchema("framework").HasAnnotation("ProductVersion", "8.0.31");
 

@@ -35,3 +35,6 @@ internal sealed class GetTaskAuthorityQueryHandler(ITaskWorkflow tasks) : IReque
 { public Task<TaskWorkAuthority> Handle(GetTaskAuthorityQuery x, CancellationToken ct) => tasks.AuthorityAsync(x.WorkId, false, ct); }
 internal sealed class GetIntegrationMaterialsQueryHandler(ITaskQueries queries) : IRequestHandler<GetIntegrationMaterialsQuery, IReadOnlyList<IntegrationMaterialView>>
 { public Task<IReadOnlyList<IntegrationMaterialView>> Handle(GetIntegrationMaterialsQuery x, CancellationToken ct) => queries.MaterialsAsync(x.ReleaseId, x.PageSize, x.After, ct); }
+
+internal sealed class GetCompatibilityDeclarationsQueryHandler(ITaskQueries queries) : IRequestHandler<GetCompatibilityDeclarationsQuery, IReadOnlyList<CompatibilityView>>
+{ public Task<IReadOnlyList<CompatibilityView>> Handle(GetCompatibilityDeclarationsQuery x, CancellationToken ct) => queries.CompatibilityAsync(x.ReleaseId, x.PageSize, x.After, ct); }

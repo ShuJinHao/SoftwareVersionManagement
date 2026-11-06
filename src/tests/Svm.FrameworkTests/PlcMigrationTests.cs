@@ -20,7 +20,7 @@ public sealed class PlcMigrationTests
             INSERT INTO rel.software VALUES ('11111111-1111-4111-8111-111111111111','PLC-MIGRATION-OLD','Old Vision','Vision',NULL,1);
             """);
         var before=await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection,"SELECT row_to_json(s)::text FROM rel.software s");
-        var result=await db.Runner.ApplyAsync(default);Assert.Equal(15,result.Applied.Count);Assert.True(await probe.CheckAsync(default));
+        var result=await db.Runner.ApplyAsync(default);Assert.Equal(PersistenceDatabase.CurrentMigrationCount, result.Applied.Count);Assert.True(await probe.CheckAsync(default));
         Assert.Equal(before,await PersistenceDatabase.ScalarAsync<string>(db.ReaderConnection,"SELECT row_to_json(s)::text FROM rel.software s"));
         Assert.False(await PersistenceDatabase.ScalarAsync<bool>(db.ReaderConnection,"SELECT has_column_privilege(current_user,'iam.plc_upload_credentials','SecretHash','SELECT')"));
         Assert.True(await PersistenceDatabase.ScalarAsync<bool>(db.ReaderConnection,"SELECT has_column_privilege(current_user,'iam.plc_upload_credentials','ScopeJson','SELECT')"));

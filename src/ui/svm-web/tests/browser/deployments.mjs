@@ -63,7 +63,7 @@ try {
   phase='offline workers retain preparation intent'
   await checkpoint('offline-preparation')
   await page.goto(config.url+`/deployments?softwareId=${software.id}&releaseId=${release.id}`)
-  await page.getByRole('button',{name:'选择更新目标',exact:true}).click()
+  await page.getByRole('button',{name:'安排更新或回退',exact:true}).click()
   await page.getByRole('checkbox',{name:'选择实例 '+target.instanceId,exact:true}).check()
   await page.getByRole('checkbox',{name:'使用配置的下一时段',exact:true}).uncheck()
   const localInput=offset=>new Date(Date.now()+offset).toISOString().slice(0,16)
