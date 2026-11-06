@@ -92,14 +92,14 @@ test('web selection requires exact existing files and explicit test names', () =
   assert.notEqual(unmatched.status,0); assert.match(unmatched.stderr,/match no tests/);
 });
 test('CI impact skips pure documentation and selects tools and web independently', () => {
-  assert.deepEqual(changeImpact(['README.md','docs/详细设计.md']),{code:false,tools:false,web:false,browser:false,operations:false});
-  assert.deepEqual(changeImpact(['eng/toolchain.mjs']),{code:true,tools:true,web:false,browser:false,operations:false});
-  assert.deepEqual(changeImpact(['src/ui/svm-web/tests/deployments.test.ts']),{code:true,tools:false,web:true,browser:false,operations:false});
-  assert.deepEqual(changeImpact(['src/ui/svm-web/package.json','src/ui/svm-web/package-lock.json']),{code:true,tools:false,web:true,browser:false,operations:false});
-  assert.deepEqual(changeImpact(['src/ui/svm-web/src/pages/DeploymentsPage.vue']),{code:true,tools:false,web:true,browser:true,operations:false});
-  assert.deepEqual(changeImpact(['deploy/linux/verify-ui.mjs']),{code:true,tools:false,web:false,browser:true,operations:false});
-  assert.deepEqual(changeImpact(['deploy/linux/verify-rollback.mjs']),{code:true,tools:false,web:false,browser:true,operations:false});
-  assert.deepEqual(changeImpact(['deploy/linux/verify-cleanup.mjs']),{code:true,tools:false,web:false,browser:true,operations:false});
+  assert.deepEqual(changeImpact(['README.md','docs/详细设计.md']),{code:false,tools:false,web:false,browser:false,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['eng/toolchain.mjs']),{code:true,tools:true,web:false,browser:false,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/tests/deployments.test.ts']),{code:true,tools:false,web:true,browser:false,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/package.json','src/ui/svm-web/package-lock.json']),{code:true,tools:false,web:true,browser:false,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/src/pages/DeploymentsPage.vue']),{code:true,tools:false,web:true,browser:true,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-ui.mjs']),{code:true,tools:false,web:false,browser:true,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-rollback.mjs']),{code:true,tools:false,web:false,browser:true,operations:false,candidate:false});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-cleanup.mjs']),{code:true,tools:false,web:false,browser:true,operations:false,candidate:false});
 });
 test('publish rejects missing page, referenced assets and license notices', async () => {
   await mkdir(join(root,'artifacts/test-results/tools-fixtures'),{recursive:true});
@@ -181,4 +181,32 @@ test('gitlab source conversion rejects conflicting connections and untrusted add
   assert.equal(convertLegacySources({ ...config, import: { bindings: [{ ...binding, packageName: '_legacy.pkg' }] } }).import.connections[0].projects[0].packages[0], '_legacy.pkg');
   const converted = convertLegacySources(config); assert.deepEqual(convertLegacySources(converted), converted);
   converted.import.connections[0].projects[0].packages.push('manual-change'); assert.throws(() => convertLegacySources(converted));
+});
+
+
+test('candidate gateway template preserves the existing protocol and substitutes only fixed settings', async () => {
+  const { candidateGatewayTemplate } = await import('./candidate.mjs');
+  const text = candidateGatewayTemplate();
+  for (const token of ['GENERATION_node-a','GENERATION_node-b','FINGERPRINT_node-a','FINGERPRINT_node-b','MAX_BYTES','IDLE_SECONDS','AUTH_SECONDS']) assert.ok(text.includes('@@'+token+'@@'), token);
+  assert.ok(text.includes('proxy_ssl_verify on'));assert.ok(text.includes('X-Svm-Plc-Binding'));assert.ok(text.includes('proxy_read_timeout 30s'));
+});
+
+test('candidate inventory hashes ordinary public files and refuses links and unsafe names', async () => {
+  const { publicInventory } = await import('./candidate.mjs');
+  const { symlink } = await import('node:fs/promises');
+  const directory=await mkdtemp(join(root,'.cache','candidate-inventory-'));
+  try {
+    await writeFile(join(directory,'release.json'),'{}');
+    await writeFile(join(directory,'npm-@scope_package@1.0.0-LICENSE'),'MIT');
+    const files=await publicInventory(directory);assert.equal(files.length,2);assert.equal(files.find(x=>x.path==='release.json').size,2);assert.equal(files[0].sha256.length,64);
+    await writeFile(join(directory,'unsafe name'),'x');await assert.rejects(publicInventory(directory));await rm(join(directory,'unsafe name'));
+    if(process.platform!=='win32'){await symlink(join(directory,'release.json'),join(directory,'alias'));await assert.rejects(publicInventory(directory));}
+  } finally {await rm(directory,{recursive:true,force:true});}
+});
+
+test('candidate CI scope selects installation without existing business or recovery regression', () => {
+  for(const file of ['src/hosts/Svm.ServiceDefaults/AcceptanceDeployment.cs','src/hosts/Svm.ServiceDefaults/CandidateBundle.cs','src/hosts/Svm.Migration/Program.cs','deploy/linux/install.sh','deploy/linux/verify-candidate.mjs','eng/candidate.mjs']) {
+    const impact=changeImpact([file]);assert.equal(impact.candidate,true);assert.equal(impact.operations,false);assert.equal(impact.browser,false);assert.equal(impact.web,false);
+  }
+  assert.equal(changeImpact(['README.md']).candidate,false);
 });

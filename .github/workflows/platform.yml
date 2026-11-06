@@ -4,6 +4,12 @@ on:
     branches: [main, codex/cross-platform-linux-delivery, codex/hardware-bound-workspace, codex/gitlab-source-management, codex/rollback-and-compatibility, codex/package-cleanup]
     types: [opened, synchronize]
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Candidate verification or immutable material assembly
+        type: choice
+        default: candidate
+        options: [candidate, freeze, affected-all]
 permissions:
   contents: read
 concurrency:
@@ -18,6 +24,7 @@ jobs:
       web: ${{ steps.impact.outputs.web }}
       browser: ${{ steps.impact.outputs.browser }}
       operations: ${{ steps.impact.outputs.operations }}
+      candidate: ${{ steps.impact.outputs.candidate }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -98,8 +105,23 @@ jobs:
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.tools == 'true'
         shell: bash
         run: |
-          eng/test tools --filter 'operations |CI impact|publish rejects' --preview
-          eng/test tools --filter 'operations |CI impact|publish rejects' --results-directory artifacts/test-results/platform/tools
+          selection='CI impact|publish rejects'
+          if [ '${{ needs.changes.outputs.operations }}' = true ]; then selection="$selection|operations "; fi
+          if [ '${{ needs.changes.outputs.candidate }}' = true ]; then selection="$selection|candidate "; fi
+          eng/test tools --filter "$selection" --preview
+          eng/test tools --filter "$selection" --results-directory artifacts/test-results/platform/tools
+      - name: Preview and verify candidate initialization
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.candidate == 'true'
+        shell: bash
+        run: |
+          eng/test framework --filter 'FullyQualifiedName~CandidateDeploymentTests' --preview
+          eng/test framework --filter 'FullyQualifiedName~CandidateDeploymentTests' --results-directory artifacts/test-results/platform/candidate-unit
+      - name: Assemble and verify standalone offline candidate on native Linux x64
+        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.candidate == 'true'
+        shell: bash
+        run: |
+          eng/node eng/candidate.mjs --release artifacts/releases/ci --output artifacts/candidates/ci
+          eng/node deploy/linux/verify-candidate.mjs --bundle artifacts/candidates/ci --results artifacts/test-results/platform/candidate-linux
       - name: Preview and verify affected recovery safety
         if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
         shell: bash
@@ -167,3 +189,33 @@ jobs:
           path: 验证 Workspace/SoftwareVersionManagement/artifacts/test-results/platform
           retention-days: 14
           if-no-files-found: ignore
+
+  freeze:
+    if: github.event_name == 'workflow_dispatch' && inputs.scope == 'freeze'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      SVM_SDK_VERSION: '8.0.425'
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Prepare verified build tools
+        run: eng/bootstrap
+      - name: Publish clean immutable main candidate
+        run: |
+          test "$(git branch --show-current)" = main
+          eng/publish --output artifacts/releases/frozen
+          eng/node eng/candidate.mjs --release artifacts/releases/frozen --output artifacts/candidates/frozen
+      - name: Upload public candidate and external checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-x64-candidate
+          path: |
+            artifacts/candidates/RC-*.tar.gz
+            artifacts/candidates/RC-*.tar.gz.sha256
+            artifacts/candidates/frozen/candidate.json
+          compression-level: 0
+          retention-days: 30
+          if-no-files-found: error
