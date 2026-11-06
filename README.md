@@ -10,6 +10,8 @@
 
 当前 `codex/operations-and-recovery` 补齐私有积压/执行诊断、受控日志、同版本同架构冷备份与隔离恢复，以及发行 SBOM、实际镜像资产和第三方材料。恢复期间禁止 Worker、新登记、新投放、开始许可及下载，现场核实后才显式开放；已有暂停投放继续暂停。操作正文见[运维与恢复](deploy/linux/OPERATIONS.md)，统一部署资料和整体回归清单见[交付核对表](deploy/linux/DELIVERY-CHECKLIST.md)。本批不新增工程、依赖或迁移，仍为 29 工程/99 引用/17 迁移，开发库不升级。实际测试、清理及未覆盖项统一记录在框架设计第 11.1 节；尚未冻结用户整体回归候选版，不宣称生产验收通过。
 
+实现提交 `102d878`，见 [PR #23](https://github.com/ShuJinHao/SoftwareVersionManagement/pull/23)，保持审阅未合并。[CI #42222980086](https://github.com/ShuJinHao/SoftwareVersionManagement/actions/runs/42222980086) 五项检查全部通过：Windows/Linux 两 SDK 构建、两 Linux SDK 完整 Release，以及原生 Linux x64 的四阶段冷恢复通过。Architecture 79、本机定向后端 17、工具 4 个不同用例通过；CI 的 16 条后端是其中不依赖本机库的子集，不重复累计。干净本机发行物 `artifacts/releases/operations-recovery-102d878` 已核验 700 个文件与 31 份锁摘要，测试及私有资源清理完成，原三套演示保留。下一步整合并冻结统一候选版，交用户集中部署回归。
+
 2026-11-04：已在 `codex/package-cleanup` 接通停用包清理：明确产品授权、阻塞原因、固定对象确认、原工作中断恢复、双节点文件清除和历史保留。完整 Architecture 79、定向后端 14、网页 10、工具 2 项通过；第十七份迁移及就绪探针只在一次性库验证，十六份旧迁移、29 工程/99 引用、依赖锁和开发库不变。完整开发 Release 在独立 Linux arm64 容器完成三阶段 HTTPS/浏览器验证；测试资源和私有材料已清理，原有演示保留。实际证据见框架设计 11.1。部分回退当时已提交 `bcdbbb5` / PR #20（现已于 2026-11-06 合并）；统一候选版本仍待依赖与运维收尾，不要求用户逐功能验收。
 
 2026-11-03：PR #18、#19 已按授权顺序合并，统一 main 为 `d8eff250844adda4ecadb91b62052e3971ca9503`。`codex/rollback-and-compatibility` 已实现正式历史版本的部分回退、不可变兼容声明、独立现场回退权限及网页。完整 Architecture 79、定向后端 12、网页 10、工具 2 项通过，受影响编译、网页类型检查/构建及独立 Linux arm64 四阶段 HTTPS/API/浏览器流程通过。新第十六份迁移只在一次性库执行，开发库保持原状；证据和限制见框架设计 11.1。完整候选版本尚未冻结，继续包清理和运维收尾后由用户统一回归，不要求逐功能验收。
