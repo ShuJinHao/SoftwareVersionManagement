@@ -22,9 +22,11 @@ using Svm.Worker.Tasks;
 using Svm.Worker.Releases;
 using Svm.Services.Contracts.Releases;
 
-if (args.Length == 1 && args[0] == "--healthcheck")
-{ Environment.ExitCode = await HostDiagnostics.ProbeAsync(HostRuntimeConfiguration.Load()); return; }
+if (args.Length == 1 && args[0] is "--healthcheck" or "--diagnostics")
+{ Environment.ExitCode = await HostDiagnostics.ProbeAsync(HostRuntimeConfiguration.Load(), args[0] == "--diagnostics"); return; }
 var builder = Host.CreateApplicationBuilder(args);
+if (!(args.Length == 1 && args[0] == "--validate-config")) RecoveryFence.Load().RequireWorkerOpen();
+SafeConsoleFormatter.Configure(builder.Logging);
 builder.ConfigureContainer(new DefaultServiceProviderFactory(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }));
 var runtime = HostRuntimeConfiguration.Load();
 var tasks = TaskConfiguration.LoadFromEnvironment();
@@ -75,7 +77,12 @@ if (messaging is not null) builder.Services.AddSvmMessaging(messaging, delivery:
 builder.Services.AddHealthChecks();
 await using var databaseProbe = new ReadPersistenceProbe(persistence.ReaderConnectionString);
 builder.Services.AddSingleton<IHostedService>(provider => new HostDiagnostics(runtime, "Worker", databaseProbe.CheckAsync,
-    provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>()));
+    provider.GetRequiredService<IHostApplicationLifetime>(), provider.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>(), async token =>
+    {
+        var db = await databaseProbe.OperationsAsync(token, files?.Execution.ReplicaCheckSeconds * 2);
+        var metrics = db.Metrics.Concat(await PackageOperationsProbe.ReadAsync(files, token)).ToArray();
+        return new OperationsSnapshot(db.ObservedAt, metrics.Any(m => m.Status == "Unavailable") ? "Incomplete" : "Available", metrics);
+    }));
 builder.Services.ValidateSvmFoundation();
 using var host = builder.Build();
 if (args.Length == 1 && args[0] == "--validate-config")

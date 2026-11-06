@@ -4,26 +4,32 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Svm.Services.Contracts.Framework;
 
 namespace Svm.ServiceDefaults;
 
 /// <summary>Private technical listener; no business services, secrets, or public management endpoints.</summary>
 public sealed class HostDiagnostics(HostRuntimeConfiguration options, string role,
-    Func<CancellationToken, Task<bool>> database, IHostApplicationLifetime lifetime, HealthCheckService checks) : IHostedService, IAsyncDisposable
+    Func<CancellationToken, Task<bool>> database, IHostApplicationLifetime lifetime, HealthCheckService checks,
+    Func<CancellationToken, Task<OperationsSnapshot>>? operations = null) : IHostedService, IAsyncDisposable
 {
-    public static async Task<int> ProbeAsync(HostRuntimeConfiguration options)
+    public static async Task<int> ProbeAsync(HostRuntimeConfiguration options, bool details = false)
     {
         if (options.HealthPort is not { } port) return 2;
         try
         {
-            using var client = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(6) };
-            using var response = await client.GetAsync("http://127.0.0.1:" + port + "/health/ready");
+            using var client = new HttpClient(new HttpClientHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(8) };
+            using var response = await client.GetAsync("http://127.0.0.1:" + port + (details ? "/health/operations" : "/health/ready"));
+            if (details) Console.WriteLine(await response.Content.ReadAsStringAsync());
             return response.IsSuccessStatusCode ? 0 : 1;
         }
         catch (HttpRequestException) { return 1; }
         catch (OperationCanceledException) { return 1; }
     }
     private WebApplication? _listener;
+    private readonly SemaphoreSlim _operationsGate = new(1);
+    private OperationsSnapshot? _last;
+    private DateTimeOffset _attempted;
     public async Task StartAsync(CancellationToken token)
     {
         if (options.HealthPort is not { } port) return;
@@ -32,6 +38,28 @@ public sealed class HostDiagnostics(HostRuntimeConfiguration options, string rol
         builder.WebHost.UseUrls("http://0.0.0.0:" + port);
         _listener = builder.Build();
         _listener.MapGet("/health/live", () => Results.Json(new { status = "Live", role }));
+        _listener.MapGet("/health/operations", async (HttpContext http) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            if (operations is null) return Results.StatusCode(404);
+            if (await _operationsGate.WaitAsync(0, http.RequestAborted))
+            {
+                try
+                {
+                    if (DateTimeOffset.UtcNow - _attempted >= TimeSpan.FromSeconds(15))
+                    {
+                        _attempted = DateTimeOffset.UtcNow;
+                        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted);
+                        timeout.CancelAfter(TimeSpan.FromSeconds(6));
+                        try { _last = await operations(timeout.Token); }
+                        catch { _last = new(DateTimeOffset.UtcNow, "Unavailable", []); }
+                    }
+                }
+                finally { _operationsGate.Release(); }
+            }
+            var snapshot = _last ?? new(DateTimeOffset.UtcNow, "Collecting", []);
+            return Results.Json(snapshot, statusCode: snapshot.Status == "Available" ? 200 : 503);
+        });
         _listener.MapGet("/health/ready", async (HttpContext http) =>
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(http.RequestAborted);

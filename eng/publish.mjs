@@ -3,6 +3,7 @@ import { readFile, readdir, mkdir, cp, writeFile, access } from 'node:fs/promise
 import { join, resolve, relative, dirname, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { root, paths, environment, dotnetCommand, run } from './toolchain.mjs';
+import { writeReleaseMaterials } from './release-materials.mjs';
 
 export async function verifyWeb(folder) {
   const index = await readFile(join(folder, 'index.html'), 'utf8');
@@ -42,6 +43,8 @@ async function main() {
   await verifyWeb(join(output, 'Svm.HttpApi/wwwroot'));
   await checked(paths().node, [join(root, 'eng/verify-dependencies.mjs')]);
   await cp(join(root, 'artifacts/licenses'), join(output, 'licenses'), { recursive: true });
+  const commit = execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+  await writeReleaseMaterials(output, dotnet, commit);
   const files = [];
   async function walk(folder) {
     for (const entry of await readdir(folder, { withFileTypes: true })) {
@@ -72,7 +75,7 @@ async function main() {
   }
   await lockFiles(join(root,'src')); await lockFiles(join(root,'build'));
   await writeFile(join(output, 'release.json'), JSON.stringify({ format: 1,
-    commit: execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),
+    commit,
     dirty,
     sdk: dotnet.version, sdkSource: dotnet.source, runtimeMinimum: '8.0.31', runtimeRollForward: 'LatestPatch', target: 'portable-net8.0',
     node: process.version, locks: locks.sort((a,b)=>a.path.localeCompare(b.path)), files: files.sort((a,b)=>a.path.localeCompare(b.path)) }, null, 2) + '\n');

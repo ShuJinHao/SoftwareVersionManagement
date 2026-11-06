@@ -2,6 +2,27 @@ using System.Text.Json;
 using Svm.EntityFrameworkCore.Migrations;
 using Svm.Services.Contracts.Framework;
 using Svm.Migration;
+using Svm.ServiceDefaults;
+
+if (args.Length == 3 && args[1] == "--directory" && args[0] is "recovery-review" or "recovery-open")
+{
+    try { await RecoveryApproval.ExecuteAsync(args[0], args[2], CancellationToken.None); Console.WriteLine("RECOVERY_STATE_SAVED; services were not started."); return 0; }
+    catch { Console.Error.WriteLine("RECOVERY_REVIEW_REQUIRED; services remain stopped; private details suppressed."); return 3; }
+}
+
+if (args.Length == 3 && args[1] == "--config" && args[0] is "backup-seal" or "backup-verify" or "backup-restore")
+{
+    using var cancel = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) => { e.Cancel = true; cancel.Cancel(); };
+    try
+    {
+        var backup = await DeploymentBackup.ExecuteAsync(args[0], args[2], cancel.Token);
+        Console.WriteLine(JsonSerializer.Serialize(new { status = "Verified", backup.Platform, backup.Project, backup.ReleaseCommit, backup.CreatedAt, files = backup.Files.Length }));
+        return 0;
+    }
+    catch (OperationCanceledException) { Console.Error.WriteLine("BACKUP_CANCELED; incomplete output is retained and never started."); return 130; }
+    catch { Console.Error.WriteLine("BACKUP_FAILED; private details suppressed, incomplete output is retained."); return 3; }
+}
 
 if (args.Length != 3 || args[1] != "--config" || args[0] is not ("status" or "script" or "apply" or "seed"))
 {

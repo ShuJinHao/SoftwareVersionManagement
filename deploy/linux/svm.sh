@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 svm_directory="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-[[ -f "$svm_directory/.svm-demo" ]] || { echo "Missing explicit deployment identity." >&2; exit 2; }
-svm_project="$(cat "$svm_directory/.svm-demo")"
-[[ "$svm_project" =~ ^svm-demo-[a-f0-9]{12}$ ]] || { echo "Invalid deployment identity." >&2; exit 2; }
+svm_marker="$svm_directory/.svm-deployment"; [[ -f "$svm_marker" ]] || svm_marker="$svm_directory/.svm-demo"
+[[ -f "$svm_marker" ]] || { echo "Missing explicit deployment identity." >&2; exit 2; }
+svm_project="$(cat "$svm_marker")"
+[[ "$svm_project" =~ ^svm-(demo|site|restore)-[a-f0-9]{12}$ ]] || { echo "Invalid deployment identity." >&2; exit 2; }
 svm_env="$svm_directory/deployment.env"
 if [[ "${1:-}" == --offline ]]; then svm_env="$svm_directory/deployment.offline.env"; shift; fi
 svm_command="${1:-}"
@@ -25,17 +26,27 @@ if [[ "$svm_command" == import ]]; then
 fi
 [[ -f "$svm_env" ]] || { echo 'Missing deployment environment.' >&2; exit 2; }
 if [[ "$svm_env" == *deployment.offline.env ]]; then svm_validate_images; fi
+case "$svm_command" in
+  backup|verify-backup|restore|diagnostics|review-up|reopen) SVM_OPERATIONS_ENV_FILE="$svm_env" exec "$svm_directory/operations.sh" "$@" ;;
+esac
+if [[ -d "$svm_directory/recovery/operation.lock" ]]; then
+  case "$svm_command" in ps|logs) ;; *) echo 'A deployment operation is active; inspect its lock before starting or changing services.' >&2; exit 4;; esac
+fi
 svm_compose=(docker compose --env-file "$svm_env" --project-name "$svm_project" -f "$svm_directory/compose.yaml")
 if grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then
   svm_compose+=(--profile full)
 else
   svm_compose+=(-f "$svm_directory/compose.preview.yaml")
 fi
+if [[ -f "$svm_directory/recovery/locked.json" ]]; then
+  svm_compose+=(-f "$svm_directory/compose.recovery.yaml" -f "$svm_directory/compose.review.yaml")
+  case "$svm_command" in up|apply|seed|export|destroy) echo 'Recovery fence active; use review-up, diagnostics and an explicit reviewed reopen.' >&2; exit 3;; esac
+fi
 case "$svm_command" in
   build) "${svm_compose[@]}" build api-a ;;
   pull)
     [[ "$svm_env" != *deployment.offline.env ]] || { echo "Offline mode never pulls images." >&2; exit 2; }
-    if grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then "${svm_compose[@]}" pull postgres rabbitmq gateway; else "${svm_compose[@]}" pull postgres; fi ;;
+    if grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then "${svm_compose[@]}" pull postgres rabbitmq gateway; else "${svm_compose[@]}" pull postgres; docker pull --platform "$(svm_value SVM_PLATFORM)" "$(svm_value SVM_NGINX_IMAGE)"; fi ;;
   dependencies)
     if grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then "${svm_compose[@]}" up -d --pull never --wait --wait-timeout 120 postgres rabbitmq; else "${svm_compose[@]}" up -d --pull never --wait --wait-timeout 120 postgres; fi ;;
   preflight)
@@ -58,13 +69,13 @@ case "$svm_command" in
   export)
     umask 077
     svm_platform="$(svm_value SVM_PLATFORM)"
-    svm_keys=(SVM_RUNTIME_IMAGE SVM_POSTGRES_IMAGE)
-    if grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then svm_keys+=(SVM_RABBITMQ_IMAGE SVM_NGINX_IMAGE); fi
+    svm_keys=(SVM_RUNTIME_IMAGE SVM_POSTGRES_IMAGE SVM_NGINX_IMAGE)
+    if grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then svm_keys+=(SVM_RABBITMQ_IMAGE); fi
     svm_images=()
     : > "$svm_directory/images.lock.tsv"
     awk '!/^SVM_(RUNTIME|POSTGRES|RABBITMQ|NGINX)_IMAGE=/' "$svm_directory/deployment.env" > "$svm_directory/deployment.offline.env"
     if ! grep -q '^SVM_MODE=full$' "$svm_directory/deployment.env"; then
-      for svm_key in SVM_RABBITMQ_IMAGE SVM_NGINX_IMAGE; do printf '%s=%s\n' "$svm_key" "$(svm_value "$svm_key")" >> "$svm_directory/deployment.offline.env"; done
+      svm_key=SVM_RABBITMQ_IMAGE; printf '%s=%s\n' "$svm_key" "$(svm_value "$svm_key")" >> "$svm_directory/deployment.offline.env"
     fi
     for svm_key in "${svm_keys[@]}"; do
       svm_image="$(svm_value "$svm_key")"
@@ -88,5 +99,5 @@ case "$svm_command" in
     [[ "${2:-}" == --delete-demo-data ]] || { echo "destroy requires --delete-demo-data; containers will be removed, bind-mounted data retained." >&2; exit 2; }
     "${svm_compose[@]}" --profile tools down --volumes --remove-orphans
     echo "Containers removed. Private files and bind-mounted data remain for explicit owner cleanup." ;;
-  *) echo "Usage: ./svm.sh [--offline] build|pull|dependencies|preflight|status|script|apply|seed|validate|up|stop|down|ps|logs|export|import|destroy --delete-demo-data" >&2; exit 2 ;;
+  *) echo "Usage: ./svm.sh [--offline] build|pull|dependencies|preflight|status|script|apply|seed|validate|up|stop|down|ps|logs|export|import|backup|verify-backup|restore|diagnostics|review-up|reopen|destroy --delete-demo-data" >&2; exit 2 ;;
 esac

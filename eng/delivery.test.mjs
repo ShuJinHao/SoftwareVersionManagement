@@ -7,6 +7,24 @@ import { root, paths, supportedSdk, platformId, resolveDotnet } from './toolchai
 import { changeImpact } from './ci-changes.mjs';
 import { verifyWeb } from './publish.mjs';
 import { renderNginx } from './packages/nginx.mjs';
+import { applicationBom } from './release-materials.mjs';
+
+test('operations release inventory distinguishes shipped packages from development tools and rejects unreviewed components', () => {
+  const policy={nuget:[{name:'Example',version:'1.0.0',license:'MIT'}],npm:[{name:'runtime',version:'2.0.0',license:'MIT'},{name:'test-only',version:'3.0.0',license:'MIT'}]};
+  const lock={packages:{'':{name:'app'},'node_modules/runtime':{version:'2.0.0'},'node_modules/test-only':{version:'3.0.0',dev:true}}};
+  const deps={api:{libraries:{'Example/1.0.0':{type:'package'},'Svm.App/1.0.0':{type:'project'}}}};
+  const bom=applicationBom(policy,lock,deps,'fixture');
+  assert.equal(bom.bomFormat,'CycloneDX');assert.equal(bom.components.length,2);
+  assert.ok(bom.components.every(c=>!c.name.includes('test-only')&&!c.name.includes('Svm.App')));
+  assert.throws(()=>applicationBom({...policy,nuget:[]},lock,deps,'fixture'),/Unreviewed release component/);
+});
+
+test('operations CI scope includes recovery and material changes without scheduling unrelated browser regression', () => {
+  for(const file of ['src/hosts/Svm.ServiceDefaults/RecoveryFence.cs','deploy/linux/operations.sh','deploy/linux/svm.sh','deploy/linux/Dockerfile','deploy/linux/verify-operations.mjs','eng/release-materials.mjs']) {
+    const result=changeImpact([file]);assert.equal(result.operations,true);assert.equal(result.browser,false);
+  }
+  assert.equal(changeImpact(['README.md']).operations,false);
+});
 
 test('toolchain accepts supported SDKs and rejects older, preview and other major versions', () => {
   for (const version of ['8.0.400','8.0.425','8.0.999']) assert.equal(supportedSdk(version), true);
@@ -74,14 +92,14 @@ test('web selection requires exact existing files and explicit test names', () =
   assert.notEqual(unmatched.status,0); assert.match(unmatched.stderr,/match no tests/);
 });
 test('CI impact skips pure documentation and selects tools and web independently', () => {
-  assert.deepEqual(changeImpact(['README.md','docs/详细设计.md']),{code:false,tools:false,web:false,browser:false});
-  assert.deepEqual(changeImpact(['eng/toolchain.mjs']),{code:true,tools:true,web:false,browser:false});
-  assert.deepEqual(changeImpact(['src/ui/svm-web/tests/deployments.test.ts']),{code:true,tools:false,web:true,browser:false});
-  assert.deepEqual(changeImpact(['src/ui/svm-web/package.json','src/ui/svm-web/package-lock.json']),{code:true,tools:false,web:true,browser:false});
-  assert.deepEqual(changeImpact(['src/ui/svm-web/src/pages/DeploymentsPage.vue']),{code:true,tools:false,web:true,browser:true});
-  assert.deepEqual(changeImpact(['deploy/linux/verify-ui.mjs']),{code:true,tools:false,web:false,browser:true});
-  assert.deepEqual(changeImpact(['deploy/linux/verify-rollback.mjs']),{code:true,tools:false,web:false,browser:true});
-  assert.deepEqual(changeImpact(['deploy/linux/verify-cleanup.mjs']),{code:true,tools:false,web:false,browser:true});
+  assert.deepEqual(changeImpact(['README.md','docs/详细设计.md']),{code:false,tools:false,web:false,browser:false,operations:false});
+  assert.deepEqual(changeImpact(['eng/toolchain.mjs']),{code:true,tools:true,web:false,browser:false,operations:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/tests/deployments.test.ts']),{code:true,tools:false,web:true,browser:false,operations:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/package.json','src/ui/svm-web/package-lock.json']),{code:true,tools:false,web:true,browser:false,operations:false});
+  assert.deepEqual(changeImpact(['src/ui/svm-web/src/pages/DeploymentsPage.vue']),{code:true,tools:false,web:true,browser:true,operations:false});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-ui.mjs']),{code:true,tools:false,web:false,browser:true,operations:false});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-rollback.mjs']),{code:true,tools:false,web:false,browser:true,operations:false});
+  assert.deepEqual(changeImpact(['deploy/linux/verify-cleanup.mjs']),{code:true,tools:false,web:false,browser:true,operations:false});
 });
 test('publish rejects missing page, referenced assets and license notices', async () => {
   await mkdir(join(root,'artifacts/test-results/tools-fixtures'),{recursive:true});

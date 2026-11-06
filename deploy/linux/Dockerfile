@@ -2,6 +2,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0.31-bookworm-slim@sha256:2f202e1169ec507
 COPY ca.crt /usr/local/share/ca-certificates/svm-deployment.crt
 RUN update-ca-certificates
 COPY release/ /opt/svm/
+# Restored backup directories are private on the host. Published application
+# files contain no deployment secrets and must be readable by the chosen UID.
+RUN chmod -R a+rX /opt/svm
 WORKDIR /opt/svm
 USER 10001:10001
 ENTRYPOINT ["dotnet"]
