@@ -48,7 +48,7 @@ public sealed class PersistenceHostTests
             using (var process = new Process { StartInfo = info })
             {
                 var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                process.OutputDataReceived += (_, e) => { if (e.Data?.Contains("Application started.", StringComparison.Ordinal) == true) ready.TrySetResult(); };
+                process.OutputDataReceived += (_, e) => { if (OutboxFixture.IsHostStartedLog(e.Data)) ready.TrySetResult(); };
                 Assert.True(process.Start());
                 process.BeginOutputReadLine();
                 var errorOutput = process.StandardError.ReadToEndAsync();
@@ -75,7 +75,9 @@ public sealed class PersistenceHostTests
             finally { if (!missing.HasExited) { missing.Kill(entireProcessTree: true); await missing.WaitForExitAsync(); } }
             Assert.NotEqual(0, missing.ExitCode);
             Assert.Contains("ConfigurationInvalid", await stderr);
-            Assert.DoesNotContain("Application started.", await stdout);
+            var output = await stdout;
+            Assert.DoesNotContain("Application started.", output);
+            Assert.DoesNotContain("\"category\":\"Microsoft.Hosting.Lifetime\"", output);
         }
         finally
         {

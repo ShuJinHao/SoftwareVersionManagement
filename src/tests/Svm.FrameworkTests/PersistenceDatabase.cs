@@ -84,6 +84,7 @@ public sealed class PersistenceDatabase : IAsyncLifetime
     {
         var services = new ServiceCollection();
         services.AddSvmDomainEvents([]).ValidateSvmDomainEvents();
+        services.AddScoped<Svm.Services.Contracts.Tasks.ITargetSnapshotContext, NoTargetSnapshotContext>();
         if (interceptor is not null) services.AddSingleton(interceptor);
         services.AddSvmPostgres(RuntimeConnection(writer ?? WriterConnection));
         services.AddSvmReadPersistence(RuntimeConnection(reader ?? ReaderConnection));
@@ -139,5 +140,11 @@ public sealed class PersistenceDatabase : IAsyncLifetime
             await ExecuteAsync(_admin, $"DROP ROLE {role}");
             _createdRoles.Remove(role);
         }
+    }
+
+    private sealed class NoTargetSnapshotContext : Svm.Services.Contracts.Tasks.ITargetSnapshotContext
+    {
+        public bool IsMaterializing => false;
+        public int TimeoutSeconds => 0;
     }
 }
