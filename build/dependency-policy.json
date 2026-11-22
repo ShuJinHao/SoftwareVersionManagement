@@ -217,14 +217,6 @@
       "licenseUrl": "https://licenses.nuget.org/MIT"
     },
     {
-      "name": "Microsoft.Extensions.ApiDescription.Server",
-      "version": "8.0.31",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/microsoft.extensions.apidescription.server/8.0.31/microsoft.extensions.apidescription.server.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
-    },
-    {
       "name": "Microsoft.Extensions.Caching.Abstractions",
       "version": "8.0.0",
       "license": "MIT",
@@ -497,14 +489,6 @@
       "licenseUrl": "https://licenses.nuget.org/MIT"
     },
     {
-      "name": "Microsoft.OpenApi",
-      "version": "2.7.5",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/microsoft.openapi/2.7.5/microsoft.openapi.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
-    },
-    {
       "name": "Microsoft.TestPlatform.ObjectModel",
       "version": "17.14.1",
       "license": "MIT",
@@ -637,110 +621,6 @@
       "source": "https://api.nuget.org/v3-flatcontainer/rabbitmq.client/7.0.0/rabbitmq.client.nuspec",
       "licenseType": "expression",
       "licenseUrl": "https://licenses.nuget.org/Apache-2.0%20OR%20MPL-2.0"
-    },
-    {
-      "name": "Serilog",
-      "version": "4.2.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog/4.2.0/serilog.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.AspNetCore",
-      "version": "8.0.3",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.aspnetcore/8.0.3/serilog.aspnetcore.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Extensions.Hosting",
-      "version": "8.0.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.extensions.hosting/8.0.0/serilog.extensions.hosting.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Extensions.Logging",
-      "version": "8.0.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.extensions.logging/8.0.0/serilog.extensions.logging.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Formatting.Compact",
-      "version": "2.0.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.formatting.compact/2.0.0/serilog.formatting.compact.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Settings.Configuration",
-      "version": "8.0.4",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.settings.configuration/8.0.4/serilog.settings.configuration.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Sinks.Console",
-      "version": "5.0.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.sinks.console/5.0.0/serilog.sinks.console.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Sinks.Debug",
-      "version": "2.0.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.sinks.debug/2.0.0/serilog.sinks.debug.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Serilog.Sinks.File",
-      "version": "7.0.0",
-      "license": "Apache-2.0",
-      "source": "https://api.nuget.org/v3-flatcontainer/serilog.sinks.file/7.0.0/serilog.sinks.file.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
-    },
-    {
-      "name": "Swashbuckle.AspNetCore",
-      "version": "10.2.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/swashbuckle.aspnetcore/10.2.3/swashbuckle.aspnetcore.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
-    },
-    {
-      "name": "Swashbuckle.AspNetCore.Swagger",
-      "version": "10.2.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/swashbuckle.aspnetcore.swagger/10.2.3/swashbuckle.aspnetcore.swagger.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
-    },
-    {
-      "name": "Swashbuckle.AspNetCore.SwaggerGen",
-      "version": "10.2.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/swashbuckle.aspnetcore.swaggergen/10.2.3/swashbuckle.aspnetcore.swaggergen.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
-    },
-    {
-      "name": "Swashbuckle.AspNetCore.SwaggerUI",
-      "version": "10.2.3",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/swashbuckle.aspnetcore.swaggerui/10.2.3/swashbuckle.aspnetcore.swaggerui.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
     },
     {
       "name": "System.Buffers",
@@ -909,14 +789,6 @@
       "version": "8.0.0",
       "license": "MIT",
       "source": "https://api.nuget.org/v3-flatcontainer/system.text.encoding.codepages/8.0.0/system.text.encoding.codepages.nuspec",
-      "licenseType": "expression",
-      "licenseUrl": "https://licenses.nuget.org/MIT"
-    },
-    {
-      "name": "System.Text.Json",
-      "version": "8.0.6",
-      "license": "MIT",
-      "source": "https://api.nuget.org/v3-flatcontainer/system.text.json/8.0.6/system.text.json.nuspec",
       "licenseType": "expression",
       "licenseUrl": "https://licenses.nuget.org/MIT"
     },
@@ -1185,54 +1057,6 @@
       "source": "https://registry.npmjs.org/@internationalized/number/3.6.8",
       "integrity": "sha512-8UmMFia46DUt+k97zKd9fKWXcWHR+k8ae3eYzILETuT2KbIvLyOfac7zesw+sJdRAAZ7Q9pM1Mk22aXp2LD0Ig==",
       "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "@intlify/core-base",
-      "version": "11.4.18",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/@intlify/core-base/11.4.18",
-      "integrity": "sha512-uryU7clROKIJsCLM8I8J6GA4pw9EVI5BCptnFQslpUXGPj/dCrlrixOaV/6gL1jLXZe3Hl8YY3yNi24bgfhvBw==",
-      "engines": {
-        "node": ">= 22"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "@intlify/devtools-types",
-      "version": "11.4.18",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/@intlify/devtools-types/11.4.18",
-      "integrity": "sha512-J7/PW4wSSijVzR8j578q2+/HICPbA09RhCIMZsLHEL8PlRkdXXVadhunrxLOre8cBe8dDK54922frpa0Z1UimA==",
-      "engines": {
-        "node": ">= 22"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "@intlify/message-compiler",
-      "version": "11.4.18",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/@intlify/message-compiler/11.4.18",
-      "integrity": "sha512-9v2s0+mIuJaFOyWBfZBHrV/g9VLFH/4osx/zaQ52BgT6FQkjvTWHWyNriCMRqWs3PEuBKysmwTUwmNpg9iPjJw==",
-      "engines": {
-        "node": ">= 22"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "@intlify/shared",
-      "version": "11.4.18",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/@intlify/shared/11.4.18",
-      "integrity": "sha512-8q7UR/eAFP0xOZndaClKYeh/lWkcIPOZkWsU85CMR9BYLjTeaENpAFWfFBvuUI8fFz0BDtZvR/fgbwiiQaqcDg==",
-      "engines": {
-        "node": ">= 22"
-      },
       "optional": false,
       "direct": false
     },
@@ -1990,16 +1814,6 @@
     },
     {
       "name": "@vue/devtools-api",
-      "version": "6.6.4",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/@vue/devtools-api/6.6.4",
-      "integrity": "sha512-sGhTPMuXqZ1rVOk32RylztWkfXTRhuS7vgAKv0zjqk8gbsHkJ7xfFf+jbySxt7tWObEJwyKaHMikV/WGDiQm8g==",
-      "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "@vue/devtools-api",
       "version": "7.7.10",
       "license": "MIT",
       "source": "https://registry.npmjs.org/@vue/devtools-api/7.7.10",
@@ -2171,18 +1985,6 @@
       "direct": false
     },
     {
-      "name": "agent-base",
-      "version": "6.0.2",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/agent-base/6.0.2",
-      "integrity": "sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==",
-      "engines": {
-        "node": ">= 6.0.0"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "alien-signals",
       "version": "3.2.1",
       "license": "MIT",
@@ -2241,26 +2043,6 @@
       "direct": false
     },
     {
-      "name": "asynckit",
-      "version": "0.4.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/asynckit/0.4.0",
-      "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
-      "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "axios",
-      "version": "1.20.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/axios/1.20.0",
-      "integrity": "sha512-r8aOh8j9cGKpgQAqpzrUHnSIc6a59Y3Xf/cv8sy1DrHCkZHzQGEuoq1tARk6qSyDdtQGSDgpb9kFlruzPvrgwg==",
-      "engines": {},
-      "optional": false,
-      "direct": true
-    },
-    {
       "name": "birpc",
       "version": "2.9.0",
       "license": "MIT",
@@ -2278,18 +2060,6 @@
       "integrity": "sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==",
       "engines": {
         "node": ">=4.0"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "call-bind-apply-helpers",
-      "version": "1.0.2",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/call-bind-apply-helpers/1.0.2",
-      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
-      "engines": {
-        "node": ">= 0.4"
       },
       "optional": false,
       "direct": false
@@ -2339,18 +2109,6 @@
       },
       "optional": false,
       "direct": true
-    },
-    {
-      "name": "combined-stream",
-      "version": "1.0.8",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/combined-stream/1.0.8",
-      "integrity": "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==",
-      "engines": {
-        "node": ">= 0.8"
-      },
-      "optional": false,
-      "direct": false
     },
     {
       "name": "confbox",
@@ -2405,36 +2163,12 @@
       "direct": false
     },
     {
-      "name": "debug",
-      "version": "4.4.3",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/debug/4.4.3",
-      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
-      "engines": {
-        "node": ">=6.0"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "defu",
       "version": "6.1.7",
       "license": "MIT",
       "source": "https://registry.npmjs.org/defu/6.1.7",
       "integrity": "sha512-7z22QmUWiQ/2d0KkdYmANbRUVABpZ9SNYyH5vx6PZ+nE5bcC0l7uFvEfHlyld/HcGBFTL536ClDt3DEcSlEJAQ==",
       "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "delayed-stream",
-      "version": "1.0.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/delayed-stream/1.0.0",
-      "integrity": "sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==",
-      "engines": {
-        "node": ">=0.4.0"
-      },
       "optional": false,
       "direct": false
     },
@@ -2449,28 +2183,6 @@
       },
       "optional": false,
       "direct": false
-    },
-    {
-      "name": "dunder-proto",
-      "version": "1.0.1",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/dunder-proto/1.0.1",
-      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "echarts",
-      "version": "6.1.0",
-      "license": "Apache-2.0",
-      "source": "https://registry.npmjs.org/echarts/6.1.0",
-      "integrity": "sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==",
-      "engines": {},
-      "optional": false,
-      "direct": true
     },
     {
       "name": "enhanced-resolve",
@@ -2497,60 +2209,12 @@
       "direct": false
     },
     {
-      "name": "es-define-property",
-      "version": "1.0.1",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/es-define-property/1.0.1",
-      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "es-errors",
-      "version": "1.3.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/es-errors/1.3.0",
-      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "es-module-lexer",
       "version": "2.3.2",
       "license": "MIT",
       "source": "https://registry.npmjs.org/es-module-lexer/2.3.2",
       "integrity": "sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==",
       "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "es-object-atoms",
-      "version": "1.1.2",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/es-object-atoms/1.1.2",
-      "integrity": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "es-set-tostringtag",
-      "version": "2.1.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/es-set-tostringtag/2.1.0",
-      "integrity": "sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==",
-      "engines": {
-        "node": ">= 0.4"
-      },
       "optional": false,
       "direct": false
     },
@@ -2609,30 +2273,6 @@
       "direct": false
     },
     {
-      "name": "follow-redirects",
-      "version": "1.16.2",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/follow-redirects/1.16.2",
-      "integrity": "sha512-/kVP2U8z596Ia0gwFrwyIeo74ta5aVmSeU1FfAUMAmcEP5EP7zydmag3SLiN64NaRKef3lxsq7i/g7ltJQDGow==",
-      "engines": {
-        "node": ">=4.0"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "form-data",
-      "version": "4.0.6",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/form-data/4.0.6",
-      "integrity": "sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==",
-      "engines": {
-        "node": ">= 6"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "fsevents",
       "version": "2.3.2",
       "license": "MIT",
@@ -2654,52 +2294,6 @@
         "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
       },
       "optional": true,
-      "direct": false
-    },
-    {
-      "name": "function-bind",
-      "version": "1.1.2",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/function-bind/1.1.2",
-      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
-      "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "get-intrinsic",
-      "version": "1.3.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/get-intrinsic/1.3.0",
-      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "get-proto",
-      "version": "1.0.1",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/get-proto/1.0.1",
-      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "gopd",
-      "version": "1.2.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/gopd/1.2.0",
-      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
       "direct": false
     },
     {
@@ -2725,30 +2319,6 @@
       "direct": true
     },
     {
-      "name": "has-symbols",
-      "version": "1.1.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/has-symbols/1.1.0",
-      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "has-tostringtag",
-      "version": "1.0.2",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/has-tostringtag/1.0.2",
-      "integrity": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "hash-wasm",
       "version": "4.12.0",
       "license": "MIT",
@@ -2757,36 +2327,12 @@
       "embeddedNotice": "docs/licenses/hash-wasm-4.12.0-SHA256.txt"
     },
     {
-      "name": "hasown",
-      "version": "2.0.4",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/hasown/2.0.4",
-      "integrity": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "hookable",
       "version": "5.5.3",
       "license": "MIT",
       "source": "https://registry.npmjs.org/hookable/5.5.3",
       "integrity": "sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==",
       "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "https-proxy-agent",
-      "version": "5.0.1",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/https-proxy-agent/5.0.1",
-      "integrity": "sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==",
-      "engines": {
-        "node": ">= 6"
-      },
       "optional": false,
       "direct": false
     },
@@ -3147,42 +2693,6 @@
       "direct": false
     },
     {
-      "name": "math-intrinsics",
-      "version": "1.1.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/math-intrinsics/1.1.0",
-      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
-      "engines": {
-        "node": ">= 0.4"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "mime-db",
-      "version": "1.52.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/mime-db/1.52.0",
-      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
-      "engines": {
-        "node": ">= 0.6"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "mime-types",
-      "version": "2.1.35",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/mime-types/2.1.35",
-      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
-      "engines": {
-        "node": ">= 0.6"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
       "name": "mitt",
       "version": "3.0.1",
       "license": "MIT",
@@ -3198,16 +2708,6 @@
       "license": "MIT",
       "source": "https://registry.npmjs.org/mlly/1.8.2",
       "integrity": "sha512-d+ObxMQFmbt10sretNDytwt85VrbkhhUA/JBGm1MPaWJ65Cl4wOgLaB1NYvJSZ0Ef03MMEU/0xpPMXUIQ29UfA==",
-      "engines": {},
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "ms",
-      "version": "2.1.3",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/ms/2.1.3",
-      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
       "engines": {},
       "optional": false,
       "direct": false
@@ -3380,18 +2880,6 @@
       "integrity": "sha512-zkd+e9S1AQHhmaBKye9zlFHWjOwVgqXl1q3ECYy8561K7qxR2cREf/STLskulBFd78k6AOFeA+ff1TtEzk9bAA==",
       "engines": {
         "node": "^10 || ^12 || >=14"
-      },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "proxy-from-env",
-      "version": "2.1.0",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/proxy-from-env/2.1.0",
-      "integrity": "sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==",
-      "engines": {
-        "node": ">=10"
       },
       "optional": false,
       "direct": false
@@ -3737,28 +3225,6 @@
       "direct": false
     },
     {
-      "name": "vue-echarts",
-      "version": "8.0.1",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/vue-echarts/8.0.1",
-      "integrity": "sha512-23rJTFLu1OUEGRWjJGmdGt8fP+8+ja1gVgzMYPIPaHWpXegcO1viIAaeu2H4QHESlVeHzUAHIxKXGrwjsyXAaA==",
-      "engines": {},
-      "optional": false,
-      "direct": true
-    },
-    {
-      "name": "vue-i18n",
-      "version": "11.4.18",
-      "license": "MIT",
-      "source": "https://registry.npmjs.org/vue-i18n/11.4.18",
-      "integrity": "sha512-NMPOTrqSUVPJxSuiYi0uJ2q0bZovoGuQb13hY9lR+ywb/FOtJRoXqxPRcO/64CDed4tkk9lZ6hRPG7HBP1nxvg==",
-      "engines": {
-        "node": ">= 22"
-      },
-      "optional": false,
-      "direct": true
-    },
-    {
       "name": "vue-router",
       "version": "5.0.3",
       "license": "MIT",
@@ -3833,16 +3299,6 @@
       "engines": {
         "node": ">= 14.6"
       },
-      "optional": false,
-      "direct": false
-    },
-    {
-      "name": "zrender",
-      "version": "6.1.0",
-      "license": "BSD-3-Clause",
-      "source": "https://registry.npmjs.org/zrender/6.1.0",
-      "integrity": "sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==",
-      "engines": {},
       "optional": false,
       "direct": false
     }

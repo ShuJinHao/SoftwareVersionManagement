@@ -17,17 +17,13 @@
     "@fontsource-variable/inter": "5.2.8",
     "@lucide/vue": "1.48.0",
     "@vueuse/core": "14.3.0",
-    "axios": "1.20.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
-    "echarts": "6.1.0",
     "hash-wasm": "4.12.0",
     "pinia": "3.0.4",
     "reka-ui": "2.9.7",
     "tailwind-merge": "3.6.0",
     "vue": "3.5.43",
-    "vue-echarts": "8.0.1",
-    "vue-i18n": "11.4.18",
     "vue-router": "5.0.3"
   },
   "devDependencies": {
@@ -44,7 +40,6 @@
     "vue-tsc": "3.2.5"
   },
   "overrides": {
-    "follow-redirects": "1.16.2",
     "postcss": "8.5.30",
     "nanoid": "3.3.18",
     "source-map-js": "1.2.2"

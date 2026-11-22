@@ -7,8 +7,6 @@
     <ProjectReference Include="../../shared/Svm.Services.Contracts/Svm.Services.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Serilog.AspNetCore" />
-    <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
     <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />

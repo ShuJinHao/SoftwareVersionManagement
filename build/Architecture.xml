@@ -99,8 +99,6 @@
   </Project>
   <Project name="Svm.ServiceDefaults" path="src/hosts/Svm.ServiceDefaults/Svm.ServiceDefaults.csproj" kind="hosts">
     <Reference name="Svm.Services.Contracts" />
-    <Package name="Serilog.AspNetCore" />
-    <Package name="Serilog.Sinks.File" />
     <Package name="OpenTelemetry.Extensions.Hosting" />
     <Package name="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
     <Package name="OpenTelemetry.Instrumentation.AspNetCore" />
@@ -122,8 +120,6 @@
     <Reference name="Svm.Security" />
     <Reference name="Svm.ServiceDefaults" />
     <Package name="MediatR" />
-    <Package name="Swashbuckle.AspNetCore" />
-    <Package name="Microsoft.OpenApi" />
     <Reference name="Svm.PackageService" />
     <Reference name="Svm.FileStorage" />
     <Reference name="Svm.TaskService" />
