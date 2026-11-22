@@ -32,7 +32,6 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Analyzers" Version="[8.0.31]" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="[8.0.31]" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="[8.0.31]" />
-    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="[8.0.31]" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Abstractions" Version="[8.0.0]" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="[8.0.1]" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="[8.0.0]" />
@@ -67,7 +66,6 @@
     <PackageVersion Include="Microsoft.Extensions.Primitives" Version="[8.0.0]" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="[17.14.1]" />
     <PackageVersion Include="Microsoft.NETCore.Platforms" Version="[7.0.4]" />
-    <PackageVersion Include="Microsoft.OpenApi" Version="[2.7.5]" />
     <PackageVersion Include="Microsoft.TestPlatform.ObjectModel" Version="[17.14.1]" />
     <PackageVersion Include="Microsoft.TestPlatform.TestHost" Version="[17.14.1]" />
     <PackageVersion Include="Mono.TextTemplating" Version="[2.2.1]" />
@@ -83,19 +81,6 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="[1.15.1]" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="[1.15.1]" />
     <PackageVersion Include="RabbitMQ.Client" Version="[7.0.0]" />
-    <PackageVersion Include="Serilog" Version="[4.2.0]" />
-    <PackageVersion Include="Serilog.AspNetCore" Version="[8.0.3]" />
-    <PackageVersion Include="Serilog.Extensions.Hosting" Version="[8.0.0]" />
-    <PackageVersion Include="Serilog.Extensions.Logging" Version="[8.0.0]" />
-    <PackageVersion Include="Serilog.Formatting.Compact" Version="[2.0.0]" />
-    <PackageVersion Include="Serilog.Settings.Configuration" Version="[8.0.4]" />
-    <PackageVersion Include="Serilog.Sinks.Console" Version="[5.0.0]" />
-    <PackageVersion Include="Serilog.Sinks.Debug" Version="[2.0.0]" />
-    <PackageVersion Include="Serilog.Sinks.File" Version="[7.0.0]" />
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="[10.2.3]" />
-    <PackageVersion Include="Swashbuckle.AspNetCore.Swagger" Version="[10.2.3]" />
-    <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerGen" Version="[10.2.3]" />
-    <PackageVersion Include="Swashbuckle.AspNetCore.SwaggerUI" Version="[10.2.3]" />
     <PackageVersion Include="System.Buffers" Version="[4.5.1]" />
     <PackageVersion Include="System.CodeDom" Version="[8.0.0]" />
     <PackageVersion Include="System.Collections.Immutable" Version="[8.0.0]" />
@@ -115,7 +100,6 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="[8.0.2]" />
     <PackageVersion Include="System.Security.Cryptography.Xml" Version="[8.0.5]" />
     <PackageVersion Include="System.Text.Encoding.CodePages" Version="[8.0.0]" />
-    <PackageVersion Include="System.Text.Json" Version="[8.0.6]" />
     <PackageVersion Include="System.Threading.Channels" Version="[8.0.0]" />
     <PackageVersion Include="System.Threading.RateLimiting" Version="[8.0.0]" />
     <PackageVersion Include="System.Threading.Tasks.Extensions" Version="[4.5.4]" />
