@@ -14,37 +14,39 @@ internal sealed class TaskRepository(SvmDbContext db, IUnitOfWork unit) : ITaskR
         await db.Set<Deployment>().AsNoTracking().AnyAsync(d => d.TargetReleaseId == id && d.State != "Rejected" && d.State != "Canceled" && d.State != "Completed", ct) ||
         await db.Set<InstanceTask>().AsNoTracking().AnyAsync(t => t.TargetReleaseId == id && t.State != "Succeeded" && t.State != "Failed" && t.State != "Canceled" && t.State != "ClosedUnknown", ct);
     private void Write() { if (unit.CurrentOperationId is null || db.Database.CurrentTransaction is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
-    private async Task<T?> One<T>(string sql, Guid id, bool protect, Func<T, Guid> key, CancellationToken ct) where T : class
+    private async Task<T?> One<T>(Func<IQueryable<T>> query, Guid id, bool protect, Func<T, Guid> key, CancellationToken ct) where T : class
     {
         if (protect) Write(); var local = db.Set<T>().Local.SingleOrDefault(x => key(x) == id); if (local is not null) return local;
-        var q = db.Set<T>().FromSqlRaw(sql + (protect ? " FOR UPDATE" : ""), id);
+        var q = query();
         try { return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(ct); }
         // Npgsql's non-retrying EF strategy wraps serialization/deadlock failures from reads.
         // These SQLSTATE values prove abort; preserve them for the existing fresh-scope retry policy.
         catch (InvalidOperationException e) when (e.InnerException is PostgresException { SqlState: "40001" or "40P01" } postgres)
         { throw new PersistenceException(PersistenceFailure.DependencyUnavailable, unit.CurrentOperationId, postgres.SqlState); }
     }
-    public Task<TargetSelection?> SelectionAsync(Guid id, bool protect, CancellationToken ct) => One<TargetSelection>("SELECT * FROM tsk.target_selections WHERE \"Id\"={0}", id, protect, x => x.Id.Value, ct);
-    public Task<Deployment?> DeploymentAsync(Guid id, bool protect, CancellationToken ct) => One<Deployment>("SELECT * FROM tsk.deployments WHERE \"Id\"={0}", id, protect, x => x.Id.Value, ct);
-    public Task<InstanceTask?> TaskAsync(Guid id, bool protect, CancellationToken ct) => One<InstanceTask>("SELECT * FROM tsk.tasks WHERE \"Id\"={0}", id, protect, x => x.Id.Value, ct);
-    public Task<ExecutionAttempt?> AttemptAsync(Guid id, bool protect, CancellationToken ct) => One<ExecutionAttempt>("SELECT * FROM tsk.attempts WHERE \"Id\"={0}", id, protect, x => x.Id, ct);
+    public Task<TargetSelection?> SelectionAsync(Guid id, bool protect, CancellationToken ct) => One(() => protect ? db.Set<TargetSelection>().FromSqlRaw("SELECT * FROM tsk.target_selections WHERE \"Id\"={0} FOR UPDATE", id) : db.Set<TargetSelection>().FromSqlRaw("SELECT * FROM tsk.target_selections WHERE \"Id\"={0}", id), id, protect, x => x.Id.Value, ct);
+    public Task<Deployment?> DeploymentAsync(Guid id, bool protect, CancellationToken ct) => One(() => protect ? db.Set<Deployment>().FromSqlRaw("SELECT * FROM tsk.deployments WHERE \"Id\"={0} FOR UPDATE", id) : db.Set<Deployment>().FromSqlRaw("SELECT * FROM tsk.deployments WHERE \"Id\"={0}", id), id, protect, x => x.Id.Value, ct);
+    public Task<InstanceTask?> TaskAsync(Guid id, bool protect, CancellationToken ct) => One(() => protect ? db.Set<InstanceTask>().FromSqlRaw("SELECT * FROM tsk.tasks WHERE \"Id\"={0} FOR UPDATE", id) : db.Set<InstanceTask>().FromSqlRaw("SELECT * FROM tsk.tasks WHERE \"Id\"={0}", id), id, protect, x => x.Id.Value, ct);
+    public Task<ExecutionAttempt?> AttemptAsync(Guid id, bool protect, CancellationToken ct) => One(() => protect ? db.Set<ExecutionAttempt>().FromSqlRaw("SELECT * FROM tsk.attempts WHERE \"Id\"={0} FOR UPDATE", id) : db.Set<ExecutionAttempt>().FromSqlRaw("SELECT * FROM tsk.attempts WHERE \"Id\"={0}", id), id, protect, x => x.Id, ct);
     public async Task<IReadOnlyList<TaskWork>> RecoverableAsync(Guid resource,CancellationToken ct) => await db.Set<TaskWork>().FromSqlInterpolated($"SELECT * FROM tsk.works WHERE \"ResourceId\"={resource} AND (NOT \"Accepted\" OR \"State\"='Failed') ORDER BY \"Id\" FOR UPDATE").AsTracking().ToListAsync(ct);
-    public Task<TaskWork?> WorkAsync(Guid id, bool protect, CancellationToken ct) => One<TaskWork>("SELECT * FROM tsk.works WHERE \"Id\"={0}", id, protect, x => x.Id.Value, ct);
+    public Task<TaskWork?> WorkAsync(Guid id, bool protect, CancellationToken ct) => One(() => protect ? db.Set<TaskWork>().FromSqlRaw("SELECT * FROM tsk.works WHERE \"Id\"={0} FOR UPDATE", id) : db.Set<TaskWork>().FromSqlRaw("SELECT * FROM tsk.works WHERE \"Id\"={0}", id), id, protect, x => x.Id.Value, ct);
     public Task<SelectionChunk?> ChunkAsync(Guid selection, int number, CancellationToken ct) => db.Set<SelectionChunk>().AsNoTracking().SingleOrDefaultAsync(x => x.SelectionId == new StrongId<TargetSelection>(selection) && x.Number == number, ct);
     public async Task<int> AppendMembersAsync(Guid selection, IReadOnlyList<Guid> ids, CancellationToken ct)
     { Write(); return await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO tsk.target_members (\"SelectionId\",\"InstanceId\") SELECT {selection}, unnest({ids.ToArray()}) ON CONFLICT DO NOTHING", ct); }
     public async Task<IReadOnlyList<Guid>> MembersAsync(Guid selection, Guid? after, int take, CancellationToken ct) => await db.Set<TargetMember>().FromSqlRaw(
         "SELECT * FROM tsk.target_members WHERE \"SelectionId\"={0} AND ({1}::uuid IS NULL OR \"InstanceId\">{1}) ORDER BY \"InstanceId\" LIMIT {2}", selection, (object?)after ?? DBNull.Value, take).AsNoTracking().Select(x => x.InstanceId).ToListAsync(ct);
-    public Task<TaskBatch?> BatchAsync(Guid id, bool protect, CancellationToken ct) => One<TaskBatch>("SELECT * FROM tsk.batches WHERE \"Id\"={0}",id,protect,x=>x.Id.Value,ct);
+    public Task<TaskBatch?> BatchAsync(Guid id, bool protect, CancellationToken ct) => One(() => protect ? db.Set<TaskBatch>().FromSqlRaw("SELECT * FROM tsk.batches WHERE \"Id\"={0} FOR UPDATE", id) : db.Set<TaskBatch>().FromSqlRaw("SELECT * FROM tsk.batches WHERE \"Id\"={0}", id), id, protect, x => x.Id.Value, ct);
     public Task<TaskBatch?> LastBatchAsync(Guid deployment, CancellationToken ct) => db.Set<TaskBatch>().FromSqlRaw("SELECT * FROM tsk.batches WHERE \"DeploymentId\"={0} ORDER BY \"Ordinal\" DESC LIMIT 1 FOR UPDATE",deployment).AsTracking().SingleOrDefaultAsync(ct);
     public async Task<IReadOnlyList<TaskBatch>> BatchesAsync(Guid deployment, bool protect, CancellationToken ct)
-    { if (protect) Write(); var q = db.Set<TaskBatch>().FromSqlRaw("SELECT * FROM tsk.batches WHERE \"DeploymentId\"={0} AND (\"State\"='Open' OR \"FailureRevision\">\"ReviewedFailureRevision\" OR \"Id\"=(SELECT \"Id\" FROM tsk.batches WHERE \"DeploymentId\"={0} AND \"State\"='Pending' ORDER BY \"Ordinal\" LIMIT 1)) ORDER BY \"Id\"" + (protect ? " FOR UPDATE" : ""), deployment);
-      var rows = await (protect ? q.AsTracking() : q.AsNoTracking()).ToListAsync(ct); return db.Set<TaskBatch>().Local.Where(x => x.DeploymentId == new StrongId<Deployment>(deployment)).Concat(rows).DistinctBy(x => x.Id).ToArray(); }
+    { if (protect) Write(); var q = protect ? db.Set<TaskBatch>().FromSqlRaw("SELECT * FROM tsk.batches WHERE \"DeploymentId\"={0} AND (\"State\"='Open' OR \"FailureRevision\">\"ReviewedFailureRevision\" OR \"Id\"=(SELECT \"Id\" FROM tsk.batches WHERE \"DeploymentId\"={0} AND \"State\"='Pending' ORDER BY \"Ordinal\" LIMIT 1)) ORDER BY \"Id\" FOR UPDATE", deployment).AsTracking() : db.Set<TaskBatch>().FromSqlRaw("SELECT * FROM tsk.batches WHERE \"DeploymentId\"={0} AND (\"State\"='Open' OR \"FailureRevision\">\"ReviewedFailureRevision\" OR \"Id\"=(SELECT \"Id\" FROM tsk.batches WHERE \"DeploymentId\"={0} AND \"State\"='Pending' ORDER BY \"Ordinal\" LIMIT 1)) ORDER BY \"Id\"", deployment).AsNoTracking();
+      var rows = await q.ToListAsync(ct); return db.Set<TaskBatch>().Local.Where(x => x.DeploymentId == new StrongId<Deployment>(deployment)).Concat(rows).DistinctBy(x => x.Id).ToArray(); }
     public Task<InstanceTask?> RetryAsync(Guid deployment, Guid instance, CancellationToken ct) => db.Set<InstanceTask>().AsNoTracking().SingleOrDefaultAsync(x => x.DeploymentId == new StrongId<Deployment>(deployment) && x.InstanceId == instance, ct);
     public async Task<IReadOnlyList<InstanceTask>> TasksAsync(Guid deployment, Guid? after, int take, bool unbatched, bool protect, CancellationToken ct)
     {
-        if (protect) Write(); var q = db.Set<InstanceTask>().FromSqlRaw("SELECT * FROM tsk.tasks WHERE \"DeploymentId\"={0} AND ({1}::uuid IS NULL OR \"Id\">{1}) AND (NOT {2} OR \"BatchId\" IS NULL) ORDER BY \"Id\" LIMIT {3}" + (protect ? " FOR UPDATE" : ""), deployment, (object?)after ?? DBNull.Value, unbatched, take);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).ToListAsync(ct);
+        if (protect) Write(); var q = protect
+            ? db.Set<InstanceTask>().FromSqlRaw("SELECT * FROM tsk.tasks WHERE \"DeploymentId\"={0} AND ({1}::uuid IS NULL OR \"Id\">{1}) AND (NOT {2} OR \"BatchId\" IS NULL) ORDER BY \"Id\" LIMIT {3} FOR UPDATE", deployment, (object?)after ?? DBNull.Value, unbatched, take).AsTracking()
+            : db.Set<InstanceTask>().FromSqlRaw("SELECT * FROM tsk.tasks WHERE \"DeploymentId\"={0} AND ({1}::uuid IS NULL OR \"Id\">{1}) AND (NOT {2} OR \"BatchId\" IS NULL) ORDER BY \"Id\" LIMIT {3}", deployment, (object?)after ?? DBNull.Value, unbatched, take).AsNoTracking();
+        return await q.ToListAsync(ct);
     }
     public Task<TaskReceipt?> ReceiptAsync(Guid attempt, Guid eventId, long sequence, CancellationToken ct) => db.Set<TaskReceipt>().AsNoTracking().FirstOrDefaultAsync(x => x.AttemptId == attempt && (x.EventId == eventId || x.Sequence == sequence), ct);
     public async Task<InstanceExecutionGuard?> GuardAsync(Guid instance, CancellationToken ct)

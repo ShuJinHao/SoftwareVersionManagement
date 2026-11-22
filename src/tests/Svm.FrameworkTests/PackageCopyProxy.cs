@@ -26,7 +26,7 @@ internal sealed class PackageCopyProxy : IAsyncDisposable
     internal Task PartialCopy => _partial.Task;
     internal int CopyCount => Volatile.Read(ref _copyCount);
     internal PackageCopyProxy(string serverPath, string peerPath, string password, int target)
-    { _server = new(serverPath, password); _peer = new(peerPath, password); _target = target; _listener.Start(); _accept = Accept(); }
+    { _server = X509CertificateLoader.LoadPkcs12FromFile(serverPath, password); _peer = X509CertificateLoader.LoadPkcs12FromFile(peerPath, password); _target = target; _listener.Start(); _accept = Accept(); }
     internal void HoldNextCopy() { _partial = new(TaskCreationOptions.RunContinuationsAsynchronously); _resume = new(TaskCreationOptions.RunContinuationsAsynchronously); Volatile.Write(ref _hold, 1); }
     internal void HoldAllCopies() { HoldNextCopy(); Volatile.Write(ref _holdAll, 1); }
     internal void Resume() { Volatile.Write(ref _holdAll, 0); _resume.TrySetResult(); }

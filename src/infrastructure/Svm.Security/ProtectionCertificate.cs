@@ -10,7 +10,7 @@ public static class ProtectionCertificate
     {
         try
         {
-            var certificate = new X509Certificate2(path, password,
+            var certificate = X509CertificateLoader.LoadPkcs12FromFile(path, password,
                 OperatingSystem.IsMacOS() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
             using var key = certificate.GetRSAPrivateKey();
             if (!certificate.HasPrivateKey || key is null || key.KeySize < 2048 || certificate.NotAfter.ToUniversalTime() <= DateTime.UtcNow)

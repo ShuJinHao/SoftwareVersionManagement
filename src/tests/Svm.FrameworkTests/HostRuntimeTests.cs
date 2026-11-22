@@ -15,7 +15,7 @@ public sealed class HostRuntimeTests
         var options = document.RootElement.GetProperty("runtimeOptions");
         Assert.Equal("LatestPatch", options.GetProperty("rollForward").GetString());
         var frameworks = options.GetProperty("frameworks").EnumerateArray().ToArray();
-        Assert.Contains(frameworks, f => f.GetProperty("name").GetString() == "Microsoft.NETCore.App" && f.GetProperty("version").GetString() == "8.0.31");
-        Assert.Contains(frameworks, f => f.GetProperty("name").GetString() == "Microsoft.AspNetCore.App" && f.GetProperty("version").GetString() == "8.0.31");
+        Assert.Contains(frameworks, f => f.GetProperty("name").GetString() == "Microsoft.NETCore.App" && f.GetProperty("version").GetString() == "10.0.15");
+        Assert.Contains(frameworks, f => f.GetProperty("name").GetString() == "Microsoft.AspNetCore.App" && f.GetProperty("version").GetString() == "10.0.15");
     }
 }

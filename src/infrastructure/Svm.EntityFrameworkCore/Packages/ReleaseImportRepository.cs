@@ -12,16 +12,20 @@ internal sealed class ReleaseImportRepository(SvmDbContext context, IUnitOfWork 
         if (protect) Require();
         var local = context.Set<ReleaseSourceBinding>().Local.SingleOrDefault(x => x.SoftwareId == id && x.IsCurrent);
         if (local is not null && protect) return local;
-        var q = context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"SoftwareId\"={0} AND \"IsCurrent\"" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token) ?? local;
+        var q = protect
+            ? context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"SoftwareId\"={0} AND \"IsCurrent\" FOR UPDATE", id).AsTracking()
+            : context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"SoftwareId\"={0} AND \"IsCurrent\"", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token) ?? local;
     }
     public async Task<ReleaseSourceBinding?> BindingByIdAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();
         var local = context.Set<ReleaseSourceBinding>().Local.SingleOrDefault(x => x.Id == id);
         if (local is not null && protect) return local;
-        var q = context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token) ?? local;
+        var q = protect
+            ? context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<ReleaseSourceBinding>().FromSqlRaw("SELECT * FROM rel.source_bindings WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token) ?? local;
     }
     public async Task<IReadOnlyList<ReleaseSourceBinding>> BindingsAsync(Guid? afterId, int count, CancellationToken token) =>
         await context.Set<ReleaseSourceBinding>().AsNoTracking().Where(x => x.IsCurrent && (afterId == null || x.Id.CompareTo(afterId.Value) > 0))
@@ -40,16 +44,20 @@ internal sealed class ReleaseImportRepository(SvmDbContext context, IUnitOfWork 
         if (protect) Require();
         var local = context.Set<ReleaseSyncWork>().Local.SingleOrDefault(x => x.Id == id);
         if (local is not null && protect) return local;
-        var q = context.Set<ReleaseSyncWork>().FromSqlRaw("SELECT * FROM rel.sync_works WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token) ?? local;
+        var q = protect
+            ? context.Set<ReleaseSyncWork>().FromSqlRaw("SELECT * FROM rel.sync_works WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<ReleaseSyncWork>().FromSqlRaw("SELECT * FROM rel.sync_works WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token) ?? local;
     }
     public async Task<ReleaseSyncWork?> FindAsync(Guid binding, string? tag, bool activeOnly, CancellationToken token)
     {
         Require();
         var local = context.Set<ReleaseSyncWork>().Local.FirstOrDefault(x => x.BindingId == binding && x.Tag == tag && (!activeOnly || x.Stage != "Completed" && x.Stage != "Conflict"));
         if (local is not null) return local;
-        return await context.Set<ReleaseSyncWork>().FromSqlRaw("SELECT * FROM rel.sync_works WHERE \"BindingId\"={0} AND \"Tag\" IS NOT DISTINCT FROM {1}::text" +
-            (activeOnly ? " AND \"Stage\" NOT IN ('Completed','Conflict')" : "") + " ORDER BY \"CreatedAt\" DESC LIMIT 1 FOR UPDATE", binding, (object?)tag ?? DBNull.Value).SingleOrDefaultAsync(token);
+        var q = activeOnly
+            ? context.Set<ReleaseSyncWork>().FromSqlRaw("SELECT * FROM rel.sync_works WHERE \"BindingId\"={0} AND \"Tag\" IS NOT DISTINCT FROM {1}::text AND \"Stage\" NOT IN ('Completed','Conflict') ORDER BY \"CreatedAt\" DESC LIMIT 1 FOR UPDATE", binding, (object?)tag ?? DBNull.Value)
+            : context.Set<ReleaseSyncWork>().FromSqlRaw("SELECT * FROM rel.sync_works WHERE \"BindingId\"={0} AND \"Tag\" IS NOT DISTINCT FROM {1}::text ORDER BY \"CreatedAt\" DESC LIMIT 1 FOR UPDATE", binding, (object?)tag ?? DBNull.Value);
+        return await q.SingleOrDefaultAsync(token);
     }
     public async Task<IReadOnlyList<Guid>> PendingAsync(Guid software, DateTimeOffset now, CancellationToken token) =>
         await context.Set<ReleaseSyncWork>().AsNoTracking().Where(x => x.SoftwareId == software && x.Stage != "Completed" && x.Stage != "Conflict" && x.Stage != "Historical" &&

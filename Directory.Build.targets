@@ -9,10 +9,10 @@
     <AdditionalFiles Include="$(SvmRoot)src/**/*.csproj" />
   </ItemGroup>
   <Target Name="ValidateSvmBuildSettings" BeforeTargets="CoreCompile">
-    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NETCoreSdkVersion)', '^8\.0\.[0-9]+$')) or $([MSBuild]::VersionLessThan('$(NETCoreSdkVersion)', '8.0.400'))" Text="SVM100: Development requires a stable .NET 8 SDK version 8.0.400 or later within 8.0." />
-    <Error Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers' and '$(TargetFramework)' != 'net8.0'" Text="SVM100: Product and test projects require net8.0." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NETCoreSdkVersion)', '^10\.0\.[0-9]+$')) or $([MSBuild]::VersionLessThan('$(NETCoreSdkVersion)', '10.0.400'))" Text="SVM100: Development requires a stable .NET 10 SDK version 10.0.400 or later within 10.0." />
+    <Error Condition="'$(MSBuildProjectName)' != 'Svm.Analyzers' and '$(TargetFramework)' != 'net10.0'" Text="SVM100: Product and test projects require net10.0." />
     <Error Condition="'$(MSBuildProjectName)' == 'Svm.Analyzers' and '$(TargetFramework)' != 'netstandard2.0'" Text="SVM100: Analyzer requires netstandard2.0." />
-    <Error Condition="'$(LangVersion)' != '12.0'" Text="SVM100: C# version must be 12.0." />
+    <Error Condition="'$(LangVersion)' != '14.0'" Text="SVM100: C# version must be 14.0." />
     <Error Condition="'$(SvmProductionProject)' == 'true' and ('$(RunAnalyzersDuringBuild)' != 'true' or '$(RunAnalyzers)' == 'false' or '$(EnableNETAnalyzers)' == 'false')" Text="SVM100: Production architecture analyzers cannot be disabled." />
     <Error Condition="'$(TreatWarningsAsErrors)' != 'true' or '$(NuGetAudit)' != 'true' or '$(NuGetAuditMode)' != 'all' or '$(NuGetAuditLevel)' != 'low'" Text="SVM100: Warning and dependency audit gates cannot be weakened." />
     <Error Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(NoWarn);$(WarningsNotAsErrors)', '(?i)(SVM|NU190|NU1605)'))" Text="SVM100: Warning suppression must not bypass architecture or dependency gates." />

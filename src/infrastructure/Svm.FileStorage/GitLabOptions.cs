@@ -28,7 +28,7 @@ public sealed record GitLabOptions(GitLabImportOptions Import, IReadOnlyList<Git
         if (TrustCertificatePath is not null)
         {
             if (!Path.IsPathFullyQualified(TrustCertificatePath) || !File.Exists(TrustCertificatePath)) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
-            try { using var certificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(TrustCertificatePath); if (certificate.HasPrivateKey) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid); }
+            try { using var certificate = System.Security.Cryptography.X509Certificates.X509CertificateLoader.LoadCertificateFromFile(TrustCertificatePath); if (certificate.HasPrivateKey) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid); }
             catch (System.Security.Cryptography.CryptographicException) { throw new RequestRejectedException(RequestFailure.ConfigurationInvalid); }
         }
         var sources = Import.Sources; var secrets = ConnectionCredentials ?? [];

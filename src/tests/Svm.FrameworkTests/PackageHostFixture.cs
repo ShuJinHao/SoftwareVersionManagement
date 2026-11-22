@@ -84,8 +84,8 @@ internal sealed class PackageHostFixture : IAsyncDisposable
             if (role == "gateway") _gatewayThumbprints[node] = string.Join(':', certificate.GetCertHashString().Chunk(2).Select(c => new string(c)));
         }
     }
-    private PackageNode Node(string node, int port) { using var c = new X509Certificate2(CertPath("server-" + node, ".pfx"), CertificatePassword); return new(node, $"https://127.0.0.1:{port}/", c.GetCertHashString(HashAlgorithmName.SHA256)); }
-    private PackagePeer[] Peers() => new[] { "node-a", "node-b" }.SelectMany(n => new[] { "Peer", "Gateway", "Collector" }.Select(r => { using var c = new X509Certificate2(CertPath(r.ToLowerInvariant() + "-" + n, ".pfx"), CertificatePassword); return new PackagePeer(c.GetCertHashString(HashAlgorithmName.SHA256), n, Guid.NewGuid(), r); })).ToArray();
+    private PackageNode Node(string node, int port) { using var c = X509CertificateLoader.LoadPkcs12FromFile(CertPath("server-" + node, ".pfx"), CertificatePassword); return new(node, $"https://127.0.0.1:{port}/", c.GetCertHashString(HashAlgorithmName.SHA256)); }
+    private PackagePeer[] Peers() => new[] { "node-a", "node-b" }.SelectMany(n => new[] { "Peer", "Gateway", "Collector" }.Select(r => { using var c = X509CertificateLoader.LoadPkcs12FromFile(CertPath(r.ToLowerInvariant() + "-" + n, ".pfx"), CertificatePassword); return new PackagePeer(c.GetCertHashString(HashAlgorithmName.SHA256), n, Guid.NewGuid(), r); })).ToArray();
     private PackageFileOptions Options(string n, int port, PackageNode[] nodes, PackagePeer[] peers, int uploadIdleSeconds)
     {
         var log = Path.Combine(DirectoryPath, n, "download-logs"); Directory.CreateDirectory(log);
@@ -136,7 +136,7 @@ internal sealed class PackageProcess : IAsyncDisposable
     internal static async Task<PackageProcess> StartAsync(PackageHostFixture f, PackageFileOptions options)
     {
         var configs = new List<string> { await OutboxFixture.PrivateJsonAsync(new { writerConnectionString = f.Personnel.Database.WriterConnection, readerConnectionString = f.Personnel.Database.ReaderConnection }), await OutboxFixture.PrivateJsonAsync(f.Messaging), await OutboxFixture.PrivateJsonAsync(f.Site), await OutboxFixture.PrivateJsonAsync(options) };
-        var info = new ProcessStartInfo(RepositoryTools.Dotnet) { WorkingDirectory = OutboxFixture.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false }; info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net8.0/Svm.Worker.dll"));
+        var info = new ProcessStartInfo(RepositoryTools.Dotnet) { WorkingDirectory = OutboxFixture.Root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false }; info.ArgumentList.Add(Path.Combine(OutboxFixture.Root, "src/hosts/Svm.Worker/bin/Debug/net10.0/Svm.Worker.dll"));
         info.Environment.Remove("SVM_GITLAB_CONFIG_FILE"); if (f.GitLab is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.GitLab)); info.Environment["SVM_GITLAB_CONFIG_FILE"] = configs[^1]; }
         info.Environment.Remove("SVM_TASK_CONFIG_FILE"); if(f.Tasks is not null) { configs.Add(await OutboxFixture.PrivateJsonAsync(f.Tasks)); info.Environment["SVM_TASK_CONFIG_FILE"]=configs[^1]; }
         foreach (var (name, i) in new[] { ("SVM_PERSISTENCE_CONFIG_FILE", 0), ("SVM_MESSAGING_CONFIG_FILE", 1), ("SVM_SITE_CONFIG_FILE", 2), ("SVM_PACKAGE_CONFIG_FILE", 3) }) info.Environment[name] = configs[i]; info.Environment["Logging__LogLevel__Default"] = "Information"; info.Environment["Logging__LogLevel__MassTransit"] = "Warning";

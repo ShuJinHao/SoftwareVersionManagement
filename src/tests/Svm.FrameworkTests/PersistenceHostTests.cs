@@ -35,7 +35,7 @@ public sealed class PersistenceHostTests
             {
                 WorkingDirectory = root.FullName, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
             };
-            info.ArgumentList.Add(Path.Combine(root.FullName, "src/hosts", hostName, "bin/Debug/net8.0", hostName + ".dll"));
+            info.ArgumentList.Add(Path.Combine(root.FullName, "src/hosts", hostName, "bin/Debug/net10.0", hostName + ".dll"));
             info.Environment["SVM_PERSISTENCE_CONFIG_FILE"] = configPath;
             if (messaging)
             {

@@ -15,8 +15,10 @@ internal sealed class ReleaseRepository(SvmDbContext context, IUnitOfWork unit) 
         if (protect) Require();
         var local = context.Set<SoftwareRelease>().Local.SingleOrDefault(x => x.Id.Value == id);
         if (local is not null) return local;
-        var query = context.Set<SoftwareRelease>().FromSqlRaw("SELECT * FROM rel.releases WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<SoftwareRelease>().FromSqlRaw("SELECT * FROM rel.releases WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<SoftwareRelease>().FromSqlRaw("SELECT * FROM rel.releases WHERE \"Id\"={0}", id).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public Task<SoftwareRelease?> LatestAsync(Guid softwareId, CancellationToken token)
     { Require(); return context.Set<SoftwareRelease>().AsNoTracking().Where(x => x.SoftwareId == softwareId).OrderByDescending(x => x.Major).ThenByDescending(x => x.Minor).ThenByDescending(x => x.Patch).FirstOrDefaultAsync(token); }
@@ -28,8 +30,10 @@ internal sealed class PackageRepository(SvmDbContext context, IUnitOfWork unit) 
     public async Task<IReadOnlyList<PackageWork>> WorksAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();
-        var query = context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"Id\"" + (protect ? " FOR UPDATE" : ""), id);
-        var rows = await (protect ? query.AsTracking() : query.AsNoTracking()).ToListAsync(token);
+        var query = protect
+            ? context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"Id\" FOR UPDATE", id).AsTracking()
+            : context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"Id\"", id).AsNoTracking();
+        var rows = await query.ToListAsync(token);
         return context.Set<PackageWork>().Local.Where(x => x.PackageId == id).Concat(rows).DistinctBy(x => x.Id).ToArray();
     }
     public Task<PackageCleanup?> CleanupAsync(Guid id, CancellationToken token) => context.Set<PackageCleanup>().AsNoTracking().SingleOrDefaultAsync(x => x.PackageId == id, token);
@@ -47,27 +51,35 @@ internal sealed class PackageRepository(SvmDbContext context, IUnitOfWork unit) 
     public async Task<PackageAsset?> GetAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require(); var local = context.Set<PackageAsset>().Local.SingleOrDefault(x => x.Id.Value == id); if (local is not null) return local;
-        var q = context.Set<PackageAsset>().FromSqlRaw("SELECT * FROM pkg.packages WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token);
+        var q = protect
+            ? context.Set<PackageAsset>().FromSqlRaw("SELECT * FROM pkg.packages WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<PackageAsset>().FromSqlRaw("SELECT * FROM pkg.packages WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token);
     }
     public async Task<PackageWork?> WorkAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require(); var local = context.Set<PackageWork>().Local.SingleOrDefault(x => x.Id.Value == id); if (local is not null) return local;
-        var q = context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token);
+        var q = protect
+            ? context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token);
     }
     public async Task<PackageWork?> UploadAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();
-        var q = context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"CreatedAt\" DESC,\"Id\" DESC" + (protect ? " FOR UPDATE" : ""), id);
-        var rows = await (protect ? q.AsTracking() : q.AsNoTracking()).ToListAsync(token);
+        var q = protect
+            ? context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"CreatedAt\" DESC,\"Id\" DESC FOR UPDATE", id).AsTracking()
+            : context.Set<PackageWork>().FromSqlRaw("SELECT * FROM pkg.works WHERE \"PackageId\"={0} ORDER BY \"CreatedAt\" DESC,\"Id\" DESC", id).AsNoTracking();
+        var rows = await q.ToListAsync(token);
         return context.Set<PackageWork>().Local.Where(x => x.PackageId == id).Concat(rows).DistinctBy(x => x.Id).OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id.Value).FirstOrDefault();
     }
     public async Task<IReadOnlyList<PackageReplica>> ReplicasAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Require();
-        var q = context.Set<PackageReplica>().FromSqlRaw("SELECT * FROM pkg.replicas WHERE \"PackageId\"={0} ORDER BY \"NodeId\"" + (protect ? " FOR UPDATE" : ""), id);
-        var rows = await (protect ? q.AsTracking() : q.AsNoTracking()).ToListAsync(token);
+        var q = protect
+            ? context.Set<PackageReplica>().FromSqlRaw("SELECT * FROM pkg.replicas WHERE \"PackageId\"={0} ORDER BY \"NodeId\" FOR UPDATE", id).AsTracking()
+            : context.Set<PackageReplica>().FromSqlRaw("SELECT * FROM pkg.replicas WHERE \"PackageId\"={0} ORDER BY \"NodeId\"", id).AsNoTracking();
+        var rows = await q.ToListAsync(token);
         return context.Set<PackageReplica>().Local.Where(x => x.PackageId == id).Concat(rows).DistinctBy(x => x.Id).ToArray();
     }
     public async Task<IReadOnlyList<Guid>> PendingAsync(DateTimeOffset now, int take, CancellationToken token) =>
@@ -81,8 +93,10 @@ internal sealed class PackageRepository(SvmDbContext context, IUnitOfWork unit) 
     public async Task<PackageDownload?> DownloadAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) { Require(); await context.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({id.ToString()}, 71006))", token); }
-        var q = context.Set<PackageDownload>().FromSqlRaw("SELECT * FROM pkg.download_sessions WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token);
+        var q = protect
+            ? context.Set<PackageDownload>().FromSqlRaw("SELECT * FROM pkg.download_sessions WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<PackageDownload>().FromSqlRaw("SELECT * FROM pkg.download_sessions WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token);
     }
     public Task<bool> HasDispatchAsync(Guid workId, long dispatch, Guid eventId, CancellationToken token) =>
         context.Set<PackageDispatch>().AsNoTracking().AnyAsync(x => x.Id == eventId && x.WorkId == workId && x.Sequence == dispatch, token);

@@ -41,7 +41,7 @@ async function main() {
   const head=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
   if(execFileSync('git',['status','--porcelain'],{cwd:root,encoding:'utf8'}).trim())throw Error('Candidate requires a clean workspace.');
   const manifest=JSON.parse(await readFile(join(release,'release.json'),'utf8'));
-  if(manifest.dirty||manifest.commit!==head||manifest.runtimeMinimum!=='8.0.31'||manifest.runtimeRollForward!=='LatestPatch')throw Error('Candidate requires the current clean complete Release.');
+  if(manifest.dirty||manifest.commit!==head||manifest.runtimeMinimum!=='10.0.15'||manifest.runtimeRollForward!=='LatestPatch')throw Error('Candidate requires the current clean complete Release.');
   const actual=await publicInventory(release);
   if(actual.length!==manifest.files.length+1)throw Error('Unexpected release content.');
   for(const file of manifest.files)if(!actual.some(x=>x.path===file.path&&x.size===file.size&&x.sha256===file.sha256))throw Error('Release checksum mismatch.');

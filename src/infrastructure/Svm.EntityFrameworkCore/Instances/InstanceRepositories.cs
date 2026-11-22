@@ -9,16 +9,15 @@ namespace Svm.EntityFrameworkCore.Instances;
 
 internal sealed class InstanceAccessRepository(SvmDbContext context,IUnitOfWork unitOfWork) : IInstanceAccessRepository
 {
-    private IQueryable<T> Query<T>(string table,string field,Guid id,bool protect) where T:class
-    {
-        if(protect) RequireWrite();
-        var q=context.Set<T>().FromSqlRaw($"SELECT * FROM iam.{table} WHERE \"{field}\"={{0}}"+(protect?" FOR UPDATE":""),id);
-        return protect?q.AsTracking():q.AsNoTracking();
-    }
-    public Task<MachineSubject?> SubjectAsync(Guid id,bool protect,CancellationToken token) => Query<MachineSubject>("instance_subjects","Id",id,protect).SingleOrDefaultAsync(token);
-    public Task<InstanceCredential?> CredentialAsync(Guid id,bool protect,CancellationToken token) => Query<InstanceCredential>("instance_credentials","Id",id,protect).SingleOrDefaultAsync(token);
-    public Task<EnrollmentPermission?> EnrollmentAsync(Guid id,bool protect,CancellationToken token) => Query<EnrollmentPermission>("enrollment_grants","Id",id,protect).SingleOrDefaultAsync(token);
-    public Task<RecoveryPermission?> RecoveryAsync(Guid id,bool protect,CancellationToken token) => Query<RecoveryPermission>("recovery_grants","Id",id,protect).SingleOrDefaultAsync(token);
+    private IQueryable<T> Track<T>(IQueryable<T> query,bool protect) where T:class => protect?query.AsTracking():query.AsNoTracking();
+    public Task<MachineSubject?> SubjectAsync(Guid id,bool protect,CancellationToken token)
+    { if(protect) RequireWrite(); return Track(protect?context.Set<MachineSubject>().FromSqlRaw("SELECT * FROM iam.instance_subjects WHERE \"Id\"={0} FOR UPDATE",id):context.Set<MachineSubject>().FromSqlRaw("SELECT * FROM iam.instance_subjects WHERE \"Id\"={0}",id),protect).SingleOrDefaultAsync(token); }
+    public Task<InstanceCredential?> CredentialAsync(Guid id,bool protect,CancellationToken token)
+    { if(protect) RequireWrite(); return Track(protect?context.Set<InstanceCredential>().FromSqlRaw("SELECT * FROM iam.instance_credentials WHERE \"Id\"={0} FOR UPDATE",id):context.Set<InstanceCredential>().FromSqlRaw("SELECT * FROM iam.instance_credentials WHERE \"Id\"={0}",id),protect).SingleOrDefaultAsync(token); }
+    public Task<EnrollmentPermission?> EnrollmentAsync(Guid id,bool protect,CancellationToken token)
+    { if(protect) RequireWrite(); return Track(protect?context.Set<EnrollmentPermission>().FromSqlRaw("SELECT * FROM iam.enrollment_grants WHERE \"Id\"={0} FOR UPDATE",id):context.Set<EnrollmentPermission>().FromSqlRaw("SELECT * FROM iam.enrollment_grants WHERE \"Id\"={0}",id),protect).SingleOrDefaultAsync(token); }
+    public Task<RecoveryPermission?> RecoveryAsync(Guid id,bool protect,CancellationToken token)
+    { if(protect) RequireWrite(); return Track(protect?context.Set<RecoveryPermission>().FromSqlRaw("SELECT * FROM iam.recovery_grants WHERE \"Id\"={0} FOR UPDATE",id):context.Set<RecoveryPermission>().FromSqlRaw("SELECT * FROM iam.recovery_grants WHERE \"Id\"={0}",id),protect).SingleOrDefaultAsync(token); }
     public async Task<InstanceRegistration?> RegistrationAsync(Guid softwareId,Guid installationKey,Guid grantId,Guid key,bool protect,CancellationToken token)
     {
         if(protect)
@@ -44,13 +43,15 @@ internal sealed class ManagedInstanceRepository(SvmDbContext context,IUnitOfWork
         context.Set<InstallationEvidence>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token);
     public async Task<ManagedInstance?> GetAsync(Guid id,bool protect,CancellationToken token)
     {
-        if(protect) RequireWrite(); var q=context.Set<ManagedInstance>().FromSqlRaw("SELECT * FROM ins.instances WHERE \"Id\"={0}"+(protect?" FOR UPDATE":""),id);
-        return await (protect?q.AsTracking():q.AsNoTracking()).SingleOrDefaultAsync(token);
+        if(protect) RequireWrite();
+        var q=protect?context.Set<ManagedInstance>().FromSqlRaw("SELECT * FROM ins.instances WHERE \"Id\"={0} FOR UPDATE",id).AsTracking():context.Set<ManagedInstance>().FromSqlRaw("SELECT * FROM ins.instances WHERE \"Id\"={0}",id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token);
     }
     public async Task<InstanceSnapshot> SnapshotAsync(Guid id,bool protect,CancellationToken token)
     {
-        if(protect) RequireWrite(); var q=context.Set<InstanceSnapshot>().FromSqlRaw("SELECT * FROM ins.instance_snapshots WHERE \"InstanceId\"={0}"+(protect?" FOR UPDATE":""),id);
-        return await (protect?q.AsTracking():q.AsNoTracking()).SingleOrDefaultAsync(token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
+        if(protect) RequireWrite();
+        var q=protect?context.Set<InstanceSnapshot>().FromSqlRaw("SELECT * FROM ins.instance_snapshots WHERE \"InstanceId\"={0} FOR UPDATE",id).AsTracking():context.Set<InstanceSnapshot>().FromSqlRaw("SELECT * FROM ins.instance_snapshots WHERE \"InstanceId\"={0}",id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token) ?? throw new RequestRejectedException(RequestFailure.ResourceNotFound);
     }
     public Task<ReportStreamReceipt?> StreamReceiptAsync(Guid id,CancellationToken token) => context.Set<ReportStreamReceipt>().AsNoTracking().SingleOrDefaultAsync(x=>x.OperationId==id,token);
     public void Add(ManagedInstance i,InstanceSnapshot s) { RequireWrite(); context.Add(i); context.Add(s); }

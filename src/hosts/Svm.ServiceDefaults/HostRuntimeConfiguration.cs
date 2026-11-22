@@ -37,7 +37,7 @@ public sealed record HostRuntimeConfiguration(string? PublicCertificatePath = nu
     {
         Validate();
         var options = new ForwardedHeadersOptions { ForwardLimit = 1, ForwardedHeaders = ForwardedHeaders.XForwardedFor };
-        options.KnownNetworks.Clear(); options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear(); options.KnownProxies.Clear();
         foreach (var address in KnownProxies ?? []) options.KnownProxies.Add(IPAddress.Parse(address));
         // An empty list disables forwarding; it never means trust every peer.
         if (options.KnownProxies.Count == 0) options.ForwardedHeaders = ForwardedHeaders.None;

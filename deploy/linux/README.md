@@ -7,11 +7,11 @@
 
 ## 开发与正式构建
 
-仓库使用 .NET 8 / C# 12。普通开发允许稳定 SDK 8.0.400 及以上的同 8.0 版本，VS 2022 建议 17.11 或以上的配套版本。VS 需安装能由 IDE 发现的 .NET 8 SDK/工作负载；仓库私有 ZIP 安装不会自动注册为系统 SDK。
+仓库使用 .NET 10 / C# 14。普通开发允许稳定 SDK 10.0.400 及以上的同 10.0 版本，Visual Studio 建议 2026（18.x）或兼容的配套版本。VS 需安装能由 IDE 发现的 .NET 10 SDK/工作负载；仓库私有 ZIP 安装不会自动注册为系统 SDK。
 
-正式发布与开发共用上述 SDK 范围，8.0.425 仅为可选复现环境；Node 24.21.0、npm 11.19.0 保持固定。运行策略为 8.0.31 下限、LatestPatch，只允许同 8.0 补丁滚动。服务器运行已发布制品，无需 SDK 或 Node。
+正式发布与开发共用上述 SDK 范围，10.0.404 仅为可选复现环境；Node 24.21.0、npm 11.19.0 保持固定。运行策略为 10.0.15 下限、LatestPatch，只允许同 10.0 补丁滚动。服务器运行已发布制品，无需 SDK 或 Node。
 
-公司已经安装兼容 SDK 时，先执行 `eng/bootstrap --node-only` 仅准备 Node/npm，再执行下面的还原、构建与发布命令。`eng/bootstrap` 和 `eng/bootstrap --sdk 8.0.400` 则显式准备可选的仓库 SDK 缓存；不会修改全局 PATH 或替换公司安装。
+公司已经安装兼容 SDK 时，先执行 `eng/bootstrap --node-only` 仅准备 Node/npm，再执行下面的还原、构建与发布命令。`eng/bootstrap` 和 `eng/bootstrap --sdk 10.0.400` 则显式准备可选的仓库 SDK 缓存；不会修改全局 PATH 或替换公司安装。
 
 从仓库根运行：
 
@@ -33,13 +33,13 @@ Windows 原生 PowerShell 使用 eng/bootstrap.ps1、eng/dotnet.ps1、eng/publis
 兼容 SDK：
 
 ~~~sh
-eng/bootstrap --sdk 8.0.400
-SVM_SDK_VERSION=8.0.400 eng/dotnet restore SoftwareVersionManagement.sln --locked-mode
-SVM_SDK_VERSION=8.0.400 eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
-SVM_SDK_VERSION=8.0.400 eng/publish --output artifacts/releases/sdk400-release
+eng/bootstrap --sdk 10.0.400
+SVM_SDK_VERSION=10.0.400 eng/dotnet restore SoftwareVersionManagement.sln --locked-mode
+SVM_SDK_VERSION=10.0.400 eng/dotnet build SoftwareVersionManagement.sln --no-restore --disable-build-servers -m:1
+SVM_SDK_VERSION=10.0.400 eng/publish --output artifacts/releases/sdk400-release
 ~~~
 
-Windows 用 $env:SVM_SDK_VERSION='8.0.400' 设置当前进程环境。SDK 选择顺序为 SVM_DOTNET 的显式绝对路径、SVM_SDK_VERSION 对应的已核验仓库 SDK、PATH 中兼容的系统 SDK、已核验仓库缓存。显式选择不可用时直接失败，不静默替换；开发与正式发布使用相同规则。不支持的 SDK 有明确报错，不能关闭 Analyzer、锁定还原或审计门禁。
+Windows 用 $env:SVM_SDK_VERSION='10.0.400' 设置当前进程环境。SDK 选择顺序为 SVM_DOTNET 的显式绝对路径、SVM_SDK_VERSION 对应的已核验仓库 SDK、PATH 中兼容的系统 SDK、已核验仓库缓存。显式选择不可用时直接失败，不静默替换；开发与正式发布使用相同规则。不支持的 SDK 有明确报错，不能关闭 Analyzer、锁定还原或审计门禁。
 
 发布入口按顺序构建前端、还原并发布 HttpApi/Worker/Migration，核验页面资源、许可、runtimeconfig，输出 release.json 的代码提交、dirty 状态、锁文件与 SHA-256。默认拒绝有未提交改动的工作区；仅显式 --allow-dirty 可生成标记 dirty=true 的开发验证制品，不可冒充干净发布。不要复制 Mac 的 bin/obj/node_modules 到 Linux。
 
@@ -149,7 +149,7 @@ eng/node deploy/linux/verify-hardware.mjs --deployment artifacts/linux-demo/my-d
 
 唯一固定测试门禁是完整 Architecture；其他选集先 eng/test --preview。tools 组也必须显式 --filter。构建和类型检查不冒充测试，文档/提交/纯合并不重跑代码测试。
 
-平台 CI 使用 Windows/Linux x64 与两个 SDK 的加载/构建矩阵；两个 Linux SDK 分别完成正式发布，仅 Linux 8.0.425 运行 Architecture、受影响选集和本批定向 Compose 浏览器流程。VS MSBuild 成功不替代 GUI 实机验收。PR 文档单独更新复用已有代码证据，GitLab 接入示例不承担平台自身 CI。
+平台 CI 使用 Windows/Linux x64 与两个 SDK 的加载/构建矩阵；两个 Linux SDK 分别完成正式发布，仅 Linux 10.0.404 运行 Architecture、受影响选集和本批定向 Compose 浏览器流程。VS MSBuild 成功不替代 GUI 实机验收。PR 文档单独更新复用已有代码证据，GitLab 接入示例不承担平台自身 CI。
 
 当前执行结果见框架设计与验收记录；任何尚未完成的目标环境验证须明确标注。私有诊断、受控日志、冷备份、隔离复核及人工开放见 [运维与恢复](OPERATIONS.md)；实际配置、SBOM/镜像材料及用户整体回归交接见 [统一候选版核对表](DELIVERY-CHECKLIST.md)。本机恢复流程不代替现场 RPO/RTO 和异机故障域验收。
 

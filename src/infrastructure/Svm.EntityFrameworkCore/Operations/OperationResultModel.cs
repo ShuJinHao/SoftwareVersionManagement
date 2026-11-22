@@ -17,7 +17,7 @@ internal static class OperationResultModel
                 b.IndexerProperty<short?>("Status"); b.IndexerProperty<Guid?>("ResourceId"); b.IndexerProperty<Guid?>("WorkId");
                 b.IndexerProperty<DateTimeOffset>("CreatedAt").HasDefaultValueSql("clock_timestamp()");
                 b.IndexerProperty<DateTimeOffset?>("CompletedAt");
-                b.HasKey("ActorKind", "SubjectId", "Operation", "IdempotencyKey");
+                b.HasKey("ActorKind", "SubjectId", "Operation", "IdempotencyKey").HasName("PK_operation_results");
                 b.HasIndex("OperationId").IsUnique().HasDatabaseName("IX_operation_results_OperationId");
                 b.ToTable("operation_results", schema);
             });

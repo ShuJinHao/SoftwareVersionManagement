@@ -54,13 +54,13 @@ try {
       const runtime = JSON.parse(readFileSync(env.SVM_PERSISTENCE_CONFIG_FILE, 'utf8'));
       // PostgreSQL can receive a new loopback port after restart. Keep account inputs unchanged.
       save(seedPath, JSON.stringify({ ...seed, writerConnectionString: runtime.writerConnectionString }, null, 2));
-      args = ['src/hosts/Svm.Migration/bin/Debug/net8.0/Svm.Migration.dll', 'seed', '--config', seedPath];
+      args = ['src/hosts/Svm.Migration/bin/Debug/net10.0/Svm.Migration.dll', 'seed', '--config', seedPath];
     }
     else {
       env.ASPNETCORE_URLS = 'https://127.0.0.1:7443';
       env.Kestrel__Certificates__Default__Path = join(directory, 'https.pfx');
       env.Kestrel__Certificates__Default__Password = readFileSync(join(directory, 'certificate-password'), 'utf8');
-      args = ['src/hosts/Svm.HttpApi/bin/Debug/net8.0/Svm.HttpApi.dll'];
+      args = ['src/hosts/Svm.HttpApi/bin/Debug/net10.0/Svm.HttpApi.dll'];
     }
     const process_ = spawn(dotnetCommand().command, args, { cwd: root, env, stdio: 'inherit' });
     process_.on('error', () => { console.error('Local personnel process could not start.'); process.exitCode = 1; });
