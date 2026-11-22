@@ -59,7 +59,7 @@ async function main() {
   }
   for (const host of hosts) {
     const runtime = JSON.parse(await readFile(join(output, host, host + '.runtimeconfig.json'), 'utf8')).runtimeOptions;
-    if (runtime.rollForward !== 'LatestPatch' || (runtime.frameworks ?? [runtime.framework]).some(f => f.version !== '8.0.31'))
+    if (runtime.rollForward !== 'LatestPatch' || (runtime.frameworks ?? [runtime.framework]).some(f => f.version !== '10.0.15'))
       throw new Error('Published runtime policy differs from the reviewed baseline.');
   }
   await walk(output);
@@ -77,7 +77,7 @@ async function main() {
   await writeFile(join(output, 'release.json'), JSON.stringify({ format: 1,
     commit,
     dirty,
-    sdk: dotnet.version, sdkSource: dotnet.source, runtimeMinimum: '8.0.31', runtimeRollForward: 'LatestPatch', target: 'portable-net8.0',
+    sdk: dotnet.version, sdkSource: dotnet.source, runtimeMinimum: '10.0.15', runtimeRollForward: 'LatestPatch', target: 'portable-net10.0',
     node: process.version, locks: locks.sort((a,b)=>a.path.localeCompare(b.path)), files: files.sort((a,b)=>a.path.localeCompare(b.path)) }, null, 2) + '\n');
   console.log('Complete Release published at ' + relative(root, output));
 }

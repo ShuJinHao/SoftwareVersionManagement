@@ -38,8 +38,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022]
-        sdk: ['8.0.400', '8.0.425']
+        os: [ubuntu-24.04, windows-2025]
+        sdk: ['10.0.400', '10.0.404']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     defaults:
@@ -58,12 +58,12 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          if [ "$SVM_SDK_VERSION" = 8.0.400 ]; then eng/bootstrap --sdk 8.0.400; else eng/bootstrap; fi
+          if [ "$SVM_SDK_VERSION" = 10.0.400 ]; then eng/bootstrap --sdk 10.0.400; else eng/bootstrap; fi
       - name: Bootstrap Windows tools
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          if ($env:SVM_SDK_VERSION -eq '8.0.400') { ./eng/bootstrap.ps1 --sdk 8.0.400 } else { ./eng/bootstrap.ps1 }
+          if ($env:SVM_SDK_VERSION -eq '10.0.400') { ./eng/bootstrap.ps1 --sdk 10.0.400 } else { ./eng/bootstrap.ps1 }
       - name: Locked restore and build on Linux
         if: runner.os == 'Linux'
         shell: bash
@@ -85,12 +85,12 @@ jobs:
           & $msbuild SoftwareVersionManagement.sln /t:Build /m:1 /nologo
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Preview architecture gate
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404'
         shell: bash
         run: |
           eng/test architecture --preview
       - name: Architecture gate
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404'
         shell: bash
         run: |
           eng/test architecture --results-directory artifacts/test-results/platform/architecture
@@ -102,7 +102,7 @@ jobs:
           mkdir -p artifacts/test-results/platform/release
           cp artifacts/releases/ci/release.json artifacts/test-results/platform/release/release.json
       - name: Preview and verify affected repository tools
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.tools == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.tools == 'true'
         shell: bash
         run: |
           selection='CI impact|publish rejects'
@@ -111,26 +111,26 @@ jobs:
           eng/test tools --filter "$selection" --preview
           eng/test tools --filter "$selection" --results-directory artifacts/test-results/platform/tools
       - name: Preview and verify candidate initialization
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.candidate == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.candidate == 'true'
         shell: bash
         run: |
           eng/test framework --filter 'FullyQualifiedName~CandidateDeploymentTests' --preview
           eng/test framework --filter 'FullyQualifiedName~CandidateDeploymentTests' --results-directory artifacts/test-results/platform/candidate-unit
       - name: Assemble and verify standalone offline candidate on native Linux x64
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.candidate == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.candidate == 'true'
         shell: bash
         run: |
           eng/node eng/candidate.mjs --release artifacts/releases/ci --output artifacts/candidates/ci
           eng/node deploy/linux/verify-candidate.mjs --bundle artifacts/candidates/ci --results artifacts/test-results/platform/candidate-linux
       - name: Preview and verify affected recovery safety
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.operations == 'true'
         shell: bash
         run: |
           selection='(FullyQualifiedName~OperationsRecoveryTests&FullyQualifiedName!~ReadOnlyPostgresDiagnostics)|FullyQualifiedName~HostDeploymentTests.PrivateReadinessChecksOnlyDependenciesHostedByThisRole'
           eng/test framework --filter "$selection" --preview
           eng/test framework --filter "$selection" --results-directory artifacts/test-results/platform/operations-unit
       - name: Targeted Linux cold backup and fenced recovery
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.operations == 'true'
         shell: bash
         run: |
           eng/node deploy/linux/prepare.mjs --demo --settings deploy/linux/demo-settings.json --release artifacts/releases/ci --output artifacts/linux-demo/operations-ci
@@ -144,14 +144,14 @@ jobs:
           eng/node deploy/linux/inventory.mjs --deployment artifacts/linux-demo/operations-ci --output artifacts/test-results/platform/operations-images
           eng/node deploy/linux/verify-operations.mjs --deployment artifacts/linux-demo/operations-ci --results artifacts/test-results/platform/operations-linux
       - name: Stop owned recovery resources
-        if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.operations == 'true'
+        if: always() && runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.operations == 'true'
         shell: bash
         run: |
           for directory in artifacts/linux-demo/operations-ci-restored artifacts/linux-demo/operations-ci; do
             if [ -f "$directory/svm.sh" ]; then "$directory/svm.sh" down; fi
           done
       - name: Preview and verify affected web interactions
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.web == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.web == 'true'
         shell: bash
         run: |
           files=(--file tests/request.test.ts --file tests/mutation.test.ts --file tests/personnel.test.ts --file tests/packages.test.ts --file tests/hardware-workspace.test.ts)
@@ -159,7 +159,7 @@ jobs:
           eng/test web "${files[@]}" --filter "$SVM_WEB_TEST_NAMES" --list
           eng/test web "${files[@]}" --filter "$SVM_WEB_TEST_NAMES" --results-directory artifacts/test-results/platform/web
       - name: Targeted Linux UI browser verification
-        if: runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
+        if: runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.browser == 'true'
         shell: bash
         run: |
           eng/node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('deploy/linux/demo-settings.json'));fs.mkdirSync('artifacts/linux-demo',{recursive:true});fs.writeFileSync('artifacts/linux-demo/ui-settings.json',JSON.stringify(s));"
@@ -177,7 +177,7 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/playwright-browsers" eng/node src/ui/svm-web/node_modules/playwright/cli.js install --with-deps chromium
           eng/node deploy/linux/verify-cleanup.mjs --deployment artifacts/linux-demo/ci --results artifacts/test-results/platform/linux-ui
       - name: Stop owned demo resources
-        if: always() && runner.os == 'Linux' && matrix.sdk == '8.0.425' && needs.changes.outputs.browser == 'true'
+        if: always() && runner.os == 'Linux' && matrix.sdk == '10.0.404' && needs.changes.outputs.browser == 'true'
         shell: bash
         run: |
           if [ -f artifacts/linux-demo/ci/svm.sh ]; then artifacts/linux-demo/ci/svm.sh down; fi
@@ -195,7 +195,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
-      SVM_SDK_VERSION: '8.0.425'
+      SVM_SDK_VERSION: '10.0.404'
       CI: 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

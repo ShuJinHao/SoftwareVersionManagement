@@ -1,14 +1,14 @@
 {
-  "dotnetSdk": "8.0.425",
-  "runtime": "8.0.31",
+  "dotnetSdk": "10.0.404",
+  "runtime": "10.0.15",
   "node": "24.21.0",
   "npm": "11.19.0",
   "platforms": {
     "darwin-arm64": {
       "dotnet": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.404/dotnet-sdk-10.0.404-osx-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "d42156be70b489236479a415536013a89a9fd6eaca57d5716a7017612fcc65bdb459068973d7cffd6fe710f2799af8bee95b2046ba032762d47df176f5c4a7d6"
+        "hash": "1c9a13f625d0c08f08ef5a53597bababe3d2473527e98db2199210940c69dd5fc599a39a4d7c30ebf297ca2334a81b2f64b9bf05ff99585de9af4a5d85215e96"
       },
       "node": {
         "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-arm64.tar.gz",
@@ -18,9 +18,9 @@
     },
     "darwin-x64": {
       "dotnet": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-osx-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.404/dotnet-sdk-10.0.404-osx-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "3b27552358905f1bde600dd0315a23051ef1cbd055a50eb64c675ee25a04e658c2ed735177125436c5bec38dfcd958fee338299611348299cd34a9bea8b8011f"
+        "hash": "88ca5dac50562b619f852b1b9845f85243f00434be52d2149db18ab4dc05f527f3fca8e1dac82e87b9eeb46a98de1ba4a6d612714caf2222f37b95aeebb611b6"
       },
       "node": {
         "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-darwin-x64.tar.gz",
@@ -30,9 +30,9 @@
     },
     "linux-arm64": {
       "dotnet": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.404/dotnet-sdk-10.0.404-linux-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "84a4d017d74d7aa842e981679d1b044e6be1f35b9b2b214021e30bc40871d016d29611cca373d8502ad5c890e3ad360ee698f9cf2d7a4d5a9fba102d88ba310f"
+        "hash": "3533a3869da219cac45c567aadac3d8e96cdf1c6a04fe1c1d5fdeefea5d45af8424488f0144730d11b4a751f7ad546fb11e4c2b2725cd8401efee726711f8f11"
       },
       "node": {
         "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz",
@@ -42,9 +42,9 @@
     },
     "linux-x64": {
       "dotnet": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-linux-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.404/dotnet-sdk-10.0.404-linux-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "934b8060a7190e5909ad1fd0785db542f487b3bbf6cdd14826b02095fdd0d0394298b1634085eff302928fccc33f7c1a7253e9b87df555fc36fce819bcd2e798"
+        "hash": "577d0eb17fec33d029104c5c63a1ab0accc3e28776274abef2218dbac5af18d2109b5406d26b31d76f5c245215e3ba0926a94c20246c672c41847c9e1eb1dc50"
       },
       "node": {
         "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.gz",
@@ -54,9 +54,9 @@
     },
     "win-x64": {
       "dotnet": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.425/dotnet-sdk-8.0.425-win-x64.zip",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.404/dotnet-sdk-10.0.404-win-x64.zip",
         "algorithm": "sha512",
-        "hash": "f0b6f15bf6f1a0507205c0cb102ab99e1dee875c4682c8ed94665be1d580186a06b21455e83b3a01a0ff7f4cd887b67420f2e2fe09ed985534a4cea488ae1af9"
+        "hash": "330ddd2665b43cd2e428216a0d8ea1ac7bb19b5434fdc530e62010dc3b52823a620bf95489d628e1ed6f5122401793ee4887cca4a019122361a1231497f632ee"
       },
       "node": {
         "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip",
@@ -68,91 +68,91 @@
   "compatibilityRuntimes": {
     "darwin-arm64": [
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-osx-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.15/dotnet-runtime-10.0.15-osx-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "1963d2ab3798efdc2b33034ef57d4252849a066a2313ce62a574e556d19e5e981afe13c9545eb6d59437849723e1c8350f10f8068bcfa6b7a2815a07263bb8b3"
+        "hash": "185c264d9e45f14da8c0b2b49a24d3a7aea471999a83aeed7a2bf164430292aabc15d9c22d2eb44b26576a4e331ca0f6b564805eb2f6588d5a290f026b86cce0"
       },
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-osx-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.15/aspnetcore-runtime-10.0.15-osx-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "8415103f319f4805b5b6f447b17887b947397eaefd82081206dbe4c6f5c36cc338a6c5945a3773c29280e725612bbec93484fd014b3330d32a556b7e4cbc4bf7"
+        "hash": "68b8d201be12e3d8f8bd9e3b0f59b50097fb3a0d35b2f599a269bb26ed75d5b7c3c00aecd0fc5979bc224559550b694abe047d4f962ccb58b50e985f07edfd72"
       }
     ],
     "darwin-x64": [
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-osx-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.15/dotnet-runtime-10.0.15-osx-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "d74c7433ee31dd2a5d6672efafeeb2a2d43fa84b19b1d41e412acadfe04a4cd4046cddd51c0e1027df0a23fa6065887e0123a5c6540de1e731748d21ca75bdb6"
+        "hash": "12b021dfda6728ab222bbe759b9b9b6ec55ff366ee7309a21ee62d385c9ad516118a6b1180582b072cfd60835e6a588d6d59c6da45ac9fdaaaffef8b658c292a"
       },
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-osx-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.15/aspnetcore-runtime-10.0.15-osx-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "49c4bc43e80960f0c334c08913db0f0d7591f30bde9a3b0fc376e7e58628bc56fbfd4e9473406b9bfe53d96705f473eac112c3aaf2dd85ad4d709925040b86bb"
+        "hash": "5981a3fe43285b0277458dbb33ec6c3cdb561f6de37ef7cc2d15a3b5c2d608625887124cc7f31bae412a37b3cc443fe876716d809f38983f9124d2b5e334c7c3"
       }
     ],
     "linux-arm64": [
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-linux-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.15/dotnet-runtime-10.0.15-linux-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "ddc66b65e9377e7f3805ba78a0ec9be857dfb96df866349df2bf963312933c663e5db98bd8443789dcf6457ca8f815404450946ef87562117d326c3a4423466c"
+        "hash": "e2e8b907d9eb6c239cccf5c1fe67fd9a72c56fddccedca9ba41c8a53ff034293b335fdd9f7ab504f09bf7b3f165e0d14e34fc9ea1f06cc0e86d0dfb06d274b6a"
       },
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-linux-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.15/aspnetcore-runtime-10.0.15-linux-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "a6871d002860d8cb920360c98f6fdb4fa8470d34139b83b900aed512c4127e7ed221d19d6e1d88bb3f51f3e5369e680f5e517e5c35189935812a8ad774f55c5a"
+        "hash": "1d82a6822871c0e750d2d3d3b9b27657d24a2083eb999c2f78b39b0cd10862178cb2c6d21f941579cd521baf5738a78d3378e5754c5895a93d7546135eb40ec6"
       }
     ],
     "linux-x64": [
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-linux-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.15/dotnet-runtime-10.0.15-linux-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "f336bdec58d54bf50d74a1b38efa82f7290d976bd2ed98b845ebcbac42cf0d8cef504684fc088d4b05f98737b996bf3302e52bd9c23005deae7c60780b2652fb"
+        "hash": "a90177d75bc891f71aa814dde3bcf76a356f5a506824669f1891754457954a3d13b72f3ca04c98fa0fe588514a5a781f8a87b17930ee802105c14f9edb28318a"
       },
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-linux-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.15/aspnetcore-runtime-10.0.15-linux-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "d870c948d54609939886725e29d8b9c235277e9d63b2d77adefcf38563b66932c480f1b980f1f183e2b2ac1c09fc066730ea080adf1148efdd654b1503e69ec0"
+        "hash": "704751c6d671b720935a18849e8f10cdb6938549e9cf25493050ebc838a95eb5cb1caa9936d2edae3b85c5975778ed926e9b736e3a2582d861411babba3229c3"
       }
     ],
     "win-x64": [
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/8.0.31/dotnet-runtime-8.0.31-win-x64.zip",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.15/dotnet-runtime-10.0.15-win-x64.zip",
         "algorithm": "sha512",
-        "hash": "9c55c58694676ee64b0eed2cd6d8cbf58b9aa8288420acc66841e15ca0099c75d4af0182d23a641c2342e5a151a325df4a12fa0bde2e47c0fb7e9a33e7b09896"
+        "hash": "06f0bedd59ae4ac722ada805a6d6bbf605bcdc790c71f59b7003878072902b5cde5dec8c40c0baa81192660d4748e9d79afdbdcb0c0ea9d6b821d0a044c4c6dd"
       },
       {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/8.0.31/aspnetcore-runtime-8.0.31-win-x64.zip",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/aspnetcore/Runtime/10.0.15/aspnetcore-runtime-10.0.15-win-x64.zip",
         "algorithm": "sha512",
-        "hash": "59a663650e4165bd73efdc3d91ca442b83112d4414030ba0b4e463eaed6a98af23ac7302c0c648072f185458bc07b14c7844ddc5a7557eeac2a014187f76f85e"
+        "hash": "8f246ab1e2b29eb2fbd6fa58585cc91f2c20c6dacb92aa2759cd49b90cc8901cf040669e8b47f41db22d9bc63efac5a133efed24787342a3bfcade21b87a51c3"
       }
     ]
   },
   "compatibilitySdks": {
-    "8.0.400": {
+    "10.0.400": {
       "darwin-arm64": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.400/dotnet-sdk-8.0.400-osx-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.400/dotnet-sdk-10.0.400-osx-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "29656a362ed6d74eec08d48aef930e5098c7456faa1bcaf178f9421f8423178838071b4ff81c0429155f1f834014cbdef8121eefe002a079443ff7a3193b4ee0"
+        "hash": "e440e9a58d4ff7741c8342ac3e086fa9ee2dadc25e01c0449a88317a74cfbd63625b8092c3b2a131ae14b16ab3401e9cc470e578e4c65a72a0b5786bd2308cde"
       },
       "darwin-x64": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.400/dotnet-sdk-8.0.400-osx-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.400/dotnet-sdk-10.0.400-osx-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "d7963a28de862605ff3c52f42155a3400aa37d7a2c01374f278bb18f0daa7a8206856cd9114bc2b94fcb8f9010ec02ab31e043e7f564038de4dd5811f943a331"
+        "hash": "3ec1cc5539afe17341145c1ce61a4342546a05de75053cccbef4169c76113146bb77f30857b5bb47f784690c081c543ea160728a3fa0d06af11aefdafebb0c7f"
       },
       "linux-arm64": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.400/dotnet-sdk-8.0.400-linux-arm64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.400/dotnet-sdk-10.0.400-linux-arm64.tar.gz",
         "algorithm": "sha512",
-        "hash": "d27b4ddd864478fc4655485cef0773411fb934c816fb3dcdafb18f670212c5389661a8255ca8a54562613815712f5ea23e5d8ad1cce4e00a3f8a82c9b4a6b127"
+        "hash": "a1b45da58e5591fff909a6126ac6bfc1ef9c12bc72c0625f7815e83a82be1a902317ee96926cbbf81324a45c6abf2ed8102a216d0507879cc166159af78d1b77"
       },
       "linux-x64": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.400/dotnet-sdk-8.0.400-linux-x64.tar.gz",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.400/dotnet-sdk-10.0.400-linux-x64.tar.gz",
         "algorithm": "sha512",
-        "hash": "8a4c637746177c4da6ceec63e23a1f499d61d050aa72bc599841550557ff7b1a15a034044c3987b230fdca4e5113de12b1676f5a2366e9946bd94aec1e51a42b"
+        "hash": "1033977dd837150e0814cf0c5d5b17ceb63925fda7ba2158b47258a4bd7c048cf82eac3bc1166f3146f53124a3f5fba09db1de1260d2ce96399860303b404b48"
       },
       "win-x64": {
-        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/8.0.400/dotnet-sdk-8.0.400-win-x64.zip",
+        "url": "https://builds.dotnet.microsoft.com/dotnet/Sdk/10.0.400/dotnet-sdk-10.0.400-win-x64.zip",
         "algorithm": "sha512",
-        "hash": "3b3b402f9402af4b80ba12d04787a083d1950c741fb64b06b3e215f6e5b3db2f86aee8014848c955ea17f9b699d302271a934ab2d5db1b35dfbb9d22405032dc"
+        "hash": "9b8b88590e4da131bfd0da7aa089d0fc04d5418d5f8607ec13d55dc5a17b4399afd54d496c12657fa05c6c6546dc5eab930f26ac6c50f2d3a7712c0fb378c366"
       }
     }
   }

@@ -21,7 +21,7 @@ internal static class ReleasePackageModel
         p.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<PackageAsset>(x)).ValueGeneratedNever(); p.Ignore(x => x.DomainEvents);
         p.Property(x => x.FileName).HasMaxLength(255); p.Property(x => x.ExpectedSha256).HasMaxLength(64); p.Property(x => x.Sha256).HasMaxLength(64); p.Property(x => x.State).HasMaxLength(32);
         p.HasIndex(x => x.ReleaseId).IsUnique(); p.HasIndex(x => x.UploadId).IsUnique(); p.HasIndex(x => new { x.State, x.Disabled });
-        var w = model.Entity<PackageWork>(); w.ToTable("works", "pkg"); w.HasKey(x => x.Id);
+        var w = model.Entity<PackageWork>(); w.ToTable("works", "pkg"); w.HasKey(x => x.Id).HasName("PK_works");
         w.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<PackageWork>(x)).ValueGeneratedNever(); w.Ignore(x => x.DomainEvents);
         w.Property(x => x.Kind).HasMaxLength(32); w.Property(x => x.State).HasMaxLength(32); w.Property(x => x.Stage).HasMaxLength(32);
         w.Property(x => x.SourceNode).HasMaxLength(64); w.Property(x => x.LeaseNode).HasMaxLength(64); w.Property(x => x.LastErrorCode).HasMaxLength(64);
@@ -31,7 +31,7 @@ internal static class ReleasePackageModel
         var d = model.Entity<PackageDownload>(); d.ToTable("download_sessions", "pkg"); d.HasKey(x => x.Id); d.Property(x => x.Id).ValueGeneratedNever();
         d.Property(x => x.NodeId).HasMaxLength(64); d.Property(x => x.ActorKind).HasMaxLength(32); d.Property(x => x.EmployeeNo).HasMaxLength(64); d.Property(x => x.State).HasMaxLength(32);
         d.HasIndex(x => new { x.PackageId, x.State }); d.HasIndex(x => new { x.NodeId, x.WorkerGeneration, x.State });
-        var dispatch = model.Entity<PackageDispatch>(); dispatch.ToTable("dispatches", "pkg"); dispatch.HasKey(x => x.Id); dispatch.Property(x => x.Id).ValueGeneratedNever();
+        var dispatch = model.Entity<PackageDispatch>(); dispatch.ToTable("dispatches", "pkg"); dispatch.HasKey(x => x.Id).HasName("PK_dispatches"); dispatch.Property(x => x.Id).ValueGeneratedNever();
         dispatch.HasIndex(x => new { x.WorkId, x.Sequence }).IsUnique();
         var attempt = model.Entity<PackageReceiveAttempt>(); attempt.ToTable("receive_attempts", "pkg"); attempt.HasKey(x => x.Id); attempt.Property(x => x.Id).ValueGeneratedNever();
         attempt.Property(x => x.NodeId).HasMaxLength(64); attempt.HasIndex(x => new { x.UploadId, x.Generation }).IsUnique();

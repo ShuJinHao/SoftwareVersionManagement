@@ -35,7 +35,7 @@ public sealed record PackageFileOptions(string NodeId, string RootPath, Guid Ser
             using var server = LoadCertificate(ServerCertificatePath, ServerCertificatePassword);
             using var client = LoadCertificate(ClientCertificatePath, ClientCertificatePassword);
             using var collector = LoadCertificate(CollectorCertificatePath, CollectorCertificatePassword);
-            using var trust = new X509Certificate2(TrustCertificatePath);
+            using var trust = X509CertificateLoader.LoadCertificateFromFile(TrustCertificatePath);
             if (!server.HasPrivateKey || !client.HasPrivateKey || !collector.HasPrivateKey || trust.HasPrivateKey ||
                 server.NotAfter.ToUniversalTime() <= DateTime.UtcNow || client.NotAfter.ToUniversalTime() <= DateTime.UtcNow || collector.NotAfter.ToUniversalTime() <= DateTime.UtcNow ||
                 !Match(server, Nodes.Single(n => n.NodeId == NodeId).ServerCertificateSha256) ||
@@ -96,13 +96,13 @@ public sealed record PackageFileOptions(string NodeId, string RootPath, Guid Ser
     }
     private static bool Absolute(string x) => !string.IsNullOrWhiteSpace(x) && Path.IsPathFullyQualified(x) && !x.Any(char.IsControl);
     private static bool Fingerprint(string x) => x is { Length: 64 } && x.All(char.IsAsciiHexDigit);
-    public static X509Certificate2 LoadCertificate(string path, string? password) => new(path, password,
+    public static X509Certificate2 LoadCertificate(string path, string? password) => X509CertificateLoader.LoadPkcs12FromFile(path, password,
         OperatingSystem.IsMacOS() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
     public static bool Match(X509Certificate2 certificate, string sha256) =>
         string.Equals(certificate.GetCertHashString(System.Security.Cryptography.HashAlgorithmName.SHA256), sha256, StringComparison.OrdinalIgnoreCase);
     public bool Trust(X509Certificate2 certificate)
     {
-        using var root = new X509Certificate2(TrustCertificatePath);
+        using var root = X509CertificateLoader.LoadCertificateFromFile(TrustCertificatePath);
         using var chain = new X509Chain(); chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
         chain.ChainPolicy.CustomTrustStore.Add(root); chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
         chain.ChainPolicy.DisableCertificateDownloads = true;

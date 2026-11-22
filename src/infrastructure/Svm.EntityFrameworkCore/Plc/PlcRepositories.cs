@@ -11,8 +11,10 @@ internal sealed class PlcCredentialRepository(SvmDbContext db, IUnitOfWork unit)
     public async Task<PlcUploadCredential?> GetAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) Write();
-        var q = db.Set<PlcUploadCredential>().FromSqlRaw("SELECT * FROM iam.plc_upload_credentials WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token);
+        var q = protect
+            ? db.Set<PlcUploadCredential>().FromSqlRaw("SELECT * FROM iam.plc_upload_credentials WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : db.Set<PlcUploadCredential>().FromSqlRaw("SELECT * FROM iam.plc_upload_credentials WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token);
     }
     public void Add(PlcUploadCredential x) { Write(); db.Add(x); }
     private void Write() { if (unit.CurrentOperationId is null || db.Database.CurrentTransaction is null) throw new PersistenceException(PersistenceFailure.InvalidTransactionNesting); }
@@ -28,8 +30,10 @@ internal sealed class PlcUsageRepository(SvmDbContext db, IUnitOfWork unit) : IP
     {
         if (protect) Write();
         // The caller already holds the hardware/association lock, including when this row does not yet exist.
-        var q = db.Set<PlcUsageState>().FromSqlRaw("SELECT * FROM ins.plc_usage_state WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? q.AsTracking() : q.AsNoTracking()).SingleOrDefaultAsync(token);
+        var q = protect
+            ? db.Set<PlcUsageState>().FromSqlRaw("SELECT * FROM ins.plc_usage_state WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : db.Set<PlcUsageState>().FromSqlRaw("SELECT * FROM ins.plc_usage_state WHERE \"Id\"={0}", id).AsNoTracking();
+        return await q.SingleOrDefaultAsync(token);
     }
     public Task<PlcUsageRecord?> GetAsync(Guid id, CancellationToken token) => db.Set<PlcUsageRecord>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, token);
     public Task<bool> IsCorrectedAsync(Guid id, CancellationToken token) => db.Set<PlcUsageRecord>().AnyAsync(x => x.CorrectsId == id, token);

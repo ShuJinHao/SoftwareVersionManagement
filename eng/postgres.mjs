@@ -191,7 +191,7 @@ try {
     if (command === 'migrate') {
       if (!state || !checkedContainer()?.State.Running) fail('Run eng/postgres up first.');
       if (arguments_.length !== 1 || !['status', 'script', 'apply'].includes(arguments_[0])) fail('Migration requires exactly status, script or apply.');
-      await child(['src/hosts/Svm.Migration/bin/Debug/net8.0/Svm.Migration.dll', arguments_[0], '--config', join(directory, 'migration.json')]);
+      await child(['src/hosts/Svm.Migration/bin/Debug/net10.0/Svm.Migration.dll', arguments_[0], '--config', join(directory, 'migration.json')]);
     }
   }
 } catch (error) {

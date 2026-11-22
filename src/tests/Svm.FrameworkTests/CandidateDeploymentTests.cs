@@ -82,9 +82,9 @@ public sealed class CandidateDeploymentTests
         Assert.True(seed["temporaryPassword"]!.GetValue<string>().Length >= 32);
         Assert.DoesNotContain("CREATE TABLE", await File.ReadAllTextAsync(Path.Combine(fixture.Output, "postgres/init.sql")), StringComparison.Ordinal);
         var package = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(fixture.Output, "runtime/node-a/package.json")))!;
-        using var cert = new X509Certificate2(Path.Combine(fixture.Output, "runtime/node-a/certs/server-node-a.pfx"), package["serverCertificatePassword"]!.GetValue<string>(), OperatingSystem.IsMacOS() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
+        using var cert = X509CertificateLoader.LoadPkcs12FromFile(Path.Combine(fixture.Output, "runtime/node-a/certs/server-node-a.pfx"), package["serverCertificatePassword"]!.GetValue<string>(), OperatingSystem.IsMacOS() ? X509KeyStorageFlags.DefaultKeySet : X509KeyStorageFlags.EphemeralKeySet);
         Assert.True(cert.HasPrivateKey); Assert.Equal(package["nodes"]![0]!["serverCertificateSha256"]!.GetValue<string>(), cert.GetCertHashString(HashAlgorithmName.SHA256).ToLowerInvariant());
-        using var root = new X509Certificate2(Path.Combine(fixture.Output, "runtime/node-a/certs/root.pem"));
+        using var root = X509CertificateLoader.LoadCertificateFromFile(Path.Combine(fixture.Output, "runtime/node-a/certs/root.pem"));
         using var chain = new X509Chain(); chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust; chain.ChainPolicy.CustomTrustStore.Add(root); chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck; chain.ChainPolicy.DisableCertificateDownloads = true;
         Assert.True(chain.Build(cert));
         var nginx = await File.ReadAllTextAsync(Path.Combine(fixture.Output, "gateway/nginx.conf")); Assert.DoesNotContain("@@", nginx);

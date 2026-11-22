@@ -10,8 +10,10 @@ internal sealed class SoftwareCatalogRepository(SvmDbContext context, IUnitOfWor
     public async Task<SoftwareProduct?> GetAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<SoftwareProduct>().FromSqlRaw("SELECT * FROM rel.software WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<SoftwareProduct>().FromSqlRaw("SELECT * FROM rel.software WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<SoftwareProduct>().FromSqlRaw("SELECT * FROM rel.software WHERE \"Id\"={0}", id).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public async Task<bool> CodeExistsAsync(string code, CancellationToken token)
     {

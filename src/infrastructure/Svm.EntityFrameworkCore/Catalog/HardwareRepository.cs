@@ -10,20 +10,26 @@ internal sealed class HardwareRepository(SvmDbContext context, IUnitOfWork unit)
     public async Task<HardwareAsset?> HardwareAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<HardwareAsset>().FromSqlRaw("SELECT * FROM ins.hardware WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<HardwareAsset>().FromSqlRaw("SELECT * FROM ins.hardware WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<HardwareAsset>().FromSqlRaw("SELECT * FROM ins.hardware WHERE \"Id\"={0}", id).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public async Task<HardwareSoftwareBinding?> BindingAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"Id\"={0}", id).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public async Task<HardwareSoftwareBinding?> BindingAsync(Guid hardwareId, Guid softwareId, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"HardwareId\"={0} AND \"SoftwareId\"={1}" + (protect ? " FOR UPDATE" : ""), hardwareId, softwareId);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"HardwareId\"={0} AND \"SoftwareId\"={1} FOR UPDATE", hardwareId, softwareId).AsTracking()
+            : context.Set<HardwareSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.hardware_software_bindings WHERE \"HardwareId\"={0} AND \"SoftwareId\"={1}", hardwareId, softwareId).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public Task<bool> HasActivePlcBindingAsync(Guid hardwareId, CancellationToken token) =>
         context.Set<HardwareSoftwareBinding>().AnyAsync(x => x.HardwareId == new Svm.SharedKernel.Domain.StrongId<HardwareAsset>(hardwareId) && x.IsActive && x.HardwareType == "PLC", token);

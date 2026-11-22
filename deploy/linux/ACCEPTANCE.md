@@ -4,7 +4,7 @@
 
 ## 运行机条件
 
-- 原生 Linux x64，Docker Engine、Compose v2.24 及以上、Bash、标准 coreutils/tar；不需要 Git、.NET SDK、Node、npm、OpenSSL 或源码。镜像内已带 ASP.NET Core 8.0.31，应用保留 LatestPatch 策略。
+- 原生 Linux x64，Docker Engine、Compose v2.24 及以上、Bash、标准 coreutils/tar；不需要 Git、.NET SDK、Node、npm、OpenSSL 或源码。镜像内已带 ASP.NET Core 10.0.15，应用保留 LatestPatch 策略。
 - 新的专用数据目录、稳定非 root UID/GID、访问 DNS 或 IPv4、可用端口、不与已有网络重叠的专用 IPv4 子网。模板内端口、子网、容量与时段是填写样例，须逐项核对。
 - Docker 守护进程须在目标 Linux 本机；安装器拒绝 arm64，不自动模拟或借用 Docker Desktop context。不得因连接到了其他 Docker 主机而把本机路径当成远程挂载路径。
 - 磁盘应容纳镜像、发行包、两份包文件、数据库、日志和备份。生产容量按现场确定，本工具不凭空给生产容量或 RPO/RTO 下结论。

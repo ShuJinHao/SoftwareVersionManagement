@@ -113,14 +113,14 @@ internal static class TaskModel
         {
             b.ToTable("works", "tsk");
             b.Property(x => x.Id).HasConversion(x => x.Value, x => new StrongId<TaskWork>(x)); b.Ignore(x => x.DomainEvents);
-            b.HasKey("Id");
+            b.HasKey("Id").HasName("PK_works");
             b.Property(x => x.Id).ValueGeneratedNever();
             b.HasIndex("Accepted", "State", "NextScanAt", "LeaseUntil", "Id");
         });
         m.Entity<TaskDispatch>(b =>
         {
             b.ToTable("dispatches", "tsk");
-            b.HasKey("Id");
+            b.HasKey("Id").HasName("PK_dispatches");
             b.Property(x => x.Id).ValueGeneratedNever();
             b.Property(x => x.WorkId).HasConversion(x => x.Value, x => new StrongId<TaskWork>(x));
             b.HasOne<TaskWork>().WithMany().HasForeignKey("WorkId").OnDelete(DeleteBehavior.Restrict);

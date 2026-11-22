@@ -16,7 +16,7 @@ public sealed class PackagePeerClient : IDisposable
     public PackagePeerClient(PackageFileOptions options, bool collector = false)
     {
         _client = collector ? PackageFileOptions.LoadCertificate(options.CollectorCertificatePath, options.CollectorCertificatePassword) : PackageFileOptions.LoadCertificate(options.ClientCertificatePath, options.ClientCertificatePassword);
-        _root = new(options.TrustCertificatePath);
+        _root = X509CertificateLoader.LoadCertificateFromFile(options.TrustCertificatePath);
         var handler = new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, UseProxy = false, AutomaticDecompression = DecompressionMethods.None };
         handler.ClientCertificates.Add(_client);
         handler.ServerCertificateCustomValidationCallback = (request, cert, _, errors) =>

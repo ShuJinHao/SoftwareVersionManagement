@@ -15,26 +15,34 @@ internal sealed class SiteAssetRepository(SvmDbContext context, IUnitOfWork unit
             RequireWrite();
             await context.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ins.site_identity (\"Singleton\",\"SiteId\") VALUES (1,{siteId}) ON CONFLICT (\"Singleton\") DO NOTHING", token);
         }
-        var rows = await context.Set<SiteIdentity>().FromSqlRaw("SELECT * FROM ins.site_identity" + (write ? " FOR SHARE" : "")).AsNoTracking().ToListAsync(token);
+        var rows = await (write
+            ? context.Set<SiteIdentity>().FromSqlRaw("SELECT * FROM ins.site_identity FOR SHARE")
+            : context.Set<SiteIdentity>().FromSqlRaw("SELECT * FROM ins.site_identity")).AsNoTracking().ToListAsync(token);
         if (rows.Count > 1 || rows.Any(x => x.SiteId != siteId)) throw new RequestRejectedException(RequestFailure.ConfigurationInvalid);
     }
     public async Task<ProductionProcess?> ProcessAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<ProductionProcess>().FromSqlRaw("SELECT * FROM ins.processes WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<ProductionProcess>().FromSqlRaw("SELECT * FROM ins.processes WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<ProductionProcess>().FromSqlRaw("SELECT * FROM ins.processes WHERE \"Id\"={0}", id).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public async Task<ProductionDevice?> DeviceAsync(Guid id, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<ProductionDevice>().FromSqlRaw("SELECT * FROM ins.devices WHERE \"Id\"={0}" + (protect ? " FOR UPDATE" : ""), id);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<ProductionDevice>().FromSqlRaw("SELECT * FROM ins.devices WHERE \"Id\"={0} FOR UPDATE", id).AsTracking()
+            : context.Set<ProductionDevice>().FromSqlRaw("SELECT * FROM ins.devices WHERE \"Id\"={0}", id).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public async Task<DeviceSoftwareBinding?> BindingAsync(Guid deviceId, Guid softwareId, bool protect, CancellationToken token)
     {
         if (protect) RequireWrite();
-        var query = context.Set<DeviceSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.device_software_bindings WHERE \"DeviceId\"={0} AND \"SoftwareId\"={1}" + (protect ? " FOR UPDATE" : ""), deviceId, softwareId);
-        return await (protect ? query.AsTracking() : query.AsNoTracking()).SingleOrDefaultAsync(token);
+        var query = protect
+            ? context.Set<DeviceSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.device_software_bindings WHERE \"DeviceId\"={0} AND \"SoftwareId\"={1} FOR UPDATE", deviceId, softwareId).AsTracking()
+            : context.Set<DeviceSoftwareBinding>().FromSqlRaw("SELECT * FROM ins.device_software_bindings WHERE \"DeviceId\"={0} AND \"SoftwareId\"={1}", deviceId, softwareId).AsNoTracking();
+        return await query.SingleOrDefaultAsync(token);
     }
     public Task<DeviceSoftwareBinding?> BindingByIdAsync(Guid id, CancellationToken token) =>
         context.Set<DeviceSoftwareBinding>().FromSqlInterpolated($"SELECT * FROM ins.device_software_bindings WHERE \"Id\"={id}").AsNoTracking().SingleOrDefaultAsync(token);

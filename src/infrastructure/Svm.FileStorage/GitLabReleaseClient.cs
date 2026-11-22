@@ -21,7 +21,7 @@ public sealed class GitLabReleaseClient : IGitLabReleaseClient, IDisposable
         if (options.TrustCertificatePath is not null) handler.ServerCertificateCustomValidationCallback = (_, certificate, _, errors) =>
         {
             if (certificate is null || errors.HasFlag(SslPolicyErrors.RemoteCertificateNameMismatch) || errors.HasFlag(SslPolicyErrors.RemoteCertificateNotAvailable)) return false;
-            using var root = new X509Certificate2(options.TrustCertificatePath);
+            using var root = X509CertificateLoader.LoadCertificateFromFile(options.TrustCertificatePath);
             using var chain = new X509Chain(); chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust; chain.ChainPolicy.CustomTrustStore.Add(root);
             chain.ChainPolicy.DisableCertificateDownloads = true; chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
             chain.ChainPolicy.ApplicationPolicy.Add(new System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.1")); return chain.Build(certificate);

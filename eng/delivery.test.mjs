@@ -27,8 +27,8 @@ test('operations CI scope includes recovery and material changes without schedul
 });
 
 test('toolchain accepts supported SDKs and rejects older, preview and other major versions', () => {
-  for (const version of ['8.0.400','8.0.425','8.0.999']) assert.equal(supportedSdk(version), true);
-  for (const version of ['8.0.399','8.0.425-preview.1','9.0.100','10.0.100','invalid']) assert.equal(supportedSdk(version), false);
+  for (const version of ['10.0.400','10.0.404','10.0.999']) assert.equal(supportedSdk(version), true);
+  for (const version of ['10.0.399','10.0.404-preview.1','8.0.425','9.0.100','11.0.100','invalid']) assert.equal(supportedSdk(version), false);
 });
 function sdkResolver(variables, versions, repository = sdk => '/reviewed/' + sdk + '/dotnet') {
   const calls = [];
@@ -39,25 +39,25 @@ function sdkResolver(variables, versions, repository = sdk => '/reviewed/' + sdk
   return { calls, selected };
 }
 test('toolchain honors explicit executable before an explicit repository version and never falls back on invalid explicit input', () => {
-  const explicit = sdkResolver({ SVM_DOTNET: '/explicit/dotnet', SVM_SDK_VERSION: 'invalid' }, { '/explicit/dotnet': '8.0.400' });
+  const explicit = sdkResolver({ SVM_DOTNET: '/explicit/dotnet', SVM_SDK_VERSION: 'invalid' }, { '/explicit/dotnet': '10.0.400' });
   assert.equal(explicit.selected().source, 'SVM_DOTNET'); assert.deepEqual(explicit.calls, ['/explicit/dotnet']);
-  const invalid = sdkResolver({ SVM_DOTNET: '/missing/dotnet' }, { '/path/compatible/dotnet': '8.0.425' });
+  const invalid = sdkResolver({ SVM_DOTNET: '/missing/dotnet' }, { '/path/compatible/dotnet': '10.0.404' });
   assert.throws(invalid.selected, /SVM_DOTNET/); assert.deepEqual(invalid.calls, ['/missing/dotnet']);
   assert.throws(() => resolveDotnet({ SVM_DOTNET: '' }), /absolute/);
   assert.throws(() => resolveDotnet({ SVM_DOTNET: 'relative/dotnet' }), /absolute/);
 });
 test('toolchain requires the exact verified repository cache for an explicit SDK version', () => {
-  const explicit = sdkResolver({ SVM_SDK_VERSION: '8.0.400' }, { '/reviewed/8.0.400/dotnet': '8.0.400', '/path/compatible/dotnet': '8.0.425' });
-  assert.equal(explicit.selected().version, '8.0.400'); assert.deepEqual(explicit.calls, ['/reviewed/8.0.400/dotnet']);
-  const mismatch = sdkResolver({ SVM_SDK_VERSION: '8.0.400' }, { '/reviewed/8.0.400/dotnet': '8.0.425', '/path/compatible/dotnet': '8.0.425' });
-  assert.throws(mismatch.selected, /matching verified/); assert.deepEqual(mismatch.calls, ['/reviewed/8.0.400/dotnet']);
+  const explicit = sdkResolver({ SVM_SDK_VERSION: '10.0.400' }, { '/reviewed/10.0.400/dotnet': '10.0.400', '/path/compatible/dotnet': '10.0.404' });
+  assert.equal(explicit.selected().version, '10.0.400'); assert.deepEqual(explicit.calls, ['/reviewed/10.0.400/dotnet']);
+  const mismatch = sdkResolver({ SVM_SDK_VERSION: '10.0.400' }, { '/reviewed/10.0.400/dotnet': '10.0.404', '/path/compatible/dotnet': '10.0.404' });
+  assert.throws(mismatch.selected, /matching verified/); assert.deepEqual(mismatch.calls, ['/reviewed/10.0.400/dotnet']);
   assert.throws(() => resolveDotnet({ SVM_SDK_VERSION: '' }), /supported/);
 });
 test('toolchain tries compatible PATH SDKs before reviewed repository fallback', () => {
-  const found = sdkResolver({}, { '/path/old/dotnet': '7.0.410', '/path/compatible/dotnet': '8.0.400', '/reviewed/8.0.425/dotnet': '8.0.425' });
+  const found = sdkResolver({}, { '/path/old/dotnet': '8.0.425', '/path/compatible/dotnet': '10.0.400', '/reviewed/10.0.404/dotnet': '10.0.404' });
   assert.equal(found.selected().source, 'PATH'); assert.deepEqual(found.calls, ['/path/old/dotnet', '/path/compatible/dotnet']);
-  const fallback = sdkResolver({}, { '/path/old/dotnet': '9.0.100', '/reviewed/8.0.425/dotnet': '8.0.425' });
-  assert.equal(fallback.selected().source, 'repository'); assert.deepEqual(fallback.calls, ['/path/old/dotnet', '/path/compatible/dotnet', '/reviewed/8.0.425/dotnet']);
+  const fallback = sdkResolver({}, { '/path/old/dotnet': '9.0.100', '/reviewed/10.0.404/dotnet': '10.0.404' });
+  assert.equal(fallback.selected().source, 'repository'); assert.deepEqual(fallback.calls, ['/path/old/dotnet', '/path/compatible/dotnet', '/reviewed/10.0.404/dotnet']);
 });
 test('toolchain node-only bootstrap does not require or replace an explicitly provided company SDK', () => {
   const result = spawnSync(process.execPath,[join(root,'eng/bootstrap.mjs'),'--node-only'],
@@ -70,7 +70,7 @@ test('toolchain separates platform caches and resolves Windows executables witho
   assert.ok(windows.dotnet.endsWith('dotnet.exe')); assert.ok(windows.node.endsWith('node.exe'));
   assert.ok(windows.npm.includes('node_modules/npm/bin/npm-cli.js'));
   assert.notEqual(windows.dotnetRoot,paths('/workspace/中文 project','linux-x64').dotnetRoot);
-  assert.notEqual(paths(root,'linux-x64','8.0.400').dotnetRoot,paths(root,'linux-x64').dotnetRoot);
+  assert.notEqual(paths(root,'linux-x64','10.0.400').dotnetRoot,paths(root,'linux-x64').dotnetRoot);
   assert.throws(()=>paths(root,'win-arm64'), /No reviewed/);
 });
 test('toolchain rejects broad test selection and results escaping the evidence folder', () => {

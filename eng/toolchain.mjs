@@ -17,7 +17,7 @@ export function paths(base = root, system = platform, sdk = manifest.dotnetSdk) 
     dotnet: join(dotnetRoot, windows ? 'dotnet.exe' : 'dotnet') };
 }
 export function supportedSdk(version) {
-  return /^8\.0\.[0-9]+$/.test(version) && Number(version.split('.')[2]) >= 400;
+  return /^10\.0\.[0-9]+$/.test(version) && Number(version.split('.')[2]) >= 400;
 }
 export function environment(dotnetRoot, variables = process.env) {
   const inherited = { ...variables };
@@ -65,17 +65,17 @@ export function resolveDotnet(variables = process.env, adapters = {}) {
   const repository = adapters.repository ?? (sdk => verifyInstallation('dotnet', sdk).dotnet);
   function inspect(command, expected) {
     const selected = probe(command);
-    if (!supportedSdk(selected.version) || expected && selected.version !== expected) throw new Error('Unsupported .NET 8 SDK selection.');
+    if (!supportedSdk(selected.version) || expected && selected.version !== expected) throw new Error('Unsupported .NET 10 SDK selection.');
     return selected;
   }
   if (variables.SVM_DOTNET !== undefined) {
     if (!variables.SVM_DOTNET || !isAbsolute(variables.SVM_DOTNET)) throw new Error('SVM_DOTNET must be an absolute executable path.');
     try { return { ...inspect(variables.SVM_DOTNET), source: 'SVM_DOTNET' }; }
-    catch { throw new Error('SVM_DOTNET is unavailable or does not resolve a supported stable .NET 8 SDK.'); }
+    catch { throw new Error('SVM_DOTNET is unavailable or does not resolve a supported stable .NET 10 SDK.'); }
   }
   if (variables.SVM_SDK_VERSION !== undefined) {
     const sdk = variables.SVM_SDK_VERSION;
-    if (!supportedSdk(sdk)) throw new Error('SVM_SDK_VERSION must select a supported stable .NET 8 SDK.');
+    if (!supportedSdk(sdk)) throw new Error('SVM_SDK_VERSION must select a supported stable .NET 10 SDK.');
     try { return { ...inspect(repository(sdk), sdk), source: 'SVM_SDK_VERSION' }; }
     catch { throw new Error('SVM_SDK_VERSION requires its matching verified repository SDK; run eng/bootstrap for that reviewed version.'); }
   }
@@ -85,7 +85,7 @@ export function resolveDotnet(variables = process.env, adapters = {}) {
   for (const sdk of [manifest.dotnetSdk, ...Object.keys(manifest.compatibilitySdks ?? {})]) {
     try { return { ...inspect(repository(sdk), sdk), source: 'repository' }; } catch { /* Try the next reviewed installed cache. */ }
   }
-  throw new Error('No supported stable .NET 8 SDK found; provide SVM_DOTNET or run eng/bootstrap.');
+  throw new Error('No supported stable .NET 10 SDK found; provide SVM_DOTNET or run eng/bootstrap.');
 }
 export function dotnetCommand() {
   return resolveDotnet();

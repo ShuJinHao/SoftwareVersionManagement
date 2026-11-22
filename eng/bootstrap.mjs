@@ -10,7 +10,7 @@ import { root, manifest, platform, paths, environment } from './toolchain.mjs';
 const args = process.argv.slice(2);
 const nodeOnly = args.length === 1 && args[0] === '--node-only';
 if (!nodeOnly && args.length && (args.length !== 2 || args[0] !== '--sdk' || !manifest.compatibilitySdks?.[args[1]]))
-  throw new Error('Usage: eng/bootstrap [--sdk 8.0.400 | --node-only]');
+  throw new Error('Usage: eng/bootstrap [--sdk 10.0.400 | --node-only]');
 const sdk = nodeOnly ? manifest.dotnetSdk : args[1] ?? manifest.dotnetSdk;
 const archives = manifest.platforms[platform];
 if (!archives) throw new Error('No reviewed toolchain for ' + platform);
