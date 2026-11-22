@@ -49,8 +49,21 @@ async function archiveFile(artifact) {
 }
 function extract(file, target, node = false) {
   if (platform.startsWith('win-')) {
-    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-      'Expand-Archive -LiteralPath $env:SVM_TOOL_ARCHIVE -DestinationPath $env:SVM_TOOL_STAGE -Force'],
+    const script = [
+      "$ErrorActionPreference = 'Stop'",
+      'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+      '$dest = [System.IO.Path]::GetFullPath($env:SVM_TOOL_STAGE)',
+      '$prefix = $dest.TrimEnd([char]92, [char]47) + [System.IO.Path]::DirectorySeparatorChar',
+      '$zip = [System.IO.Compression.ZipFile]::OpenRead($env:SVM_TOOL_ARCHIVE)',
+      'try {',
+      '  foreach ($e in $zip.Entries) {',
+      '    $out = [System.IO.Path]::GetFullPath([System.IO.Path]::Combine($dest, $e.FullName))',
+      "    if ($out -ne $dest -and !$out.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe archive path.' }",
+      '    if ([string]::IsNullOrEmpty($e.Name)) { [System.IO.Directory]::CreateDirectory($out) | Out-Null } else { [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($out)) | Out-Null; [System.IO.Compression.ZipFileExtensions]::ExtractToFile($e, $out, $true) }',
+      '  }',
+      '} finally { $zip.Dispose() }'
+    ].join('\n');
+    execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
       { stdio: 'inherit', env: { ...process.env, SVM_TOOL_ARCHIVE: file, SVM_TOOL_STAGE: target } });
   } else execFileSync('tar', ['-xzf', file, '-C', target, ...(node ? ['--strip-components=1'] : [])], { stdio: 'inherit' });
 }
