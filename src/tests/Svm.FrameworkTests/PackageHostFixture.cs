@@ -142,7 +142,7 @@ internal sealed class PackageProcess : IAsyncDisposable
         foreach (var (name, i) in new[] { ("SVM_PERSISTENCE_CONFIG_FILE", 0), ("SVM_MESSAGING_CONFIG_FILE", 1), ("SVM_SITE_CONFIG_FILE", 2), ("SVM_PACKAGE_CONFIG_FILE", 3) }) info.Environment[name] = configs[i]; info.Environment["Logging__LogLevel__Default"] = "Information"; info.Environment["Logging__LogLevel__MassTransit"] = "Warning";
         var p = new Process { StartInfo = info, EnableRaisingEvents = true }; var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously); PackageProcess? worker = null;
         p.Exited += (_, _) => ready.TrySetException(new InvalidOperationException("Package Worker exited before readiness; redacted log retained."));
-        p.OutputDataReceived += (_, e) => { if (e.Data is null) return; lock (worker!._logs) worker._logs.AppendLine(e.Data); if (e.Data.Contains("Application started.", StringComparison.Ordinal)) ready.TrySetResult(); };
+        p.OutputDataReceived += (_, e) => { if (e.Data is null) return; lock (worker!._logs) worker._logs.AppendLine(e.Data); if (OutboxFixture.IsHostStartedLog(e.Data)) ready.TrySetResult(); };
         try { Assert.True(p.Start()); worker = new(p, configs.ToArray(), [f.CertificatePassword, f.Messaging.Password, .. (f.GitLab?.Credentials.SelectMany(c => new[] { c.ApiToken, c.PackageToken }) ?? [])]); p.BeginOutputReadLine(); await ready.Task.WaitAsync(TimeSpan.FromSeconds(25)); Assert.False(p.HasExited); return worker; }
         catch { if (worker is not null) await worker.DisposeAsync(); else { foreach (var c in configs) File.Delete(c); p.Dispose(); } throw; }
     }

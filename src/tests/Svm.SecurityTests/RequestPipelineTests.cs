@@ -23,6 +23,7 @@ public sealed class RequestPipelineTests
             (typeof(ClientQuery), RequestKind.Client, [ActorKind.Instance]),
             (typeof(EnrollmentQuery), RequestKind.Enrollment, [ActorKind.EnrollmentGrant]),
             (typeof(RecoveryQuery), RequestKind.Recovery, [ActorKind.RecoveryGrant]),
+            (typeof(PlcUploadQuery), RequestKind.PlcUpload, [ActorKind.PlcUpload]),
             (typeof(InternalQuery), RequestKind.Internal, [ActorKind.Service]),
             (typeof(SessionQuery), RequestKind.Session, [ActorKind.Anonymous]),
             (typeof(HumanSessionQuery), RequestKind.Session, [ActorKind.Human])
@@ -234,7 +235,7 @@ public sealed class RequestPipelineTests
     private static State NewState(Type requestType, ActorKind actor = ActorKind.Human, RequestKind entry = RequestKind.Manage)
     {
         var identity = new CallActor(actor, actor == ActorKind.Anonymous ? null : Guid.NewGuid(),
-            actor is ActorKind.Instance or ActorKind.EnrollmentGrant or ActorKind.RecoveryGrant ? Software : null,
+            actor is ActorKind.Instance or ActorKind.EnrollmentGrant or ActorKind.RecoveryGrant or ActorKind.PlcUpload ? Software : null,
             actor is ActorKind.Instance or ActorKind.RecoveryGrant ? Instance : null,
             actor == ActorKind.Service ? ModuleOwner.Tasks : null, actor == ActorKind.Service ? Work : null);
         var target = requestType == typeof(ClientQuery) || requestType == typeof(RecoveryQuery) ? AuthorizationTarget.Instance(Software, Instance)
@@ -323,6 +324,10 @@ public sealed class RequestPipelineTests
         TransactionMode.ReadOnly, IdempotencyMode.None, ValidationMode.ExplicitlyNone, ActorKind.RecoveryGrant,
         Permission = "grant.read", ValidationReason = "Test-only actor matrix, no request fields.")]
     public sealed record RecoveryQuery : IQuery<ProbeResult>;
+    [RequestPolicy("fixture.plc-upload", ModuleOwner.Packages, RequestKind.PlcUpload, RequestScope.Software,
+        TransactionMode.ReadOnly, IdempotencyMode.None, ValidationMode.ExplicitlyNone, ActorKind.PlcUpload,
+        Permission = "plc.upload", ValidationReason = "Test-only actor matrix, no request fields.")]
+    public sealed record PlcUploadQuery : IQuery<ProbeResult>;
     [RequestPolicy("fixture.internal", ModuleOwner.Tasks, RequestKind.Internal, RequestScope.InternalWork,
         TransactionMode.ReadOnly, IdempotencyMode.None, ValidationMode.ExplicitlyNone, ActorKind.Service,
         Permission = "work.read", ValidationReason = "Test-only actor matrix, no request fields.")]

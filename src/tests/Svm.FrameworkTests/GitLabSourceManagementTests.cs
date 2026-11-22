@@ -138,6 +138,8 @@ public sealed class GitLabSourceManagementTests
             Assert.True(await imports.AuthorizesPackageAsync(upload.ReleaseId, original.SubjectId, f.SoftwareId, default));
             Assert.False(await imports.AuthorizesPackageAsync(upload.ReleaseId, current.SubjectId, f.SoftwareId, default));
         }
+        var drift = DateTimeOffset.UtcNow - f.Instances.Clock.GetUtcNow();
+        if (drift > TimeSpan.Zero) f.Instances.Clock.Advance(drift);
         await Send(f, options, new CheckPackageReplicasCommand(upload.PackageId, [f.Healthy[0], new("node-b", "Missing", f.Instances.Clock.GetUtcNow())]), work: upload.PackageId);
         var repair = await PersistenceDatabase.ScalarAsync<Guid>(f.Database.ReaderConnection, "SELECT \"Id\" FROM pkg.works WHERE \"Kind\"='Repair'");
         await Accept(repair); var repairLease = (await Send(f, options, new ClaimPackageWorkCommand(repair, "node-a", Guid.NewGuid()), work: repair)).Value!;
@@ -192,7 +194,7 @@ public sealed class GitLabSourceManagementTests
         var result = await db.Runner.ApplyAsync(default); Assert.Equal(PersistenceDatabase.CurrentMigrationCount, result.Applied.Count);
         Assert.True(await probe.CheckAsync(default));
         Assert.True(await probe.CheckAsync(default));
-        Assert.Equal(15, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
+        Assert.Equal(PersistenceDatabase.CurrentMigrationCount, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM framework.\"__EFMigrationsHistory\""));
         var after = await PersistenceDatabase.ScalarAsync<string>(db.MigrationConnection, "SELECT row_to_json(b)::text FROM (SELECT \"Id\",\"SoftwareId\",\"SubjectId\",\"BaseUri\",\"ProjectId\",\"PackageName\",\"Initialized\",\"LastSyncedAt\",\"NextScanAt\",\"LatestWorkId\",\"LastErrorCode\" FROM rel.source_bindings) b");
         Assert.Equal(System.Text.Json.Nodes.JsonNode.Parse(before)!.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(after)!.ToJsonString());
         Assert.Equal(1, await PersistenceDatabase.ScalarAsync<long>(db.ReaderConnection, "SELECT count(*) FROM iam.permission_catalog WHERE \"Operation\"='release.source.manage'"));

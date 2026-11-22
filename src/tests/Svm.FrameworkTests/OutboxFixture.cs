@@ -44,6 +44,10 @@ internal static class OutboxFixture
                 foreach (var message in messages) await outbox.EnqueueAsync(message, token);
                 return await fixture.ApplyAsync(scope, token);
             });
+    internal static bool IsHostStartedLog(string? line) =>
+        line is not null && (line.Contains("Application started.", StringComparison.Ordinal) ||
+            (line.Contains("\"category\":\"Microsoft.Hosting.Lifetime\"", StringComparison.Ordinal) &&
+             line.Contains("\"eventId\":0", StringComparison.Ordinal)));
     internal static async Task WaitAsync(Func<Task<bool>> condition, int seconds = 35)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(seconds));
@@ -177,7 +181,7 @@ internal sealed class OutboxWorker : IAsyncDisposable
         {
             if (e.Data is null) return;
             lock (worker!._stdout) worker._stdout.AppendLine(e.Data);
-            if (e.Data.Contains("Application started.", StringComparison.Ordinal)) ready.TrySetResult();
+            if (OutboxFixture.IsHostStartedLog(e.Data)) ready.TrySetResult();
         };
         try
         {

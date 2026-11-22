@@ -176,7 +176,14 @@ internal sealed class LocalApi : IAsyncDisposable
         { WorkingDirectory = root.FullName, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         info.ArgumentList.Add(Path.Combine(root.FullName, "src/hosts/Svm.HttpApi/bin/Debug/net8.0/Svm.HttpApi.dll"));
         info.Environment["SVM_PERSISTENCE_CONFIG_FILE"] = config;
-        info.Environment["ASPNETCORE_URLS"] = packages is null ? "https://127.0.0.1:0" : $"https://0.0.0.0:{publicPort}";
+        var boundPort = publicPort;
+        if (packages is null)
+        {
+            using var listener = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            boundPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+        }
+        info.Environment["ASPNETCORE_URLS"] = packages is null ? $"https://127.0.0.1:{boundPort}" : $"https://0.0.0.0:{publicPort}";
         info.Environment["Kestrel__Certificates__Default__Path"] = certPath;
         info.Environment["Kestrel__Certificates__Default__Password"] = certPassword;
         info.Environment.Remove("SVM_GITLAB_CONFIG_FILE"); info.Environment.Remove("SVM_TASK_CONFIG_FILE"); info.Environment.Remove("SVM_PACKAGE_CONFIG_FILE"); info.Environment.Remove("SVM_MESSAGING_CONFIG_FILE");
@@ -202,7 +209,7 @@ internal sealed class LocalApi : IAsyncDisposable
             info.Environment["SVM_INSTANCE_ACCESS_CONFIG_FILE"] = instanceConfig;
         }
         var api = new LocalApi(new Process { StartInfo = info, EnableRaisingEvents = true }, config, cert.Thumbprint, siteConfig, instanceConfig);
-        api._publicPort = publicPort;
+        api._publicPort = boundPort;
         if (packages is not null)
         {
             var path = await OutboxFixture.PrivateJsonAsync(packages); api._packageConfigurations.Add(path); info.Environment["SVM_PACKAGE_CONFIG_FILE"] = path;
@@ -244,6 +251,8 @@ internal sealed class LocalApi : IAsyncDisposable
             var url = line[(index + marker.Length)..].Trim();
             if (_publicPort == 0 || new Uri(url).Port == _publicPort) _ready.TrySetResult(url.Replace("0.0.0.0", "127.0.0.1", StringComparison.Ordinal));
         }
+        else if (_publicPort > 0 && OutboxFixture.IsHostStartedLog(line))
+            _ready.TrySetResult($"https://127.0.0.1:{_publicPort}");
     }
     internal HttpClient Client(CookieContainer cookies) => new(new HttpClientHandler
     {
